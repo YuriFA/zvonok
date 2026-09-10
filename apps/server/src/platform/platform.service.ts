@@ -52,8 +52,7 @@ export class PlatformService {
       keyId,
       participantId: randomUUID(),
       name: dto.name ?? 'Participant',
-      publish: dto.publish ?? true,
-      admin: dto.admin ?? false,
+      role: dto.role ?? 'participant',
     };
 
     return {

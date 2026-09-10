@@ -11,8 +11,8 @@ import type {
   SfuState,
   SfuStateCallback,
   SfuTrackCallback,
-  SfuPeerCallback,
-  SfuPeerInfo,
+  SfuParticipantCallback,
+  SfuParticipantInfo,
   SfuKickedPayload,
   SfuRoomEndedPayload,
   SfuJoinPayload,
@@ -49,14 +49,41 @@ interface ISfuRoomMembership {
   joinRoom(payload: SfuJoinPayload): Promise<void>;
   /** Leave the current room */
   leaveRoom(): void;
-  /** Kick a peer from the room */
-  kickPeer(userId: string): boolean;
   /** Subscribe to kicked events */
   onKicked(callback: (payload: SfuKickedPayload) => void): () => void;
   /** Subscribe to room-ended events */
   onRoomEnded(callback: (payload: SfuRoomEndedPayload) => void): () => void;
   /** Subscribe to server-refused joins */
   onJoinError(callback: (error: SfuJoinError) => void): () => void;
+}
+
+/**
+ * Responsible for host-control actions.
+ * Single responsibility: capability-guarded room moderation signalling.
+ */
+interface ISfuHostControls {
+  /** Mute a single participant (requires mute-users). */
+  mutePeer(userId: string, options?: { timeoutMs?: number }): Promise<void>;
+  /** Mute every publishing participant except the caller (mute-users). */
+  muteAll(options?: { timeoutMs?: number }): Promise<void>;
+  /** Lock or unlock the room (lock-room). */
+  lockRoom(locked: boolean, options?: { timeoutMs?: number }): Promise<void>;
+  /** Kick a participant; resolves after the server confirms the removal. */
+  kickPeer(userId: string, options?: { timeoutMs?: number }): Promise<void>;
+}
+
+/**
+ * Responsible for client-initiated egress control.
+ * Single responsibility: capability-gated egress session signalling.
+ */
+interface ISfuEgressControls {
+  /** Start a client-initiated session with record and/or HLS outputs. */
+  startEgress(
+    outputs: { record?: boolean; hls?: boolean },
+    options?: { timeoutMs?: number },
+  ): Promise<void>;
+  /** Stop the room's active session. */
+  stopEgress(options?: { timeoutMs?: number }): Promise<void>;
 }
 
 /**
@@ -94,15 +121,15 @@ interface ISfuProducerManager {
  * Responsible for peer tracking.
  * Single responsibility: peer registry.
  */
-interface ISfuPeerRegistry {
+interface ISfuParticipantRegistry {
   /** Get all peers */
-  getPeers(): Map<string, SfuPeerInfo>;
+  getParticipants(): Map<string, SfuParticipantInfo>;
   /** Get a specific peer */
-  getPeer(userId: string): SfuPeerInfo | undefined;
+  getParticipant(userId: string): SfuParticipantInfo | undefined;
   /** Subscribe to peer joined events */
-  onPeerJoined(callback: SfuPeerCallback): () => void;
+  onParticipantJoined(callback: SfuParticipantCallback): () => void;
   /** Subscribe to peer left events */
-  onPeerLeft(callback: (userId: string) => void): () => void;
+  onParticipantLeft(callback: (userId: string) => void): () => void;
   /** Subscribe to remote producer state change events */
   onProducerStateChange(callback: SfuProducerStateCallback): () => void;
 }
@@ -131,7 +158,6 @@ interface ISfuStateNotifier {
   getState(): SfuState;
   /** Subscribe to state changes */
   onStateChange(callback: SfuStateCallback): () => void;
-  /** Subscribe to remote track events */
   onTrack(callback: SfuTrackCallback): () => void;
   /** Subscribe to screen share stopped events (remote peer stopped sharing) */
   onScreenShareStopped(callback: SfuScreenShareStoppedCallback): () => void;
@@ -146,7 +172,9 @@ export interface ISfuManager
   extends
     ISfuConnection,
     ISfuRoomMembership,
+    ISfuHostControls,
+    ISfuEgressControls,
     ISfuProducerManager,
-    ISfuPeerRegistry,
+    ISfuParticipantRegistry,
     ISfuStatsCollector,
     ISfuStateNotifier {}

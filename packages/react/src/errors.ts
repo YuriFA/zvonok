@@ -37,9 +37,9 @@ export type ZvonokServerJoinErrorCode =
 export type ZvonokJoinTimeoutCode = "JOIN_TIMEOUT";
 
 /**
- * Host control action failures (mutePeer, muteAll, lockRoom). The server
- * emits sfu:host-error { code, message } on the requesting socket when a
- * host-only action is denied.
+ * Host control action failures (mutePeer, muteAll, lockRoom, kickPeer).
+ * The server answers each action with an acknowledgement; denials carry a
+ * coded error that lands here unchanged.
  */
 export class ZvonokHostError extends ZvonokError {
   constructor(code: string, message: string) {
@@ -48,8 +48,41 @@ export class ZvonokHostError extends ZvonokError {
   }
 }
 
-/** Codes the server sends on sfu:host-error. */
-export type ZvonokServerHostErrorCode = "NOT_ROOM_HOST";
+/** Codes the server sends in host-action acknowledgement denials. */
+export type ZvonokServerHostErrorCode =
+  | "MISSING_CAPABILITY"
+  | "TARGET_NOT_FOUND"
+  | "NOT_IN_ROOM";
 
 /** Client-side host action failure codes. */
-export type ZvonokHostLocalErrorCode = "DISCONNECTED" | "HOST_ACTION_FAILED";
+export type ZvonokHostLocalErrorCode =
+  | "DISCONNECTED"
+  | "HOST_ACTION_TIMEOUT"
+  | "HOST_ACTION_FAILED";
+
+/**
+ * Client-initiated egress action failures (start/stop). The server answers
+ * with an acknowledgement; coded denials land here unchanged.
+ */
+export class ZvonokEgressError extends ZvonokError {
+  constructor(code: string, message: string) {
+    super(code, message);
+    this.name = "ZvonokEgressError";
+  }
+}
+
+/** Codes the server sends in egress action acknowledgement denials. */
+export type ZvonokServerEgressErrorCode =
+  | "NOT_IN_ROOM"
+  | "MISSING_CAPABILITY"
+  | "NOT_PROJECT_ROOM"
+  | "INVALID_OUTPUTS"
+  | "ALREADY_ACTIVE"
+  | "NOT_ACTIVE"
+  | "EGRESS_UNAVAILABLE";
+
+/** Client-side egress action failure codes. */
+export type ZvonokEgressLocalErrorCode =
+  | "DISCONNECTED"
+  | "EGRESS_ACTION_TIMEOUT"
+  | "EGRESS_ACTION_FAILED";

@@ -230,6 +230,44 @@ describe("ZvonokRoom", () => {
     expect(screen.queryByText("Join room")).toBeNull();
   });
 
+  it("renders no record control without the start-recording capability", async () => {
+    await renderJoined();
+
+    expect(screen.queryByRole("button", { name: "Record" })).toBeNull();
+  });
+
+  it("records through the egress controls when the capability is granted", async () => {
+    await renderJoined();
+
+    act(() => {
+      lastSfu().manager.simulateCapabilities([
+        "send-audio",
+        "send-video",
+        "start-recording",
+      ]);
+    });
+    const recordButton = screen.getByRole("button", { name: "Record" });
+    expect(recordButton.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(recordButton);
+    await flush();
+    expect(lastSfu().manager.startEgress).toHaveBeenCalledWith({ record: true });
+
+    act(() => {
+      lastSfu().manager.simulateEgressStatus({
+        sessionId: "egress-1",
+        outputs: { record: true, hls: false },
+        status: "live",
+      });
+    });
+    const stopButton = screen.getByRole("button", { name: "Stop recording" });
+    expect(stopButton.getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(stopButton);
+    await flush();
+    expect(lastSfu().manager.stopEgress).toHaveBeenCalledWith();
+  });
+
   it("skips the pre-join card when displayName is provided", async () => {
     render(
       <ZvonokRoom serverUrl="https://sfu.test" roomSlug="room-1" token={TOKEN} displayName="Bob" />,

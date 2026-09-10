@@ -106,7 +106,7 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
         layerTimersCurrent.set(userId, timer);
       }
     });
-    const unsubscribePeerLeft = sfuManager.onPeerLeft((userId) => {
+    const unsubscribePeerLeft = sfuManager.onParticipantLeft((userId) => {
       clearUserLayerState(userId);
     });
 

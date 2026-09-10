@@ -17,16 +17,16 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { SfuService } from './sfu.service';
+import { capabilitiesForRole, type ParticipantRole } from './capabilities';
 import type { Producer } from 'mediasoup/types';
 import { WorkerManager } from './worker-manager';
-import type {
-  Peer,
-  PeerPermissions,
-  SfuJoinPayload,
-} from './interfaces/sfu.interface';
+import type { Peer, SfuJoinPayload } from './interfaces/sfu.interface';
 import { RoomTokenHelper } from '../platform/room-token.helper';
 import { PrismaService } from 'src/prisma/prisma.service';
-import type { RoomTokenVerifyResult } from '../platform/room-token.helper';
+import type {
+  RoomTokenClaims,
+  RoomTokenVerifyResult,
+} from '../platform/room-token.helper';
 import { WebhookDispatcher } from '../webhooks/webhook-dispatcher.service';
 import { egressPlainTransportOptions } from '../egress/egress.config';
 import type { EgressTapDescriptor } from '../egress/egress.types';
@@ -130,6 +130,7 @@ it('joins a room and emits RTP capabilities', async () => {
   expect(socket.emit).toHaveBeenCalledWith('sfu:joined', {
     routerRtpCapabilities,
     participant: { id: 'user-1', username: 'alice' },
+    capabilities: capabilitiesForRole('host'),
   });
 });
 
@@ -189,6 +190,7 @@ it('connects a matching transport with client DTLS parameters', async () => {
     sendTransport: { id: 'send-1', connect } as unknown as WebRtcTransport,
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   } satisfies Peer;
 
   const serviceState = service as unknown as SfuServiceState;
@@ -262,6 +264,7 @@ it('announces existing producers when a recv transport is created', async () => 
         recvTransport?: WebRtcTransport;
         producers: Map<string, typeof producer>;
         consumers: Map<string, unknown>;
+        capabilities: string[];
       }
     >;
     rooms: Map<string, Set<string>>;
@@ -275,6 +278,7 @@ it('announces existing producers when a recv transport is created', async () => 
     recvTransport,
     producers: new Map([['producer-1', producer]]),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   });
 
   workerManager.createRouter.mockResolvedValue({} as Router<AppData>);
@@ -314,6 +318,7 @@ it('notifies other peers when a peer leaves the room', async () => {
         socket: Socket;
         producers: Map<string, unknown>;
         consumers: Map<string, unknown>;
+        capabilities: string[];
       }
     >;
     rooms: Map<string, Set<string>>;
@@ -327,6 +332,7 @@ it('notifies other peers when a peer leaves the room', async () => {
     socket,
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   });
   serviceState.peers.set(otherSocket.id, {
     id: otherSocket.id,
@@ -335,6 +341,7 @@ it('notifies other peers when a peer leaves the room', async () => {
     socket: otherSocket,
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   });
   serviceState.rooms.set('room-1', new Set([socket.id, otherSocket.id]));
 
@@ -361,6 +368,7 @@ it('allows the room owner to kick another peer', async () => {
         socket: Socket;
         producers: Map<string, unknown>;
         consumers: Map<string, unknown>;
+        capabilities: string[];
       }
     >;
     rooms: Map<string, Set<string>>;
@@ -374,6 +382,7 @@ it('allows the room owner to kick another peer', async () => {
     socket: ownerSocket,
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('host'),
   });
   serviceState.peers.set(targetSocket.id, {
     id: targetSocket.id,
@@ -382,6 +391,7 @@ it('allows the room owner to kick another peer', async () => {
     socket: targetSocket,
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   });
   serviceState.rooms.set('room-1', new Set([ownerSocket.id, targetSocket.id]));
   serviceState.roomOwners.set('room-1', 'user-1');
@@ -412,6 +422,7 @@ it('emits sfu:room-ended to all peers and cleans up when a room is ended', async
         recvTransport?: { close: jest.Mock };
         producers: Map<string, unknown>;
         consumers: Map<string, unknown>;
+        capabilities: string[];
       }
     >;
     rooms: Map<string, Set<string>>;
@@ -431,6 +442,7 @@ it('emits sfu:room-ended to all peers and cleans up when a room is ended', async
     recvTransport: { close: recvClose1 },
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   });
   serviceState.peers.set(socket2.id, {
     id: socket2.id,
@@ -440,6 +452,7 @@ it('emits sfu:room-ended to all peers and cleans up when a room is ended', async
     sendTransport: { close: sendClose2 },
     producers: new Map(),
     consumers: new Map(),
+    capabilities: capabilitiesForRole('participant'),
   });
   serviceState.rooms.set('room-1', new Set([socket1.id, socket2.id]));
   serviceState.roomOwners.set('room-1', 'user-1');
@@ -496,6 +509,7 @@ describe('screen share', () => {
       sendTransport: { id: 'send-1', produce } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.peers.set(otherSocket.id, {
       id: otherSocket.id,
@@ -504,6 +518,7 @@ describe('screen share', () => {
       socket: otherSocket,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.rooms.set('room-1', new Set([socket.id, otherSocket.id]));
 
@@ -548,6 +563,7 @@ describe('screen share', () => {
       } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.peers.set(socket2.id, {
       id: socket2.id,
@@ -560,6 +576,7 @@ describe('screen share', () => {
       } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.rooms.set('room-1', new Set([socket.id, socket2.id]));
     state.roomScreenShare.set('room-1', socket.id);
@@ -601,6 +618,7 @@ describe('screen share', () => {
         ],
       ]),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.peers.set(otherSocket.id, {
       id: otherSocket.id,
@@ -609,6 +627,7 @@ describe('screen share', () => {
       socket: otherSocket,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.rooms.set('room-1', new Set([socket.id, otherSocket.id]));
     state.roomScreenShare.set('room-1', socket.id);
@@ -634,6 +653,7 @@ describe('screen share', () => {
       sendTransport: { close: jest.fn() } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.peers.set(otherSocket.id, {
       id: otherSocket.id,
@@ -642,6 +662,7 @@ describe('screen share', () => {
       socket: otherSocket,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.rooms.set('room-1', new Set([socket.id, otherSocket.id]));
     state.roomScreenShare.set('room-1', socket.id);
@@ -670,6 +691,7 @@ describe('screen share', () => {
       sendTransport: { close: jest.fn() } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('host'),
     });
     state.peers.set(targetSocket.id, {
       id: targetSocket.id,
@@ -679,6 +701,7 @@ describe('screen share', () => {
       sendTransport: { close: jest.fn() } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.rooms.set('room-1', new Set([ownerSocket.id, targetSocket.id]));
     state.roomOwners.set('room-1', 'user-1');
@@ -711,6 +734,7 @@ describe('screen share', () => {
       sendTransport: { id: 'send-1', produce } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.peers.set(otherSocket.id, {
       id: otherSocket.id,
@@ -720,6 +744,7 @@ describe('screen share', () => {
       recvTransport: { id: 'recv-1' } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     });
     state.rooms.set('room-1', new Set([socket.id, otherSocket.id]));
 
@@ -743,14 +768,13 @@ describe('screen share', () => {
 });
 
 describe('room-token join', () => {
-  const tokenClaims = {
+  const tokenClaims: RoomTokenClaims = {
     roomId: 'room-1',
     projectId: 'project-1',
     keyId: 'key-1',
     participantId: 'participant-1',
     name: 'Alice',
-    publish: true,
-    admin: false,
+    role: 'participant',
   };
 
   function verifyResult(claims: typeof tokenClaims): RoomTokenVerifyResult {
@@ -772,8 +796,38 @@ describe('room-token join', () => {
     const peer = state.peers.get(socket.id) as Peer;
     expect(peer.userId).toBe('participant-1');
     expect(peer.username).toBe('Alice');
-    expect(peer.permissions).toEqual({ publish: true, admin: false });
-    expect(socket.emit).toHaveBeenCalledWith('sfu:joined', expect.anything());
+    expect(peer.capabilities).toEqual([
+      'send-audio',
+      'send-video',
+      'send-screenshare',
+    ]);
+    expect(socket.emit).toHaveBeenCalledWith(
+      'sfu:joined',
+      expect.objectContaining({
+        participant: { id: 'participant-1', username: 'Alice' },
+        capabilities: ['send-audio', 'send-video', 'send-screenshare'],
+      }),
+    );
+  });
+
+  it('delivers no send capabilities for a viewer-role token', async () => {
+    (roomTokenHelper.verify as jest.Mock).mockReturnValue(
+      verifyResult({ ...tokenClaims, role: 'viewer' }),
+    );
+    prisma.apiKey.findUnique.mockResolvedValue({ revokedAt: null });
+
+    await service.joinRoom(socket, {
+      roomId: 'room-1',
+      token: 'signed-token',
+    });
+
+    const state = service as unknown as SfuServiceState;
+    const peer = state.peers.get(socket.id) as Peer;
+    expect(peer.capabilities).toEqual([]);
+    expect(socket.emit).toHaveBeenCalledWith(
+      'sfu:joined',
+      expect.objectContaining({ capabilities: [] }),
+    );
   });
 
   it('rejects an invalid token with a coded error and no peer', async () => {
@@ -829,10 +883,37 @@ describe('room-token join', () => {
       message: 'API key is not active',
     });
   });
-
-  it('refuses produce for a participant without publish permission', async () => {
+  it('refuses produce for a viewer-role participant per kind', async () => {
     (roomTokenHelper.verify as jest.Mock).mockReturnValue(
-      verifyResult({ ...tokenClaims, publish: false }),
+      verifyResult({ ...tokenClaims, role: 'viewer' }),
+    );
+    prisma.apiKey.findUnique.mockResolvedValue({ revokedAt: null });
+
+    await service.joinRoom(socket, {
+      roomId: 'room-1',
+      token: 'signed-token',
+    });
+
+    for (const kind of ['audio', 'video'] as const) {
+      (socket.emit as jest.Mock).mockClear();
+      await service.createProducer(socket, {
+        requestId: 'req-1',
+        transportId: 'send-1',
+        kind,
+        rtpParameters: {} as unknown as RtpParameters,
+      });
+
+      expect(socket.emit).toHaveBeenCalledWith('sfu:produce-error', {
+        requestId: 'req-1',
+        code: 'PUBLISH_NOT_ALLOWED',
+        message: `Missing send-${kind} capability`,
+      });
+    }
+  });
+
+  it('refuses screen share produce without send-screenshare', async () => {
+    (roomTokenHelper.verify as jest.Mock).mockReturnValue(
+      verifyResult({ ...tokenClaims, role: 'viewer' }),
     );
     prisma.apiKey.findUnique.mockResolvedValue({ revokedAt: null });
 
@@ -842,22 +923,23 @@ describe('room-token join', () => {
     });
 
     await service.createProducer(socket, {
-      requestId: 'req-1',
+      requestId: 'req-2',
       transportId: 'send-1',
       kind: 'video',
       rtpParameters: {} as unknown as RtpParameters,
+      appData: { source: 'screen' },
     });
 
     expect(socket.emit).toHaveBeenCalledWith('sfu:produce-error', {
-      requestId: 'req-1',
+      requestId: 'req-2',
       code: 'PUBLISH_NOT_ALLOWED',
-      message: expect.any(String),
+      message: 'Missing send-screenshare capability',
     });
   });
 
-  it('lets an admin-token participant kick in a project room', async () => {
+  it('lets a host-role token participant kick in a project room', async () => {
     (roomTokenHelper.verify as jest.Mock).mockReturnValue(
-      verifyResult({ ...tokenClaims, participantId: 'admin-1', admin: true }),
+      verifyResult({ ...tokenClaims, participantId: 'admin-1', role: 'host' }),
     );
     prisma.apiKey.findUnique.mockResolvedValue({ revokedAt: null });
 
@@ -873,8 +955,9 @@ describe('room-token join', () => {
     });
 
     // The plain join resolves to the default verified user (user-1).
-    await service.kickPeer(adminSocket, 'user-1');
+    const ack = await service.kickPeer(adminSocket, 'user-1');
 
+    expect(ack).toEqual({ ok: true });
     expect(targetSocket.emit).toHaveBeenCalledWith('sfu:kicked', {
       roomId: 'room-1',
     });
@@ -1008,14 +1091,13 @@ describe('handshake-verified join', () => {
 });
 
 describe('host controls', () => {
-  const controlClaims = {
+  const controlClaims: RoomTokenClaims = {
     roomId: 'room-1',
     projectId: 'project-1',
     keyId: 'key-1',
     participantId: 'participant-1',
     name: 'Alice',
-    publish: true,
-    admin: false,
+    role: 'participant',
   };
 
   type ControlState = {
@@ -1040,7 +1122,7 @@ describe('host controls', () => {
     socket: Socket,
     userId: string,
     roomId: string,
-    options: { ownerId?: string; permissions?: PeerPermissions } = {},
+    options: { ownerId?: string; role?: ParticipantRole } = {},
   ): Peer {
     const peer: Peer = {
       id: socket.id,
@@ -1049,7 +1131,10 @@ describe('host controls', () => {
       socket,
       producers: new Map(),
       consumers: new Map(),
-      permissions: options.permissions,
+      ownsRoom: options.ownerId === userId,
+      capabilities: capabilitiesForRole(
+        options.ownerId === userId ? 'host' : (options.role ?? 'participant'),
+      ),
     };
     state().peers.set(peer.id, peer);
     const roomPeers = state().rooms.get(roomId) ?? new Set<string>();
@@ -1097,7 +1182,7 @@ describe('host controls', () => {
     });
   });
 
-  it('denies a plain user mute with a coded host error', async () => {
+  it('denies a plain user mute with a coded ack and no state change', async () => {
     const ownerSocket = createSocket('socket-owner');
     const owner = seedPeer(ownerSocket, 'user-1', 'room-1', {
       ownerId: 'user-1',
@@ -1107,11 +1192,12 @@ describe('host controls', () => {
     const plainSocket = createSocket('socket-plain');
     seedPeer(plainSocket, 'user-2', 'room-1');
 
-    await service.mutePeer(plainSocket, 'user-1');
+    const ack = await service.mutePeer(plainSocket, 'user-1');
 
-    expect(plainSocket.emit).toHaveBeenCalledWith('sfu:host-error', {
-      code: 'NOT_ROOM_HOST',
-      message: expect.any(String),
+    expect(ack).toEqual({
+      ok: false,
+      code: 'MISSING_CAPABILITY',
+      message: 'Missing mute-users capability',
     });
     expect(audio.pause).not.toHaveBeenCalled();
     expect(ownerSocket.emit).not.toHaveBeenCalledWith(
@@ -1124,13 +1210,14 @@ describe('host controls', () => {
     const ownerSocket = createSocket('socket-owner');
     seedPeer(ownerSocket, 'user-1', 'room-1', { ownerId: 'user-1' });
     const plainToken = createSocket('socket-token');
-    await joinTokenPeer(plainToken, { admin: false });
+    await joinTokenPeer(plainToken, { role: 'participant' });
 
-    await service.lockRoom(plainToken, true);
+    const ack = await service.lockRoom(plainToken, true);
 
-    expect(plainToken.emit).toHaveBeenCalledWith('sfu:host-error', {
-      code: 'NOT_ROOM_HOST',
-      message: expect.any(String),
+    expect(ack).toEqual({
+      ok: false,
+      code: 'MISSING_CAPABILITY',
+      message: 'Missing lock-room capability',
     });
     expect(state().roomLocks.has('room-1')).toBe(false);
     expect(ownerSocket.emit).not.toHaveBeenCalledWith(
@@ -1139,25 +1226,27 @@ describe('host controls', () => {
     );
   });
 
-  it('lets an admin-token participant mute and lock in a project room', async () => {
+  it('lets a host-role token participant mute and lock in a project room', async () => {
     const adminSocket = createSocket('socket-admin');
     await joinTokenPeer(adminSocket, {
       participantId: 'admin-1',
-      admin: true,
+      role: 'host',
     });
     const target = seedPeer(createSocket('socket-target'), 'user-2', 'room-1');
     const audio = makeProducer('prod-a', 'audio');
     target.producers.set(audio.id, audio);
 
-    await service.mutePeer(adminSocket, 'user-2');
+    const muteAck = await service.mutePeer(adminSocket, 'user-2');
 
+    expect(muteAck).toEqual({ ok: true });
     expect(audio.pause).toHaveBeenCalled();
     expect(target.socket.emit).toHaveBeenCalledWith('sfu:peer-muted', {
       userId: 'user-2',
     });
 
-    await service.lockRoom(adminSocket, true);
+    const lockAck = await service.lockRoom(adminSocket, true);
 
+    expect(lockAck).toEqual({ ok: true });
     expect(adminSocket.emit).toHaveBeenCalledWith('sfu:room-locked', {
       locked: true,
     });
@@ -1333,6 +1422,9 @@ describe('webhook emissions', () => {
       socket: sock,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole(
+        options.ownerId === userId ? 'host' : 'participant',
+      ),
     };
     state().peers.set(peer.id, peer);
     const roomPeers = state().rooms.get(roomId) ?? new Set<string>();
@@ -1400,8 +1492,7 @@ describe('webhook emissions', () => {
         keyId: 'key-1',
         participantId: 'participant-1',
         name: 'Alice',
-        publish: true,
-        admin: false,
+        role: 'participant',
       },
     });
     prisma.apiKey.findUnique.mockResolvedValue({ revokedAt: null });
@@ -1524,6 +1615,7 @@ describe('egress taps', () => {
         ]),
       ),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     } as unknown as Peer);
   };
 
@@ -1619,6 +1711,7 @@ describe('egress taps', () => {
       sendTransport: { id: 'send-1', produce } as unknown as WebRtcTransport,
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     } as unknown as Peer);
     state.rooms.set('room-1', new Set([socket.id]));
     state.rooms.set('room-2', new Set(['socket-other']));
@@ -1665,6 +1758,7 @@ describe('egress taps', () => {
       socket: createSocket(socketId),
       producers: new Map(),
       consumers: new Map(),
+      capabilities: capabilitiesForRole('participant'),
     } as unknown as Peer);
   };
 

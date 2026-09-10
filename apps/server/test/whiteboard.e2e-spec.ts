@@ -179,8 +179,7 @@ describe('Whiteboard (e2e)', () => {
       keyId: 'key-e2e',
       participantId: 'owner-1',
       name: 'Owner',
-      publish: true,
-      admin: true,
+      role: 'host',
     });
     const sfuSocket = connectSfu(roomToken);
     await waitFor(sfuSocket, 'sfu:joined');

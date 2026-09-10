@@ -28,7 +28,7 @@ export interface UseRoomSfuResult {
   sfuState: SfuState;
   remotePeers: RemotePeerMedia[];
   wasKicked: boolean;
-  kickPeer: (userId: string) => void;
+  kickPeer: (userId: string) => Promise<void>;
   mediaControls: UseMediaControlsReturn;
   toggleVideo: () => Promise<void>;
   toggleAudio: () => Promise<void>;

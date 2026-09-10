@@ -203,7 +203,7 @@ describe('SFU host controls (e2e)', () => {
   });
 
   it('refuses host controls from a non-host participant', async () => {
-    const hostToken = await mintToken({ name: 'Host', admin: true });
+    const hostToken = await mintToken({ name: 'Host', role: 'host' });
     const host = connectSocket();
     host.on('sfu:peer-muted', (payload: { userId: string }) => {
       hostMutes.push(payload);
@@ -221,13 +221,14 @@ describe('SFU host controls (e2e)', () => {
     plainId = (await peerJoined).userId;
     hostId = (await existingPeers)[0].userId;
 
-    const hostError = waitFor<{ code: string; message: string }>(
-      plain,
-      'sfu:host-error',
-    );
-    plain.emit('sfu:mute-peer', { userId: hostId });
-    const error = await hostError;
-    expect(error.code).toBe('NOT_ROOM_HOST');
+    const denial = new Promise<Record<string, unknown>>((resolve) => {
+      plain.emit('sfu:mute-peer', { userId: hostId }, resolve);
+    });
+    expect(await denial).toEqual({
+      ok: false,
+      code: 'MISSING_CAPABILITY',
+      message: expect.any(String),
+    });
 
     // A denied attempt changes nothing: the host was never muted.
     expect(hostMutes).toEqual([]);
@@ -237,8 +238,11 @@ describe('SFU host controls (e2e)', () => {
     const host = sockets[0];
     const plain = sockets[1];
 
+    const ack = new Promise<Record<string, unknown>>((resolve) => {
+      host.emit('sfu:mute-peer', { userId: plainId }, resolve);
+    });
     const plainMuted = waitFor<{ userId: string }>(plain, 'sfu:peer-muted');
-    host.emit('sfu:mute-peer', { userId: plainId });
+    expect(await ack).toEqual({ ok: true });
     const muted = await plainMuted;
     expect(muted).toEqual({ userId: plainId });
 

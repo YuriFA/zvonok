@@ -47,7 +47,7 @@ export interface UseMediasoupResult {
   isRoomLocked: boolean;
   mutedByHost: boolean;
   hostControls: HostControls;
-  kickPeer: (userId: string) => void;
+  kickPeer: (userId: string) => Promise<void>;
   wasKicked: boolean;
   produceTrack: (track: MediaStreamTrack) => Promise<boolean>;
   pauseProducer: (kind: "audio" | "video") => void;
@@ -207,8 +207,10 @@ export function useMediasoup({
   }, [localVideoStream, localAudioStream, state.isSendTransportCreated, sfuManager, isMobile]);
 
   const kickPeer = useCallback(
-    (userId: string) => {
-      sfuManager.kickPeer(userId);
+    async (userId: string): Promise<void> => {
+      // Denials surface here (capability or target races); the participant
+      // list updates from peer-left events either way.
+      await sfuManager.kickPeer(userId);
     },
     [sfuManager],
   );

@@ -5,6 +5,7 @@ jest.mock('src/prisma/prisma.service', () => ({
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { RoomTokenHelper } from './room-token.helper';
+import type { RoomTokenClaims } from './room-token.helper';
 import { PlatformService } from './platform.service';
 import { RoomService } from 'src/room/room.service';
 import { SfuService } from 'src/sfu/sfu.service';
@@ -36,14 +37,13 @@ describe('RoomTokenHelper', () => {
   });
 
   it('round-trips claims through mint and verify', () => {
-    const claims = {
+    const claims: RoomTokenClaims = {
       roomId: 'room-1',
       projectId: 'project-1',
       keyId: 'key-1',
       participantId: 'participant-1',
       name: 'Alice',
-      publish: false,
-      admin: true,
+      role: 'host',
     };
 
     const result = helper.verify(helper.mint(claims));
@@ -184,8 +184,7 @@ describe('PlatformService', () => {
         keyId: 'key-1',
         participantId: expect.stringMatching(/^[0-9a-f-]{36}$/),
         name: 'Participant',
-        publish: true,
-        admin: false,
+        role: 'participant',
       }),
     );
   });

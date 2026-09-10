@@ -278,8 +278,7 @@ describe('SFU join identity matrix (e2e)', () => {
       keyId: 'key-e2e',
       participantId: 'participant-embed',
       name: 'Embed',
-      publish: true,
-      admin: false,
+      role: 'participant',
     });
     const embed = connectSocket({ origin: 'https://evil.example' });
     await expect(
@@ -305,10 +304,14 @@ describe('SFU join identity matrix (e2e)', () => {
       participant: { id: 'user-2', username: 'bob' },
     });
 
-    const denied = waitFor<{ code: string }>(member, 'sfu:host-error');
-    member.emit('sfu:lock-room', { locked: true });
-    const error = await denied;
-    expect(error.code).toBe('NOT_ROOM_HOST');
+    const ack = new Promise<Record<string, unknown>>((resolve) => {
+      member.emit('sfu:lock-room', { locked: true }, resolve);
+    });
+    expect(await ack).toEqual({
+      ok: false,
+      code: 'MISSING_CAPABILITY',
+      message: expect.any(String),
+    });
   });
 
   function waitFor<T>(

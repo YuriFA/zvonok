@@ -13,6 +13,15 @@ export {
 export { useParticipants, type UseParticipantsResult } from "./use-participants.js";
 export { useHostControls, type UseHostControlsResult } from "./use-host-controls.js";
 export { createHostControls, type HostControls } from "./host-controls.js";
+export { useOwnCapabilities } from "./use-own-capabilities.js";
+export {
+  useEgressState,
+  type UseEgressStateResult,
+} from "./use-egress-state.js";
+export {
+  useEgressControls,
+  type UseEgressControlsResult,
+} from "./use-egress-controls.js";
 export {
   EMPTY_ROOM_STATE,
   RoomTracker,
@@ -20,10 +29,18 @@ export {
 } from "./room-tracker.js";
 export { useDeviceControls, type UseDeviceControlsResult } from "./use-device-controls.js";
 export {
+  useQualityControls,
+  type UseQualityControlsResult,
+  type ParticipantQualityLevel,
+} from "./use-quality-controls.js";
+export {
   ZvonokError,
   ZvonokHostError,
   ZvonokJoinError,
+  ZvonokEgressError,
+  type ZvonokEgressLocalErrorCode,
   type ZvonokHostLocalErrorCode,
+  type ZvonokServerEgressErrorCode,
   type ZvonokServerHostErrorCode,
   type ZvonokServerJoinErrorCode,
 } from "./errors.js";

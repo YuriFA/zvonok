@@ -70,3 +70,25 @@ export interface EgressSessionView {
   /** Finalized recording size in bytes, when known. */
   recordingSizeBytes: number | null;
 }
+
+/** Coded denials for client-initiated egress actions (signalling acks). */
+export type EgressActionErrorCode =
+  | 'NOT_IN_ROOM'
+  | 'MISSING_CAPABILITY'
+  | 'NOT_PROJECT_ROOM'
+  | 'INVALID_OUTPUTS'
+  | 'ALREADY_ACTIVE'
+  | 'NOT_ACTIVE'
+  | 'EGRESS_UNAVAILABLE';
+
+/** Acknowledgement for egress:start / egress:stop on the requesting socket. */
+export type EgressActionAck =
+  | { ok: true }
+  | { ok: false; code: EgressActionErrorCode; message: string };
+
+/** Client-visible slice of an egress session's state (egress:status). */
+export interface EgressStatusBroadcast {
+  sessionId: string;
+  outputs: { record: boolean; hls: boolean };
+  status: EgressSessionStatus;
+}

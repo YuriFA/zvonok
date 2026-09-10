@@ -182,7 +182,7 @@ export class RoomTracker {
     const manager = this.manager;
 
     this.unsubscribes.push(
-      manager.onPeerJoined((peer) => {
+      manager.onParticipantJoined((peer) => {
         this.update(peer.userId, (current) => ({
           ...current,
           displayName: peer.username || current.displayName,
@@ -238,7 +238,7 @@ export class RoomTracker {
     );
 
     this.unsubscribes.push(
-      manager.onPeerLeft((userId) => {
+      manager.onParticipantLeft((userId) => {
         if (!this.participants.has(userId)) {
           return;
         }

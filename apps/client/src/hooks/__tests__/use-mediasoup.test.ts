@@ -109,7 +109,7 @@ const sfuMock = vi.hoisted(() => {
         return () => trackListeners.delete(callback);
       },
     ),
-    onPeerJoined: vi.fn(
+    onParticipantJoined: vi.fn(
       (
         callback: (peer: {
           userId: string;
@@ -121,7 +121,7 @@ const sfuMock = vi.hoisted(() => {
         return () => peerJoinedListeners.delete(callback);
       },
     ),
-    onPeerLeft: vi.fn((callback: (userId: string) => void) => {
+    onParticipantLeft: vi.fn((callback: (userId: string) => void) => {
       peerLeftListeners.add(callback);
       return () => peerLeftListeners.delete(callback);
     }),
@@ -212,8 +212,8 @@ const sfuMock = vi.hoisted(() => {
       this.getState.mockImplementation(() => currentState);
       this.onStateChange.mockClear();
       this.onTrack.mockClear();
-      this.onPeerJoined.mockClear();
-      this.onPeerLeft.mockClear();
+      this.onParticipantJoined.mockClear();
+      this.onParticipantLeft.mockClear();
       this.onKicked.mockClear();
       this.onProducerStateChange.mockClear();
       this.onScreenShareStopped.mockClear();

@@ -2,14 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
+import { isParticipantRole, type ParticipantRole } from '../sfu/capabilities';
+
 export interface RoomTokenClaims {
   roomId: string;
   projectId: string;
   keyId: string;
   participantId: string;
   name: string;
-  publish: boolean;
-  admin: boolean;
+  /** Permission statement of the token; resolved to capabilities at join. */
+  role: ParticipantRole;
 }
 
 export type RoomTokenFailureCode = 'ROOM_TOKEN_EXPIRED' | 'ROOM_TOKEN_INVALID';
@@ -24,8 +26,7 @@ interface DecodedRoomToken {
   keyId: string;
   participantId: string;
   name: string;
-  publish: boolean;
-  admin: boolean;
+  role: ParticipantRole;
 }
 
 function isDecodedRoomToken(value: unknown): value is DecodedRoomToken {
@@ -37,8 +38,7 @@ function isDecodedRoomToken(value: unknown): value is DecodedRoomToken {
     typeof candidate.keyId === 'string' &&
     typeof candidate.participantId === 'string' &&
     typeof candidate.name === 'string' &&
-    typeof candidate.publish === 'boolean' &&
-    typeof candidate.admin === 'boolean'
+    isParticipantRole(candidate.role)
   );
 }
 
@@ -56,8 +56,7 @@ export class RoomTokenHelper {
         keyId: claims.keyId,
         participantId: claims.participantId,
         name: claims.name,
-        publish: claims.publish,
-        admin: claims.admin,
+        role: claims.role,
       },
       {
         subject: claims.roomId,
@@ -100,8 +99,7 @@ export class RoomTokenHelper {
         keyId: decoded.keyId,
         participantId: decoded.participantId,
         name: decoded.name,
-        publish: decoded.publish,
-        admin: decoded.admin,
+        role: decoded.role,
       },
     };
   }

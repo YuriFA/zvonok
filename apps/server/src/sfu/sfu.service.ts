@@ -4,6 +4,7 @@ import type { Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { WorkerManager } from './worker-manager';
+import { capabilitiesForRole, type CapabilityId } from './capabilities';
 import type {
   Peer,
   SfuJoinPayload,
@@ -14,7 +15,7 @@ import type {
   SfuExistingPeerPayload,
   SfuMediaSource,
   SfuJoinErrorCode,
-  SfuHostErrorPayload,
+  SfuHostActionAck,
   SfuProduceAppData,
 } from './interfaces/sfu.interface';
 import type {
@@ -66,7 +67,30 @@ export class SfuService implements OnModuleDestroy {
     return null;
   }
 
-  /** Whether a registered user is currently an active SFU peer in the room. */
+  /**
+   * Room context of a connected socket for cross-module signalling guards
+   * (egress control): room id, verified user id, and effective capabilities.
+   */
+  describeSocket(
+    socketId: string,
+  ): { roomId: string; userId: string; capabilities: CapabilityId[] } | null {
+    const peer = this.getPeer(socketId);
+    const roomId = this.getRoomIdBySocketId(socketId);
+    if (!peer || !roomId) return null;
+    return {
+      roomId,
+      userId: peer.userId,
+      capabilities: peer.capabilities,
+    };
+  }
+
+  /** Broadcast an event to every connected participant of a room. */
+  broadcastToRoom(roomId: string, event: string, payload: unknown): void {
+    for (const peer of this.getRoomPeers(roomId)) {
+      peer.socket.emit(event, payload);
+    }
+  }
+
   hasPeerInSlug(roomSlug: string, userId: string): boolean {
     const roomId = this.slugToRoomId.get(roomSlug);
     if (!roomId) return false;
@@ -361,6 +385,7 @@ export class SfuService implements OnModuleDestroy {
     socket.emit('sfu:joined', {
       routerRtpCapabilities,
       participant: { id: peer.userId, username: peer.username },
+      capabilities: peer.capabilities,
     });
 
     // Webhook emission is fire-and-forget and must never delay or break the
@@ -417,11 +442,6 @@ export class SfuService implements OnModuleDestroy {
       this.emitJoinError(socket, 'ROOM_TOKEN_INVALID', 'API key is not active');
       return null;
     }
-
-    this.logger.log(
-      `Token peer ${claims.participantId} joining room ${claims.roomId}`,
-    );
-
     return {
       id: socket.id,
       userId: claims.participantId,
@@ -429,7 +449,7 @@ export class SfuService implements OnModuleDestroy {
       socket,
       producers: new Map(),
       consumers: new Map(),
-      permissions: { publish: claims.publish, admin: claims.admin },
+      capabilities: capabilitiesForRole(claims.role),
     };
   }
 
@@ -491,9 +511,9 @@ export class SfuService implements OnModuleDestroy {
         socket,
         producers: new Map(),
         consumers: new Map(),
+        capabilities: capabilitiesForRole('participant'),
       };
     }
-
     const user = await this.prisma.user.findUnique({
       where: { id: identity.userId },
       select: { username: true },
@@ -513,6 +533,9 @@ export class SfuService implements OnModuleDestroy {
       producers: new Map(),
       consumers: new Map(),
       ownsRoom: room.ownerId === identity.userId,
+      capabilities: capabilitiesForRole(
+        room.ownerId === identity.userId ? 'host' : 'participant',
+      ),
     };
   }
 
@@ -613,13 +636,25 @@ export class SfuService implements OnModuleDestroy {
   ): Promise<void> {
     const peer = this.getPeer(socket.id);
     const roomId = this.getRoomId(socket);
-    if (peer?.permissions && !peer.permissions.publish) {
-      socket.emit('sfu:produce-error', {
-        requestId: payload.requestId,
-        code: 'PUBLISH_NOT_ALLOWED',
-        message: 'Participant is not allowed to publish',
-      });
-      return;
+
+    const source: SfuMediaSource =
+      (payload.appData?.source as SfuMediaSource) ?? 'camera';
+
+    if (peer) {
+      const required: CapabilityId =
+        source === 'screen'
+          ? 'send-screenshare'
+          : payload.kind === 'audio'
+            ? 'send-audio'
+            : 'send-video';
+      if (!peer.capabilities.includes(required)) {
+        socket.emit('sfu:produce-error', {
+          requestId: payload.requestId,
+          code: 'PUBLISH_NOT_ALLOWED',
+          message: `Missing ${required} capability`,
+        });
+        return;
+      }
     }
     if (!peer?.sendTransport || !roomId) {
       socket.emit('sfu:produce-error', {
@@ -639,9 +674,6 @@ export class SfuService implements OnModuleDestroy {
       });
       return;
     }
-
-    const source: SfuMediaSource =
-      (payload.appData?.source as SfuMediaSource) ?? 'camera';
 
     if (source === 'screen') {
       const existingSharer = this.roomScreenShare.get(roomId);
@@ -854,99 +886,115 @@ export class SfuService implements OnModuleDestroy {
     this.notifyProducerStateChanged(socket, producer, peer, false);
   }
 
-  async kickPeer(socket: Socket, targetUserId: string): Promise<void> {
+  async kickPeer(
+    socket: Socket,
+    targetUserId: string,
+  ): Promise<SfuHostActionAck> {
     const requester = this.getPeer(socket.id);
     const roomId = this.getRoomId(socket);
 
     if (!requester || !roomId) {
       this.logger.warn(`Kick request from unknown peer ${socket.id}`);
-      return;
+      return {
+        ok: false,
+        code: 'NOT_IN_ROOM',
+        message: 'Join the room before using host controls',
+      };
     }
 
-    if (!this.isRoomHost(requester, roomId)) {
+    if (!requester.capabilities.includes('remove-participants')) {
       this.logger.warn(
         `Unauthorized kick request from ${requester.userId} in room ${roomId}`,
       );
-      return;
+      return {
+        ok: false,
+        code: 'MISSING_CAPABILITY',
+        message: 'Missing remove-participants capability',
+      };
     }
 
     const targetPeer = this.getRoomPeers(roomId).find(
       (peer) => peer.userId === targetUserId,
     );
     if (!targetPeer || targetPeer.id === socket.id) {
-      return;
+      return {
+        ok: false,
+        code: 'TARGET_NOT_FOUND',
+        message: `Participant ${targetUserId} is not in the room`,
+      };
     }
 
     targetPeer.socket.emit('sfu:kicked', { roomId });
+    // The acknowledgement lands only after teardown completes, so a resolved
+    // kick promise is a usable ordering guarantee for consumer UIs.
     await this.removePeer(targetPeer.id, 'kick');
     targetPeer.socket.disconnect();
+    return { ok: true };
   }
 
   /**
-   * A peer is a room host when it owns a user room (its userId matches the
-   * room owner) or holds the admin claim of a project-room token.
+   * Guards a host-control action: the requester must hold a peer state in a
+   * room and carry the capability the action enforces. Returns the
+   * acknowledgement for denial, or null to proceed.
    */
-  private isRoomHost(peer: Peer, roomId: string): boolean {
-    const roomOwnerId = this.roomOwners.get(roomId);
-    const isRoomOwner = !!roomOwnerId && roomOwnerId === peer.userId;
-    const isTokenAdmin = peer.permissions?.admin === true;
-    return isRoomOwner || isTokenAdmin;
-  }
-
-  private emitHostError(socket: Socket, message: string): void {
-    const payload: SfuHostErrorPayload = {
-      code: 'NOT_ROOM_HOST',
-      message,
-    };
-    socket.emit('sfu:host-error', payload);
-  }
-
-  async mutePeer(socket: Socket, targetUserId: string): Promise<void> {
+  private denyHostAction(
+    socket: Socket,
+    capability: CapabilityId,
+    action: string,
+  ): SfuHostActionAck | null {
     const requester = this.getPeer(socket.id);
     const roomId = this.getRoomId(socket);
 
     if (!requester || !roomId) {
-      this.logger.warn(`Mute request from unknown peer ${socket.id}`);
-      return;
+      this.logger.warn(`${action} request from unknown peer ${socket.id}`);
+      return {
+        ok: false,
+        code: 'NOT_IN_ROOM',
+        message: 'Join the room before using host controls',
+      };
     }
 
-    if (!this.isRoomHost(requester, roomId)) {
+    if (!requester.capabilities.includes(capability)) {
       this.logger.warn(
-        `Unauthorized mute request from ${requester.userId} in room ${roomId}`,
+        `Unauthorized ${action} request from ${requester.userId} in room ${roomId}`,
       );
-      this.emitHostError(socket, 'Only the room host can mute participants');
-      return;
+      return {
+        ok: false,
+        code: 'MISSING_CAPABILITY',
+        message: `Missing ${capability} capability`,
+      };
     }
+
+    return null;
+  }
+
+  async mutePeer(
+    socket: Socket,
+    targetUserId: string,
+  ): Promise<SfuHostActionAck> {
+    const denial = this.denyHostAction(socket, 'mute-users', 'mute');
+    if (denial) return denial;
+    const roomId = this.getRoomId(socket) as string;
 
     const targetPeer = this.getRoomPeers(roomId).find(
       (peer) => peer.userId === targetUserId,
     );
     if (!targetPeer || targetPeer.id === socket.id) {
-      this.logger.warn(
-        `Mute target ${targetUserId} not found in room ${roomId}`,
-      );
-      return;
+      return {
+        ok: false,
+        code: 'TARGET_NOT_FOUND',
+        message: `Participant ${targetUserId} is not in the room`,
+      };
     }
 
     await this.muteRoomPeer(roomId, targetPeer);
+    return { ok: true };
   }
 
-  async muteAll(socket: Socket): Promise<void> {
-    const requester = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-
-    if (!requester || !roomId) {
-      this.logger.warn(`Mute-all request from unknown peer ${socket.id}`);
-      return;
-    }
-
-    if (!this.isRoomHost(requester, roomId)) {
-      this.logger.warn(
-        `Unauthorized mute-all request from ${requester.userId} in room ${roomId}`,
-      );
-      this.emitHostError(socket, 'Only the room host can mute participants');
-      return;
-    }
+  async muteAll(socket: Socket): Promise<SfuHostActionAck> {
+    const denial = this.denyHostAction(socket, 'mute-users', 'mute-all');
+    if (denial) return denial;
+    const roomId = this.getRoomId(socket) as string;
 
     // Snapshot of the current publishers: peers that start publishing after
     // mute-all stay unmuted, and the requesting host is never muted.
@@ -956,33 +1004,24 @@ export class SfuService implements OnModuleDestroy {
       }
       await this.muteRoomPeer(roomId, peer);
     }
+    return { ok: true };
   }
 
-  async lockRoom(socket: Socket, locked: boolean): Promise<void> {
-    const requester = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-
-    if (!requester || !roomId) {
-      this.logger.warn(`Lock request from unknown peer ${socket.id}`);
-      return;
-    }
-
-    if (!this.isRoomHost(requester, roomId)) {
-      this.logger.warn(
-        `Unauthorized lock request from ${requester.userId} in room ${roomId}`,
-      );
-      this.emitHostError(socket, 'Only the room host can lock the room');
-      return;
-    }
+  async lockRoom(socket: Socket, locked: boolean): Promise<SfuHostActionAck> {
+    const denial = this.denyHostAction(socket, 'lock-room', 'lock');
+    if (denial) return denial;
+    const roomId = this.getRoomId(socket) as string;
 
     const nextLocked = Boolean(locked);
     if ((this.roomLocks.get(roomId) ?? false) === nextLocked) {
-      return;
+      // Idempotent: re-locking a locked room (or the reverse) is a success.
+      return { ok: true };
     }
     this.roomLocks.set(roomId, nextLocked);
     for (const roomPeer of this.getRoomPeers(roomId)) {
       roomPeer.socket.emit('sfu:room-locked', { locked: nextLocked });
     }
+    return { ok: true };
   }
 
   /**

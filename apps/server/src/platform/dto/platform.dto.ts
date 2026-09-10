@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsBoolean,
   IsOptional,
   IsString,
@@ -11,6 +12,11 @@ import {
   Min,
   Max,
 } from 'class-validator';
+
+import {
+  PARTICIPANT_ROLES,
+  type ParticipantRole,
+} from '../../sfu/capabilities';
 
 export class CreatePlatformRoomDto {
   @ApiProperty({ required: false, type: 'string', maxLength: 100 })
@@ -40,23 +46,15 @@ export class MintRoomTokenDto {
 
   @ApiProperty({
     required: false,
-    type: 'boolean',
-    default: true,
-    description: 'Whether the participant may publish audio/video/screen',
+    type: 'string',
+    enum: PARTICIPANT_ROLES,
+    default: 'participant',
+    description:
+      'Role of the participant: host, participant, or viewer. The server resolves the role to capabilities at join time',
   })
   @IsOptional()
-  @IsBoolean()
-  publish?: boolean;
-
-  @ApiProperty({
-    required: false,
-    type: 'boolean',
-    default: false,
-    description: 'Whether the participant holds room-admin rights',
-  })
-  @IsOptional()
-  @IsBoolean()
-  admin?: boolean;
+  @IsIn(PARTICIPANT_ROLES)
+  role?: ParticipantRole;
 }
 
 export class StartEgressDto {

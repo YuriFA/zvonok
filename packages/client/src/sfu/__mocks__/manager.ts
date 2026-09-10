@@ -11,8 +11,8 @@ import type {
   SfuState,
   SfuStateCallback,
   SfuTrackCallback,
-  SfuPeerCallback,
-  SfuPeerInfo,
+  SfuParticipantCallback,
+  SfuParticipantInfo,
   SfuKickedPayload,
   SfuRoomEndedPayload,
   SfuJoinPayload,
@@ -26,7 +26,7 @@ import type {
 
 export interface MockSfuManagerConfig {
   initialState?: Partial<SfuState>;
-  initialPeers?: SfuPeerInfo[];
+  initialParticipants?: SfuParticipantInfo[];
 }
 
 const DEFAULT_STATE: SfuState = {
@@ -39,6 +39,8 @@ const DEFAULT_STATE: SfuState = {
   audioProducerId: null,
   videoProducerId: null,
   screenProducerId: null,
+  capabilities: [],
+  egress: null,
 };
 
 export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuManager & {
@@ -46,8 +48,8 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
   setState(state: Partial<SfuState>): void;
   simulateConnection(): void;
   simulateDisconnection(): void;
-  simulatePeerJoined(peer: SfuPeerInfo): void;
-  simulatePeerLeft(userId: string): void;
+  simulateParticipantJoined(peer: SfuParticipantInfo): void;
+  simulateParticipantLeft(userId: string): void;
   emitQualityStats(stats: Map<string, PeerQualityStats>): void;
   simulateTrackReceived(track: MediaStreamTrack, kind: "audio" | "video", userId: string): void;
   simulateKicked(roomId: string): void;
@@ -55,18 +57,18 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
   getJoinRoomCalls(): SfuJoinPayload[];
   getProduceCalls(): MediaStreamTrack[];
 } {
-  const { initialState, initialPeers = [] } = config;
+  const { initialState, initialParticipants = [] } = config;
 
   let state: SfuState = { ...DEFAULT_STATE, ...initialState };
 
-  const peers = new Map<string, SfuPeerInfo>();
-  initialPeers.forEach((peer) => {
+  const peers = new Map<string, SfuParticipantInfo>();
+  initialParticipants.forEach((peer) => {
     peers.set(peer.userId, peer);
   });
 
   const stateCallbacks = new Set<SfuStateCallback>();
   const trackCallbacks = new Set<SfuTrackCallback>();
-  const peerJoinedCallbacks = new Set<SfuPeerCallback>();
+  const peerJoinedCallbacks = new Set<SfuParticipantCallback>();
   const peerLeftCallbacks = new Set<(userId: string) => void>();
   const kickedCallbacks = new Set<(payload: SfuKickedPayload) => void>();
   const roomEndedCallbacks = new Set<(payload: SfuRoomEndedPayload) => void>();
@@ -123,9 +125,12 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
       notifyStateChange();
     },
 
-    kickPeer(): boolean {
-      return true;
-    },
+    async kickPeer(): Promise<void> {},
+    async mutePeer(): Promise<void> {},
+    async muteAll(): Promise<void> {},
+    async lockRoom(): Promise<void> {},
+    async startEgress(): Promise<void> {},
+    async stopEgress(): Promise<void> {},
 
     onKicked(callback: (payload: SfuKickedPayload) => void): () => void {
       kickedCallbacks.add(callback);
@@ -240,21 +245,21 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
       return () => produceErrorCallbacks.delete(callback);
     },
 
-    // ISfuPeerRegistry
-    getPeers(): Map<string, SfuPeerInfo> {
+    // ISfuParticipantRegistry
+    getParticipants(): Map<string, SfuParticipantInfo> {
       return new Map(peers);
     },
 
-    getPeer(userId: string): SfuPeerInfo | undefined {
+    getParticipant(userId: string): SfuParticipantInfo | undefined {
       return peers.get(userId);
     },
 
-    onPeerJoined(callback: SfuPeerCallback): () => void {
+    onParticipantJoined(callback: SfuParticipantCallback): () => void {
       peerJoinedCallbacks.add(callback);
       return () => peerJoinedCallbacks.delete(callback);
     },
 
-    onPeerLeft(callback: (userId: string) => void): () => void {
+    onParticipantLeft(callback: (userId: string) => void): () => void {
       peerLeftCallbacks.add(callback);
       return () => peerLeftCallbacks.delete(callback);
     },
@@ -361,14 +366,14 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
       notifyStateChange();
     },
 
-    simulatePeerJoined(peer: SfuPeerInfo): void {
+    simulateParticipantJoined(peer: SfuParticipantInfo): void {
       peers.set(peer.userId, peer);
       peerJoinedCallbacks.forEach((cb) => {
         cb(peer);
       });
     },
 
-    simulatePeerLeft(userId: string): void {
+    simulateParticipantLeft(userId: string): void {
       peers.delete(userId);
       peerLeftCallbacks.forEach((cb) => {
         cb(userId);

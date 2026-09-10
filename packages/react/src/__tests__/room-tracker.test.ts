@@ -40,8 +40,8 @@ function createManager(parts: { socket: Record<string, unknown> | null }) {
         return () => stateListeners.delete(callback);
       }),
       onTrack: vi.fn(() => noopUnsubscribe),
-      onPeerJoined: vi.fn(() => noopUnsubscribe),
-      onPeerLeft: vi.fn(() => noopUnsubscribe),
+      onParticipantJoined: vi.fn(() => noopUnsubscribe),
+      onParticipantLeft: vi.fn(() => noopUnsubscribe),
       onKicked: vi.fn(() => noopUnsubscribe),
       onProducerStateChange: vi.fn(() => noopUnsubscribe),
       onScreenShareStopped: vi.fn(() => noopUnsubscribe),

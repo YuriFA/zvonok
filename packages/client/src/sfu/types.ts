@@ -8,17 +8,58 @@ import type {
 
 export type SfuMediaSource = "camera" | "screen";
 
+/**
+ * Capability vocabulary delivered by the server in the join acknowledgement.
+ * Mirrors the server's fixed vocabulary; unknown ids are ignored.
+ */
+export type CapabilityId =
+  | "send-audio"
+  | "send-video"
+  | "send-screenshare"
+  | "mute-users"
+  | "remove-participants"
+  | "lock-room"
+  | "start-recording"
+  | "start-broadcast";
+
+/** Coded denials the server sends in host-action acknowledgements. */
+export type SfuHostActionServerErrorCode =
+  | "NOT_IN_ROOM"
+  | "MISSING_CAPABILITY"
+  | "TARGET_NOT_FOUND";
+
+/** Local host-action failure codes (no socket, no ack in time). */
+export type SfuHostActionLocalErrorCode = "DISCONNECTED" | "HOST_ACTION_TIMEOUT";
+
+export type SfuHostActionErrorCode =
+  | SfuHostActionServerErrorCode
+  | SfuHostActionLocalErrorCode;
+
+/**
+ * A host-control action was refused by the server or could not reach it.
+ * `code` mirrors the server's coded acknowledgement (or a local timeout).
+ */
+export class SfuHostActionError extends Error {
+  readonly code: SfuHostActionErrorCode;
+
+  constructor(code: SfuHostActionErrorCode, message: string) {
+    super(message);
+    this.name = "SfuHostActionError";
+    this.code = code;
+  }
+}
+
 export type SfuProduceErrorCode =
   | "SCREEN_SHARE_ALREADY_ACTIVE"
   | "SEND_TRANSPORT_NOT_READY"
   | "TRANSPORT_NOT_FOUND"
+  | "PUBLISH_NOT_ALLOWED"
   | "PRODUCE_FAILED";
 
 export class SfuProduceError extends Error {
   readonly code: SfuProduceErrorCode;
   constructor(code: SfuProduceErrorCode, message: string) {
     super(message);
-    this.name = "SfuProduceError";
     this.code = code;
   }
 }
@@ -62,10 +103,64 @@ export interface SfuParticipantIdentity {
   username: string;
 }
 
+
+/** Lifecycle statuses of a room egress session, mirrored from the server. */
+export type SfuEgressSessionStatus =
+  | "starting"
+  | "live"
+  | "stopping"
+  | "ended"
+  | "failed";
+
+/** The client-visible slice of an egress session (egress:status events). */
+export interface SfuEgressStatusPayload {
+  sessionId: string;
+  outputs: { record: boolean; hls: boolean };
+  status: SfuEgressSessionStatus;
+}
+
+/** Coded denials the server sends in egress action acknowledgements. */
+export type SfuEgressActionServerErrorCode =
+  | "NOT_IN_ROOM"
+  | "MISSING_CAPABILITY"
+  | "NOT_PROJECT_ROOM"
+  | "INVALID_OUTPUTS"
+  | "ALREADY_ACTIVE"
+  | "NOT_ACTIVE"
+  | "EGRESS_UNAVAILABLE";
+
+/** Local egress action failure codes (no socket, no ack in time). */
+export type SfuEgressActionLocalErrorCode = "DISCONNECTED" | "EGRESS_ACTION_TIMEOUT";
+
+export type SfuEgressActionErrorCode =
+  | SfuEgressActionServerErrorCode
+  | SfuEgressActionLocalErrorCode;
+
+/**
+ * A client-initiated egress action was refused by the server or could not
+ * reach it. `code` mirrors the server's coded acknowledgement.
+ */
+export class SfuEgressActionError extends Error {
+  readonly code: SfuEgressActionErrorCode;
+
+  constructor(code: SfuEgressActionErrorCode, message: string) {
+    super(message);
+    this.name = "SfuEgressActionError";
+    this.code = code;
+  }
+}
+
+/** Outputs requestable through the client signalling path (no RTMP). */
+export interface SfuEgressOutputRequest {
+  record?: boolean;
+  hls?: boolean;
+}
 // Joined response from server
 export interface SfuJoinedPayload {
   routerRtpCapabilities: RtpCapabilities;
   participant: SfuParticipantIdentity;
+  /** Own capabilities from the verified credential path (server authority). */
+  capabilities: CapabilityId[];
 }
 
 
@@ -202,20 +297,20 @@ export interface SfuGuestJoinRequestPayload {
 }
 
 // Peer info for tracking remote producers
-export interface SfuPeerInfo {
+export interface SfuParticipantInfo {
   userId: string;
   username: string;
   producers: Map<string, { kind: "audio" | "video"; paused?: boolean; source?: SfuMediaSource }>;
 }
 
 // Payload for sfu:peer-joined event (peer joins after you)
-export interface SfuPeerJoinedPayload {
+export interface SfuParticipantJoinedPayload {
   userId: string;
   username: string;
 }
 
 // Payload for sfu:existing-peers event (peers already in room when you join)
-export interface SfuExistingPeersPayload {
+export interface SfuExistingParticipantsPayload {
   userId: string;
   username: string;
 }
@@ -230,6 +325,10 @@ export interface SfuState {
   isSendTransportCreated: boolean;
   sendTransportConnected: boolean;
   recvTransportConnected: boolean;
+  /** Own capabilities delivered by the server; empty until joined. */
+  capabilities: CapabilityId[];
+  /** Latest egress session state broadcast for the room; null when idle. */
+  egress: SfuEgressStatusPayload | null;
   audioProducerId: string | null;
   videoProducerId: string | null;
   screenProducerId: string | null;
@@ -243,7 +342,7 @@ export type SfuTrackCallback = (
   userId: string,
   source?: SfuMediaSource,
 ) => void;
-export type SfuPeerCallback = (peer: SfuPeerInfo) => void;
+export type SfuParticipantCallback = (peer: SfuParticipantInfo) => void;
 export type SfuStateCallback = (state: SfuState) => void;
 export type SfuProducerStateCallback = (payload: SfuProducerStateChangedPayload) => void;
 export type SfuScreenShareStoppedCallback = (payload: SfuScreenShareStoppedPayload) => void;

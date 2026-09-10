@@ -11,7 +11,7 @@ import type {
   SfuNewProducerPayload,
   SfuConsumerCreatedPayload,
   SfuProducerCreatedPayload,
-  SfuPeerJoinedPayload,
+  SfuParticipantJoinedPayload,
   SfuKickedPayload,
   SfuRoomEndedPayload,
   SfuProducerStateChangedPayload,
@@ -21,8 +21,9 @@ import type {
   SfuConsumerClosedPayload,
   SfuGuestJoinRequestPayload,
   SfuJoinErrorPayload,
+  SfuEgressStatusPayload,
 } from "./types.js";
-import type { SfuExistingPeersPayload } from "./types.js";
+import type { SfuExistingParticipantsPayload } from "./types.js";
 
 /**
  * Handler interface for SFU socket events.
@@ -36,19 +37,20 @@ export interface SfuEventHandlers {
   onProducerCreated(payload: SfuProducerCreatedPayload): void;
   onProduceError(payload: SfuProduceErrorPayload): void;
   onJoinError(payload: SfuJoinErrorPayload): void;
-  onPeerJoined(payload: SfuPeerJoinedPayload): void;
-  onExistingPeers(payload: SfuExistingPeersPayload[]): void;
+  onParticipantJoined(payload: SfuParticipantJoinedPayload): void;
+  onExistingParticipants(payload: SfuExistingParticipantsPayload[]): void;
   onNewProducer(payload: SfuNewProducerPayload): void;
   onConsumerCreated(payload: SfuConsumerCreatedPayload): Promise<void>;
   onConsumerClosed(payload: SfuConsumerClosedPayload): void;
   onProducerStateChanged(payload: SfuProducerStateChangedPayload): void;
-  onPeerLeft(payload: { userId: string }): void;
+  onParticipantLeft(payload: { userId: string }): void;
   onKicked(payload: SfuKickedPayload): void;
   onRoomEnded(payload: SfuRoomEndedPayload): void;
   onReconnectFailed(): void;
   onScreenShareStarted(payload: SfuScreenShareStartedPayload): void;
-  onScreenShareStopped(payload: SfuScreenShareStoppedPayload): void;
   onGuestJoinRequest(payload: SfuGuestJoinRequestPayload): void;
+  onEgressStatus(payload: SfuEgressStatusPayload): void;
+  onScreenShareStopped(payload: SfuScreenShareStoppedPayload): void;
 }
 
 /** A registered socket listener that can be selectively removed. */
@@ -100,10 +102,10 @@ export class SfuEventRouter {
       this.handlers.onJoinError(payload as SfuJoinErrorPayload),
     );
     register("sfu:peer-joined", (payload: unknown) =>
-      this.handlers.onPeerJoined(payload as SfuPeerJoinedPayload),
+      this.handlers.onParticipantJoined(payload as SfuParticipantJoinedPayload),
     );
     register("sfu:existing-peers", (payload: unknown) =>
-      this.handlers.onExistingPeers(payload as SfuExistingPeersPayload[]),
+      this.handlers.onExistingParticipants(payload as SfuExistingParticipantsPayload[]),
     );
     register("sfu:new-producer", (payload: unknown) =>
       this.handlers.onNewProducer(payload as SfuNewProducerPayload),
@@ -118,7 +120,7 @@ export class SfuEventRouter {
       this.handlers.onProducerStateChanged(payload as SfuProducerStateChangedPayload),
     );
     register("sfu:peer-left", (payload: unknown) =>
-      this.handlers.onPeerLeft(payload as { userId: string }),
+      this.handlers.onParticipantLeft(payload as { userId: string }),
     );
     register("sfu:kicked", (payload: unknown) =>
       this.handlers.onKicked(payload as SfuKickedPayload),
@@ -134,6 +136,9 @@ export class SfuEventRouter {
     );
     register("sfu:guest-join-request", (payload: unknown) =>
       this.handlers.onGuestJoinRequest(payload as SfuGuestJoinRequestPayload),
+    );
+    register("egress:status", (payload: unknown) =>
+      this.handlers.onEgressStatus(payload as SfuEgressStatusPayload),
     );
     register("reconnect_failed", () => this.handlers.onReconnectFailed());
   }

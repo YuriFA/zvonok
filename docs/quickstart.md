@@ -79,6 +79,33 @@ The widget imports its own stylesheet (`zvonok.css`, all classes `zvk-`
 prefixed); for manual stylesheet control it is also exported as
 `@zvonok/react/zvonok.css`.
 
+### Theming the prebuilt
+
+`ZvonokRoom` reads a small set of CSS custom properties. Define them on any
+ancestor of the widget (or on `:root`) to brand it - no JavaScript, no props:
+
+```css
+:root {
+  --zvonok-accent-color: #4f46e5;
+  --zvonok-background-color: #0b0d12;
+  --zvonok-text-color: #f4f4f5;
+  --zvonok-radius: 14px;
+  --zvonok-font-family: "Inter", system-ui, sans-serif;
+}
+```
+
+| Variable | Default | Controls |
+| --- | --- | --- |
+| `--zvonok-accent-color` | `#2f6f4f` | Join button, input focus ring |
+| `--zvonok-background-color` | `#16181d` | Room and input background |
+| `--zvonok-text-color` | `#e6e8eb` | Text and button labels |
+| `--zvonok-radius` | `10px` | Corner radius (tiles scale with it) |
+| `--zvonok-font-family` | `system-ui, ...` | Widget font |
+
+Without overrides the widget renders with its built-in defaults; the
+variables only ever read, never leak globally. Renaming a variable is a
+breaking change.
+
 ### Headless: provider + hooks
 
 `index.html`:
@@ -150,8 +177,8 @@ npx vite
 ```
 
 Open the printed localhost URL in two browser windows (mint a second token for
-the second window) - both participants land in the same room with live peer
-events.
+the second window) - both participants land in the same room with live
+participant events.
 
 ## What the SDK exposes
 
@@ -163,14 +190,21 @@ events.
   and the underlying `manager` for advanced use
 - `useParticipants()` - remote participants with their camera/screen/audio
   streams and enabled flags
+- `useOwnCapabilities()` - the server-delivered capability list for the local
+  participant (empty until join); gate UI on membership, e.g.
+  `capabilities.includes("mute-users")`
 - `useHostControls()` - `mutePeer`, `muteAll`, `lockRoom`, `kickPeer` for
-  token participants carrying the admin claim
-- `useDeviceControls()` - camera/mic capture and device selection
+  participants whose capabilities include the matching moderation right;
+  every action settles on the server's acknowledgement
+- `useQualityControls()` - manual simulcast preference per remote participant:
+  `setParticipantQuality(userId, "low" | "medium" | "high")`; affects only
+  your own subscription, never audio or other subscribers
 
 ## Next steps
 
-- Host controls require an admin claim on the token: request them when
-  minting (`"admin": true` in the token payload)
+- Host controls require the host role on the token: request it when minting
+  (`"role": "host"` in the token payload); the server resolves the role to
+  capabilities and delivers them with the join acknowledgement
 - Room lifecycle (end room, list rooms) lives in the same `/v1` API
 - Everything above works against a locally running server too
   (`http://localhost:3000`)

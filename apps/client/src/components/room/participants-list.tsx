@@ -64,9 +64,9 @@ export function ParticipantsList({
               key={participant.id}
               {...participant}
               isLocalUser={participant.id === currentUserId}
-              canKick={isOwner}
+              canKick={Boolean(onKickParticipant)}
               onKick={onKickParticipant}
-              canMute={isOwner}
+              canMute={Boolean(onMuteParticipant)}
               onMute={onMuteParticipant}
             />
           ))}

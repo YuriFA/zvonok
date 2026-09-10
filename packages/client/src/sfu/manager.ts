@@ -31,15 +31,15 @@ import type {
   SfuJoinPayload,
   SfuKickedPayload,
   SfuRoomEndedPayload,
-  SfuPeerInfo,
-  SfuPeerJoinedPayload,
-  SfuExistingPeersPayload,
+  SfuParticipantInfo,
+  SfuParticipantJoinedPayload,
+  SfuExistingParticipantsPayload,
   SfuProducerStateChangedPayload,
   QualityStatsCallback,
   PeerQualityStats,
   SfuStateCallback,
   SfuTrackCallback,
-  SfuPeerCallback,
+  SfuParticipantCallback,
   SfuProducerStateCallback,
   SimulcastSpatialLayer,
   SfuProduceErrorCode,
@@ -48,9 +48,16 @@ import type {
   SfuScreenShareStoppedPayload,
   SfuScreenShareStoppedCallback,
   SfuGuestJoinRequestPayload,
+  SfuJoinErrorPayload,
+  SfuEgressStatusPayload,
+  SfuEgressOutputRequest,
 } from "./types.js";
-import { SfuProduceError, SfuJoinError } from "./types.js";
-import type { SfuJoinErrorPayload } from "./types.js";
+import {
+  SfuProduceError,
+  SfuJoinError,
+  SfuHostActionError,
+  SfuEgressActionError,
+} from "./types.js";
 
 /**
  * Simulcast encoding layers sent to the SFU for video producers.
@@ -76,7 +83,7 @@ export class SfuManager implements ISfuManager {
   private recvTransport: Transport | null = null;
   private producers = new Map<string, Producer>();
   private consumers = new Map<string, Consumer>();
-  private peers = new Map<string, SfuPeerInfo>();
+  private peers = new Map<string, SfuParticipantInfo>();
   private pendingNewProducers: SfuNewProducerPayload[] = [];
   private producingInProgress = new Map<string, Promise<Producer | null>>();
   private replaceChains: Record<"audio" | "video", Promise<boolean>> = {
@@ -109,10 +116,12 @@ export class SfuManager implements ISfuManager {
     videoProducerId: null,
     screenProducerId: null,
     isScreenShareBlocked: false,
+    capabilities: [],
+    egress: null,
   };
   private stateCallbacks = new Set<SfuStateCallback>();
   private trackCallbacks = new Set<SfuTrackCallback>();
-  private peerJoinedCallbacks = new Set<SfuPeerCallback>();
+  private peerJoinedCallbacks = new Set<SfuParticipantCallback>();
   private peerLeftCallbacks = new Set<(userId: string) => void>();
   private kickedCallbacks = new Set<(payload: SfuKickedPayload) => void>();
   private roomEndedCallbacks = new Set<(payload: SfuRoomEndedPayload) => void>();
@@ -148,18 +157,19 @@ export class SfuManager implements ISfuManager {
       onProducerCreated: (p) => this.handleProducerCreated(p),
       onProduceError: (p) => this.handleProduceError(p),
       onJoinError: (p) => this.handleJoinError(p),
-      onPeerJoined: (p) => this.handlePeerJoined(p),
-      onExistingPeers: (p) => this.handleExistingPeers(p),
+      onParticipantJoined: (p) => this.handlePeerJoined(p),
+      onExistingParticipants: (p) => this.handleExistingPeers(p),
       onNewProducer: (p) => this.handleNewProducer(p),
       onConsumerCreated: (p) => this.handleConsumerCreated(p),
       onConsumerClosed: (p) => this.handleConsumerClosed(p),
       onProducerStateChanged: (p) => this.handleProducerStateChanged(p),
-      onPeerLeft: (p) => this.handlePeerLeft(p),
+      onParticipantLeft: (p) => this.handlePeerLeft(p),
       onKicked: (p) => this.handleKicked(p),
       onRoomEnded: (p) => this.handleRoomEnded(p),
       onScreenShareStarted: (p) => this.handleScreenShareStarted(p),
       onScreenShareStopped: (p) => this.handleScreenShareStopped(p),
       onGuestJoinRequest: (p) => this.handleGuestJoinRequest(p),
+      onEgressStatus: (p) => this.handleEgressStatus(p),
     };
   }
 
@@ -217,12 +227,143 @@ export class SfuManager implements ISfuManager {
     }
     this.closeAll();
   }
+  // ISfuHostControls
+  async mutePeer(userId: string, options?: { timeoutMs?: number }): Promise<void> {
+    await this.emitHostAction("sfu:mute-peer", { userId }, options?.timeoutMs);
+  }
 
-  kickPeer(userId: string): boolean {
+  async muteAll(options?: { timeoutMs?: number }): Promise<void> {
+    await this.emitHostAction("sfu:mute-all", {}, options?.timeoutMs);
+  }
+
+  async lockRoom(locked: boolean, options?: { timeoutMs?: number }): Promise<void> {
+    await this.emitHostAction("sfu:lock-room", { locked }, options?.timeoutMs);
+  }
+
+  async kickPeer(userId: string, options?: { timeoutMs?: number }): Promise<void> {
+    await this.emitHostAction("sfu:kick-peer", { userId }, options?.timeoutMs);
+  }
+
+  /** How long to wait for a host-action acknowledgement before failing. */
+  private static readonly HOST_ACTION_TIMEOUT_MS = 10_000;
+
+  /**
+   * Emits a host-control event and settles on the server's acknowledgement:
+   * `{ok: true}` resolves; `{ok: false, code, message}` rejects with a typed
+   * SfuHostActionError carrying the server's code. A missing acknowledgement
+   * rejects with HOST_ACTION_TIMEOUT.
+   */
+  private emitHostAction(
+    event: "sfu:mute-peer" | "sfu:mute-all" | "sfu:lock-room" | "sfu:kick-peer",
+    payload: Record<string, string | boolean>,
+    timeoutMs?: number,
+  ): Promise<void> {
     const socket = this.connection.getSocket();
-    if (!socket) return false;
-    socket.emit("sfu:kick-peer", { userId });
-    return true;
+    if (!socket) {
+      return Promise.reject(
+        new SfuHostActionError("DISCONNECTED", "Join the room before using host controls"),
+      );
+    }
+
+    const wait = timeoutMs ?? SfuManager.HOST_ACTION_TIMEOUT_MS;
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new SfuHostActionError(
+            "HOST_ACTION_TIMEOUT",
+            `Server did not acknowledge ${event} within ${wait}ms`,
+          ),
+        );
+      }, wait);
+      socket.emit(event, payload, (ack: unknown) => {
+        clearTimeout(timer);
+        const { ok, code, message } = (ack ?? {}) as {
+          ok?: boolean;
+          code?: string;
+          message?: string;
+        };
+        if (ok === true) {
+          resolve();
+          return;
+        }
+        reject(
+          new SfuHostActionError(
+            (code as SfuHostActionError["code"]) ?? "MISSING_CAPABILITY",
+            message ?? `Server denied ${event}`,
+          ),
+        );
+      });
+    });
+  }
+
+  // Egress control (client-initiated sessions; RTMP stays server-side)
+  async startEgress(
+    outputs: SfuEgressOutputRequest,
+    options?: { timeoutMs?: number },
+  ): Promise<void> {
+    await this.emitEgressAction(
+      "egress:start",
+      { record: outputs.record === true, hls: outputs.hls === true },
+      options?.timeoutMs,
+    );
+  }
+
+  async stopEgress(options?: { timeoutMs?: number }): Promise<void> {
+    await this.emitEgressAction("egress:stop", {}, options?.timeoutMs);
+  }
+
+  /** How long to wait for an egress acknowledgement before failing. */
+  private static readonly EGRESS_ACTION_TIMEOUT_MS = 10_000;
+
+  /**
+   * Emits an egress control event and settles on the server's
+   * acknowledgement, mirroring the host-action ack contract.
+   */
+  private emitEgressAction(
+    event: "egress:start" | "egress:stop",
+    payload: Record<string, boolean>,
+    timeoutMs?: number,
+  ): Promise<void> {
+    const socket = this.connection.getSocket();
+    if (!socket) {
+      return Promise.reject(
+        new SfuEgressActionError("DISCONNECTED", "Join the room before controlling egress"),
+      );
+    }
+
+    const wait = timeoutMs ?? SfuManager.EGRESS_ACTION_TIMEOUT_MS;
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new SfuEgressActionError(
+            "EGRESS_ACTION_TIMEOUT",
+            `Server did not acknowledge ${event} within ${wait}ms`,
+          ),
+        );
+      }, wait);
+      socket.emit(event, payload, (ack: unknown) => {
+        clearTimeout(timer);
+        const { ok, code, message } = (ack ?? {}) as {
+          ok?: boolean;
+          code?: string;
+          message?: string;
+        };
+        if (ok === true) {
+          resolve();
+          return;
+        }
+        reject(
+          new SfuEgressActionError(
+            (code as SfuEgressActionError["code"]) ?? "EGRESS_UNAVAILABLE",
+            message ?? `Server denied ${event}`,
+          ),
+        );
+      });
+    });
+  }
+
+  private handleEgressStatus(payload: SfuEgressStatusPayload): void {
+    this.updateState({ egress: payload });
   }
 
   onKicked(callback: (payload: SfuKickedPayload) => void): () => void {
@@ -488,21 +629,21 @@ export class SfuManager implements ISfuManager {
     return undefined;
   }
 
-  // ISfuPeerRegistry
-  getPeers(): Map<string, SfuPeerInfo> {
+  // ISfuParticipantRegistry
+  getParticipants(): Map<string, SfuParticipantInfo> {
     return new Map(this.peers);
   }
 
-  getPeer(userId: string): SfuPeerInfo | undefined {
+  getParticipant(userId: string): SfuParticipantInfo | undefined {
     return this.peers.get(userId);
   }
 
-  onPeerJoined(callback: SfuPeerCallback): () => void {
+  onParticipantJoined(callback: SfuParticipantCallback): () => void {
     this.peerJoinedCallbacks.add(callback);
     return () => this.peerJoinedCallbacks.delete(callback);
   }
 
-  onPeerLeft(callback: (userId: string) => void): () => void {
+  onParticipantLeft(callback: (userId: string) => void): () => void {
     this.peerLeftCallbacks.add(callback);
     return () => this.peerLeftCallbacks.delete(callback);
   }
@@ -584,9 +725,11 @@ export class SfuManager implements ISfuManager {
 
   private async handleJoined(payload: SfuJoinedPayload): Promise<void> {
     console.log("[SFU] Joined room, loading device...");
-    // The server echoes back the verified identity; payload identity is
-    // never trusted.
+    // The server echoes back the verified identity and the effective
+    // capabilities; payload identity is never trusted and rights are never
+    // decoded from the token client-side.
     this.localUserId = payload.participant?.id ?? null;
+    this.updateState({ capabilities: payload.capabilities ?? [] });
     await this.loadDevice(payload.routerRtpCapabilities);
   }
 
@@ -781,7 +924,7 @@ export class SfuManager implements ISfuManager {
     }
   }
 
-  private handlePeerJoined(payload: SfuPeerJoinedPayload): void {
+  private handlePeerJoined(payload: SfuParticipantJoinedPayload): void {
     console.log("[SFU] Peer joined:", payload.userId, payload.username);
     let peer = this.peers.get(payload.userId);
     if (!peer) {
@@ -801,7 +944,7 @@ export class SfuManager implements ISfuManager {
     });
   }
 
-  private handleExistingPeers(peers: SfuExistingPeersPayload[]): void {
+  private handleExistingPeers(peers: SfuExistingParticipantsPayload[]): void {
     console.log("[SFU] Existing peers:", peers.length);
     for (const peerData of peers) {
       let peer = this.peers.get(peerData.userId);
@@ -1089,8 +1232,6 @@ export class SfuManager implements ISfuManager {
     this.pendingProduceRequests.clear();
     this.peers.clear();
     this.pendingNewProducers = [];
-    this.pendingLocalProduces = [];
-    this.localUserId = null;
     this.state = {
       connectionState: "disconnected",
       isDeviceLoaded: false,
@@ -1101,6 +1242,8 @@ export class SfuManager implements ISfuManager {
       videoProducerId: null,
       screenProducerId: null,
       isScreenShareBlocked: false,
+      capabilities: [],
+      egress: null,
     };
     this.notifyStateChange();
   }

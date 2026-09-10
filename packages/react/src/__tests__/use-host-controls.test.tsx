@@ -1,33 +1,31 @@
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { SfuHostActionError } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
 import { ZvonokHostError } from "../errors.js";
+import type { UseHostControlsResult } from "../use-host-controls.js";
 import { useHostControls } from "../use-host-controls.js";
-import { ZvonokProvider, useZvonokSession } from "../zvonok-context.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
   return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
 }
-
-function renderControls() {
-  return renderHook(
-    () => {
-      const session = useZvonokSession();
-      const controls = useHostControls();
-      return { session, controls };
-    },
-    { wrapper: Provider },
-  );
+interface ControlsHookResult {
+  controls: UseHostControlsResult;
+  session: ZvonokSession;
 }
 
-async function attachManager(
-  result: ReturnType<typeof renderControls>["result"],
-  sfu: MockSfuManager,
-) {
+function renderControls() {
+  return renderHook(() => ({ controls: useHostControls(), session: useZvonokSession() }), {
+    wrapper: Provider,
+  });
+}
+
+async function attachManager(result: { current: ControlsHookResult }, sfu: MockSfuManager) {
   await act(async () => {
     result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
   });
@@ -36,113 +34,88 @@ async function attachManager(
 describe("useHostControls", () => {
   let sfu: MockSfuManager;
 
+
   beforeEach(() => {
     sfu = createMockSfuManager();
   });
 
-  it("emits sfu:mute-peer with the target and resolves after the denial window", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderControls();
-      await attachManager(result, sfu);
-
-      let promise: Promise<void> = Promise.resolve();
-      act(() => {
-        promise = result.current.controls.mutePeer("peer-1");
-      });
-      expect(sfu.socket.emissions).toContainEqual({ event: "sfu:mute-peer", payload: { userId: "peer-1" } });
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3_000);
-        await promise;
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("rejects mutePeer with a typed error when the server denies", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderControls();
-      await attachManager(result, sfu);
-
-      let promise: Promise<void> = Promise.resolve();
-      act(() => {
-        promise = result.current.controls.mutePeer("peer-1");
-      });
-      await act(async () => {
-        sfu.socket.fire("sfu:host-error", { code: "NOT_ROOM_HOST", message: "not the host" });
-        await expect(promise).rejects.toBeInstanceOf(ZvonokHostError);
-      });
-      await expect(promise).rejects.toMatchObject({ code: "NOT_ROOM_HOST" });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("emits sfu:mute-all to everyone-else semantics with an empty payload", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderControls();
-      await attachManager(result, sfu);
-
-      let promise: Promise<void> = Promise.resolve();
-      act(() => {
-        promise = result.current.controls.muteAll();
-      });
-      expect(sfu.socket.emissions).toContainEqual({ event: "sfu:mute-all", payload: {} });
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3_000);
-        await promise;
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("emits sfu:lock-room with the requested state", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderControls();
-      await attachManager(result, sfu);
-
-      let promise: Promise<void> = Promise.resolve();
-      act(() => {
-        promise = result.current.controls.lockRoom(true);
-      });
-      expect(sfu.socket.emissions).toContainEqual({ event: "sfu:lock-room", payload: { locked: true } });
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3_000);
-        await promise;
-      });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("kickPeer delegates to the manager", async () => {
+  it("delegates mutePeer to the manager and resolves on the ack", async () => {
     const { result } = renderControls();
     await attachManager(result, sfu);
 
-    act(() => {
-      result.current.controls.kickPeer("peer-7");
+    await act(async () => {
+      await result.current.controls.mutePeer("user-2");
     });
 
-    expect(sfu.manager.kickPeer).toHaveBeenCalledWith("peer-7");
+    expect(sfu.manager.mutePeer).toHaveBeenCalledWith("user-2");
+  });
+
+  it("rejects mutePeer with the server's coded denial", async () => {
+    sfu.manager.mutePeer.mockRejectedValueOnce(
+      new SfuHostActionError("MISSING_CAPABILITY", "Missing mute-users capability"),
+    );
+    const { result } = renderControls();
+    await attachManager(result, sfu);
+
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await result.current.controls.mutePeer("user-2");
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBeInstanceOf(ZvonokHostError);
+    expect((caught as ZvonokHostError).code).toBe("MISSING_CAPABILITY");
+  });
+
+  it("delegates muteAll with no arguments", async () => {
+    const { result } = renderControls();
+    await attachManager(result, sfu);
+
+    await act(async () => {
+      await result.current.controls.muteAll();
+    });
+
+    expect(sfu.manager.muteAll).toHaveBeenCalledWith();
+  });
+
+  it("delegates lockRoom with the requested state", async () => {
+    const { result } = renderControls();
+    await attachManager(result, sfu);
+
+    await act(async () => {
+      await result.current.controls.lockRoom(true);
+    });
+
+    expect(sfu.manager.lockRoom).toHaveBeenCalledWith(true);
+  });
+
+  it("kickPeer settles on the manager promise", async () => {
+    const { result } = renderControls();
+    await attachManager(result, sfu);
+
+    await act(async () => {
+      await result.current.controls.kickPeer("user-2");
+    });
+
+    expect(sfu.manager.kickPeer).toHaveBeenCalledWith("user-2");
   });
 
   it("rejects with a typed error when there is no connection", async () => {
     const { result } = renderControls();
 
-    await expect(result.current.controls.mutePeer("peer-1")).rejects.toMatchObject({
-      code: "DISCONNECTED",
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await result.current.controls.mutePeer("user-2");
+      } catch (error) {
+        caught = error;
+      }
     });
-    await expect(result.current.controls.muteAll()).rejects.toMatchObject({ code: "DISCONNECTED" });
-    await expect(result.current.controls.lockRoom(true)).rejects.toMatchObject({
-      code: "DISCONNECTED",
-    });
+
+    expect(caught).toBeInstanceOf(ZvonokHostError);
+    expect((caught as ZvonokHostError).code).toBe("DISCONNECTED");
   });
 });

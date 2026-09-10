@@ -182,9 +182,16 @@ export function ActiveRoomView({
     await toggleAudio();
   }, [toggleAudio]);
 
-  const [asideState, setAsideState] = useState<string | null>(null);
-
   const isOwner = currentUserId === room.ownerId;
+
+  // Server-delivered capabilities gate the host affordances; role and
+  // owner knowledge never lives in the client.
+  const ownCapabilities = session.sfuState.capabilities;
+  const canMuteUsers = ownCapabilities.includes("mute-users");
+  const canLockRoom = ownCapabilities.includes("lock-room");
+  const canRemoveParticipants = ownCapabilities.includes("remove-participants");
+
+  const [asideState, setAsideState] = useState<string | null>(null);
 
   const overlayPanel = roomPanels.find((panel) => panel.id === asideState) ?? null;
 
@@ -353,14 +360,9 @@ export function ActiveRoomView({
                   {participants.length}
                 </span>
               </AsidePanelHeader>
-              {isOwner && (
+              {(canMuteUsers || canLockRoom) && (
                 <div className="flex items-center gap-2 border-b px-3 py-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 gap-1.5 text-xs"
-                    onClick={handleMuteAll}
-                  >
+                  <Button size="sm" variant="outline" onClick={handleMuteAll}>
                     <MicOff className="size-3.5" />
                     Mute all
                   </Button>
@@ -383,8 +385,8 @@ export function ActiveRoomView({
                 participants={participants}
                 currentUserId={currentUserId}
                 roomOwnerId={room.ownerId}
-                onKickParticipant={kickPeer}
-                onMuteParticipant={isOwner ? handleMuteParticipant : undefined}
+                onKickParticipant={canRemoveParticipants ? kickPeer : undefined}
+                onMuteParticipant={canMuteUsers ? handleMuteParticipant : undefined}
                 onApproveRequest={isOwner ? approveRequest : undefined}
                 onDenyRequest={isOwner ? denyRequest : undefined}
               />

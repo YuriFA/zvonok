@@ -85,18 +85,27 @@ export function createMockSfuManager() {
   const produceErrorListeners = new Set<(code: string) => void>();
 
   let connectionState = "disconnected";
+  let capabilities: string[] = [];
+  let egress: Record<string, unknown> | null = null;
 
   const manager = {
     connect: vi.fn(() => {
       connectionState = "connected";
-      stateListeners.forEach((listener) => listener({ connectionState }));
+      stateListeners.forEach((listener) => listener({ connectionState, capabilities, egress }));
     }),
     disconnect: vi.fn(),
     leaveRoom: vi.fn(),
     isConnected: vi.fn(() => true),
     getSocket: vi.fn(() => socket),
     joinRoom: vi.fn(async () => {}),
-    kickPeer: vi.fn(() => true),
+    kickPeer: vi.fn(async () => {}),
+    mutePeer: vi.fn(async () => {}),
+    muteAll: vi.fn(async () => {}),
+    lockRoom: vi.fn(async () => {}),
+    startEgress: vi.fn(async () => {}),
+    stopEgress: vi.fn(async () => {}),
+    setPreferredLayers: vi.fn(),
+    getVideoConsumerIdForUserId: vi.fn(),
     produce: vi.fn(async (track: MediaStreamTrack) => ({ id: `${track.kind}-producer` })),
     produceScreen: vi.fn(async () => ({ id: "screen-producer" })),
     closeScreenProducer: vi.fn(),
@@ -105,7 +114,7 @@ export function createMockSfuManager() {
     resumeProducer: vi.fn(),
     replaceTrack: vi.fn(async () => true),
     getProducerByKind: vi.fn<(kind: "audio" | "video") => { id: string } | undefined>(),
-    getState: vi.fn(() => ({ connectionState })),
+    getState: vi.fn(() => ({ connectionState, capabilities, egress })),
     startStatsCollection: vi.fn(),
     stopStatsCollection: vi.fn(),
     getStats: vi.fn(() => new Map()),
@@ -122,11 +131,11 @@ export function createMockSfuManager() {
       trackListeners.add(listener);
       return () => trackListeners.delete(listener);
     }),
-    onPeerJoined: vi.fn((listener: (peer: { userId: string; username: string }) => void) => {
+    onParticipantJoined: vi.fn((listener: (peer: { userId: string; username: string }) => void) => {
       peerJoinedListeners.add(listener);
       return () => peerJoinedListeners.delete(listener);
     }),
-    onPeerLeft: vi.fn((listener: (userId: string) => void) => {
+    onParticipantLeft: vi.fn((listener: (userId: string) => void) => {
       peerLeftListeners.add(listener);
       return () => peerLeftListeners.delete(listener);
     }),
@@ -155,6 +164,14 @@ export function createMockSfuManager() {
       screenShareStoppedListeners.add(listener);
       return () => screenShareStoppedListeners.delete(listener);
     }),
+    simulateCapabilities(next: string[]): void {
+      capabilities = next;
+      stateListeners.forEach((listener) => listener({ connectionState, capabilities, egress }));
+    },
+    simulateEgressStatus(next: Record<string, unknown> | null): void {
+      egress = next;
+      stateListeners.forEach((listener) => listener({ connectionState, capabilities, egress }));
+    },
     simulateConnected(state = "connected"): void {
       connectionState = state;
       stateListeners.forEach((listener) => listener({ connectionState }));

@@ -11,11 +11,7 @@ import type {
   IceCandidate,
 } from 'mediasoup/types';
 import type { IceServerConfig } from '../config/mediasoup.config';
-
-export interface PeerPermissions {
-  publish: boolean;
-  admin: boolean;
-}
+import type { CapabilityId } from '../capabilities';
 
 export interface Peer {
   id: string;
@@ -26,7 +22,9 @@ export interface Peer {
   recvTransport?: WebRtcTransport;
   producers: Map<string, Producer>;
   consumers: Map<string, Consumer>;
-  permissions?: PeerPermissions;
+  /** Effective capabilities resolved by the server from the verified
+   * credential path; never read from client-supplied payload fields. */
+  capabilities: CapabilityId[];
   /** Set only when a verified identity matches the DB room owner. */
   ownsRoom?: boolean;
 }
@@ -60,12 +58,14 @@ export interface SfuJoinedPayload {
   routerRtpCapabilities: RtpCapabilities;
   /** The server-verified identity of this participant. */
   participant: { id: string; username: string };
+  /** The participant's effective capabilities from the verified
+   * credential path (single source of truth; clients never decode tokens). */
+  capabilities: CapabilityId[];
 }
 
 export type SfuTransportDirection = 'send' | 'recv';
 
 export interface SfuTransportCreatedPayload {
-  direction: SfuTransportDirection;
   transportId: string;
   iceParameters: IceParameters;
   iceCandidates: IceCandidate[];
@@ -173,14 +173,16 @@ export interface SfuRoomLockedPayload {
   locked: boolean;
 }
 
-// Coded denial for host-control actions (sfu:mute-peer, sfu:mute-all,
-// sfu:lock-room), emitted on the requesting socket only.
-export type SfuHostErrorCode = 'NOT_ROOM_HOST';
+// Acknowledgement for host-control actions (sfu:mute-peer, sfu:mute-all,
+// sfu:lock-room, sfu:kick-peer), answered on the requesting socket only.
+export type SfuHostActionErrorCode =
+  | 'NOT_IN_ROOM' // requester has no peer state in a room
+  | 'MISSING_CAPABILITY' // requester lacks the capability the action guards
+  | 'TARGET_NOT_FOUND'; // target peer absent from the room
 
-export interface SfuHostErrorPayload {
-  code: SfuHostErrorCode;
-  message: string;
-}
+export type SfuHostActionAck =
+  | { ok: true }
+  | { ok: false; code: SfuHostActionErrorCode; message: string };
 
 // Peer joined payload - sent when a peer joins the room (independent of media)
 export interface SfuPeerJoinedPayload {

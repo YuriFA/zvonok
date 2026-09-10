@@ -209,10 +209,10 @@ describe("SfuManager", () => {
   });
 
   it("consumes a remote producer and notifies track subscribers", async () => {
-    const onPeerJoined = vi.fn();
+    const onParticipantJoined = vi.fn();
     const onTrack = vi.fn();
 
-    manager.onPeerJoined(onPeerJoined);
+    manager.onParticipantJoined(onParticipantJoined);
     manager.onTrack(onTrack);
     manager.connect();
 
@@ -234,7 +234,7 @@ describe("SfuManager", () => {
       kind: "video",
     });
 
-    expect(onPeerJoined).toHaveBeenCalledWith(
+    expect(onParticipantJoined).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "user-2",
         username: "bob",
@@ -681,6 +681,83 @@ describe("SfuManager", () => {
       await setupWithRecvTransport();
 
       expect(manager.getVideoConsumerIdForUserId("user-unknown")).toBeUndefined();
+    });
+  });
+
+  describe("egress state and actions", () => {
+    it("mirrors egress:status broadcasts into state", async () => {
+      manager.connect();
+
+      await testContext.emitSocketEvent("egress:status", {
+        sessionId: "egress-1",
+        outputs: { record: true, hls: false },
+        status: "starting",
+      });
+      expect(manager.getState().egress).toEqual({
+        sessionId: "egress-1",
+        outputs: { record: true, hls: false },
+        status: "starting",
+      });
+
+      await testContext.emitSocketEvent("egress:status", {
+        sessionId: "egress-1",
+        outputs: { record: true, hls: false },
+        status: "live",
+      });
+      expect(manager.getState().egress?.status).toBe("live");
+    });
+
+    it("resolves startEgress on the server acknowledgement", async () => {
+      manager.connect();
+
+      const promise = manager.startEgress({ record: true });
+      const call = testContext.mockSocket.emit.mock.calls.find(
+        (args) => args[0] === "egress:start",
+      );
+      expect(call?.[1]).toEqual({ record: true, hls: false });
+      (call?.[2] as (ack: unknown) => void)({ ok: true });
+
+      await expect(promise).resolves.toBeUndefined();
+    });
+
+    it("rejects startEgress with the server's coded denial", async () => {
+      manager.connect();
+
+      const promise = manager.startEgress({ hls: true });
+      const call = testContext.mockSocket.emit.mock.calls.find(
+        (args) => args[0] === "egress:start",
+      );
+      (call?.[2] as (ack: unknown) => void)({
+        ok: false,
+        code: "MISSING_CAPABILITY",
+        message: "Missing start-broadcast capability",
+      });
+
+      await expect(promise).rejects.toMatchObject({
+        name: "SfuEgressActionError",
+        code: "MISSING_CAPABILITY",
+      });
+    });
+
+    it("rejects when the acknowledgement never arrives", async () => {
+      manager.connect();
+
+      const promise = manager.startEgress({ record: true }, { timeoutMs: 5 });
+      await expect(promise).rejects.toMatchObject({
+        code: "EGRESS_ACTION_TIMEOUT",
+      });
+    });
+
+    it("resolves stopEgress on the server acknowledgement", async () => {
+      manager.connect();
+
+      const promise = manager.stopEgress();
+      const call = testContext.mockSocket.emit.mock.calls.find(
+        (args) => args[0] === "egress:stop",
+      );
+      (call?.[2] as (ack: unknown) => void)({ ok: true });
+
+      await expect(promise).resolves.toBeUndefined();
     });
   });
 });

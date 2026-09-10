@@ -25,7 +25,7 @@ export interface UseRoomSessionResult {
   sfuState: SfuState;
   remotePeers: RemotePeerMedia[];
   wasKicked: boolean;
-  kickPeer: (userId: string) => void;
+  kickPeer: (userId: string) => Promise<void>;
   participants: Participant[];
   localUserId: string;
   isRoomLocked: boolean;

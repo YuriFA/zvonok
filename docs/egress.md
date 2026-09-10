@@ -55,6 +55,30 @@ the same room responds `409`. Endpoint hosts on private/loopback addresses
 are rejected unless `EGRESS_ALLOW_PRIVATE_TARGETS=true` (development only -
 use it with a local mediamtx target).
 
+### Client-initiated start/stop
+
+In-call participants can start and stop egress over the room socket -
+no API key in the browser. The SDK surface:
+
+```tsx
+const controls = useEgressControls();
+await controls.start({ record: true, hls: true });
+await controls.stop();
+```
+
+Rules:
+
+- Outputs are limited to `record` and `hls`; RTMP endpoints stay
+  server-side via `/v1` (push URLs from a browser are an SSRF boundary)
+- The `record` output requires the `start-recording` capability and `hls`
+  requires `start-broadcast` (delivered with the join acknowledgement; the
+  `host` role carries both)
+- Only project rooms support egress; user-owned rooms are refused
+- One active session per room, exactly like the REST path: a second start
+  answers a coded `ALREADY_ACTIVE` denial
+- Every room participant receives `egress:status` broadcasts on session
+  transitions; `useEgressState()` mirrors them (`isRecording`, `isLive`)
+
 ### Inspect, list, stop
 
 ```bash
@@ -122,8 +146,11 @@ curl -X DELETE -H "Authorization: Bearer $API_KEY" \
 ```
 
 The session view (`GET /v1/egress/$EGRESS_ID`) carries `recordingUrl` and
-`recordingSizeBytes` for record sessions; there is no `recording.ready`
-webhook - poll after `egress.stopped`.
+`recordingSizeBytes` for record sessions. When the finalized MP4 is ready
+(shortly after `egress.stopped`), the project's webhook endpoint receives
+`egress.recording_ready` with the download URL and byte size - no polling.
+Sessions that fail without finalization never emit it; their raw parts stay
+downloadable.
 
 ## Environment variables
 

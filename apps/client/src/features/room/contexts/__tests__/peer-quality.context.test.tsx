@@ -1,13 +1,13 @@
 import { act, render } from "@testing-library/react";
 import { createMockSfuManager } from "@zvonok/client/sfu/__mocks__/manager";
-import type { PeerQualityStats, QualityLevel, SfuPeerInfo } from "@zvonok/client/sfu/types";
+import type { PeerQualityStats, QualityLevel, SfuParticipantInfo } from "@zvonok/client/sfu/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SfuManagerProvider } from "@/features/sfu/contexts/sfu-manager.context";
 
 import { PeerQualityProvider } from "../peer-quality.context";
 
-function createPeer(userId: string, producerId: string): SfuPeerInfo {
+function createPeer(userId: string, producerId: string): SfuParticipantInfo {
   return {
     userId,
     username: userId,
@@ -57,7 +57,7 @@ describe("PeerQualityProvider", () => {
     const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
     vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
 
-    manager.simulatePeerJoined(createPeer("user-2", "producer-old"));
+    manager.simulateParticipantJoined(createPeer("user-2", "producer-old"));
 
     render(
       <SfuManagerProvider manager={manager}>
@@ -72,7 +72,7 @@ describe("PeerQualityProvider", () => {
     });
 
     act(() => {
-      const peer = manager.getPeer("user-2");
+      const peer = manager.getParticipant("user-2");
       if (!peer) {
         throw new Error("Expected peer to exist");
       }
@@ -90,7 +90,7 @@ describe("PeerQualityProvider", () => {
     const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
     vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
 
-    manager.simulatePeerJoined(createPeer("user-2", "producer-old"));
+    manager.simulateParticipantJoined(createPeer("user-2", "producer-old"));
 
     render(
       <SfuManagerProvider manager={manager}>
@@ -109,8 +109,8 @@ describe("PeerQualityProvider", () => {
     expect(setPreferredLayers).toHaveBeenLastCalledWith("producer-old", 0);
 
     act(() => {
-      manager.simulatePeerLeft("user-2");
-      manager.simulatePeerJoined(createPeer("user-2", "producer-new"));
+      manager.simulateParticipantLeft("user-2");
+      manager.simulateParticipantJoined(createPeer("user-2", "producer-new"));
       manager.emitQualityStats(new Map([["user-2", createQualityStats("user-2", "poor")]]));
       vi.advanceTimersByTime(3000);
     });

@@ -4,6 +4,12 @@
  * on host CSS. The prebuilt module imports this file as a side effect;
  * consumers who manage stylesheets manually can import it via the
  * "@zvonok/react/zvonok.css" export instead.
+ *
+ * Theming: the widget reads a documented set of --zvonok-* custom
+ * properties (defined on any ancestor of the widget by the host):
+ * --zvonok-accent-color, --zvonok-background-color, --zvonok-text-color,
+ * --zvonok-radius, --zvonok-font-family. Every read carries the built-in
+ * default as its fallback, so an unstyled embed renders identically.
  */
 
 .zvk-room {
@@ -13,9 +19,15 @@
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  background-color: #16181d;
-  color: #e6e8eb;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background-color: var(--zvonok-background-color, #16181d);
+  color: var(--zvonok-text-color, #e6e8eb);
+  font-family: var(
+    --zvonok-font-family,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif
+  );
   font-size: 14px;
   line-height: 1.4;
 }
@@ -71,9 +83,8 @@
   position: relative;
   margin: 0;
   min-height: 135px;
-  border-radius: 10px;
   overflow: hidden;
-  background-color: #22252c;
+  border-radius: var(--zvonok-radius, 10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -114,7 +125,7 @@
   bottom: 8px;
   max-width: calc(100% - 16px);
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: calc(var(--zvonok-radius, 10px) - 4px);
   background-color: rgba(0, 0, 0, 0.6);
   color: #fff;
   font-size: 12px;
@@ -149,12 +160,10 @@
 .zvk-button {
   padding: 8px 16px;
   border: 1px solid #3a404d;
-  border-radius: 8px;
+  border-radius: calc(var(--zvonok-radius, 10px) - 2px);
   background-color: #22252c;
-  color: #e6e8eb;
+  color: var(--zvonok-text-color, #e6e8eb);
   font-size: 14px;
-  font-family: inherit;
-  cursor: pointer;
 }
 
 .zvk-button:hover:not(:disabled) {
@@ -172,19 +181,17 @@
 }
 
 .zvk-button-join {
-  background-color: #2f6f4f;
-  border-color: #2f6f4f;
+  background-color: var(--zvonok-accent-color, #2f6f4f);
+  border-color: var(--zvonok-accent-color, #2f6f4f);
 }
 
 .zvk-button-join:hover:not(:disabled) {
-  background-color: #388560;
+  background-color: color-mix(
+    in srgb,
+    var(--zvonok-accent-color, #2f6f4f) 85%,
+    white
+  );
 }
-
-.zvk-button-leave {
-  background-color: #7c2d2d;
-  border-color: #7c2d2d;
-}
-
 .zvk-button-leave:hover:not(:disabled) {
   background-color: #963838;
 }
@@ -203,7 +210,7 @@
   max-width: 340px;
   padding: 24px;
   border: 1px solid #2a2e36;
-  border-radius: 12px;
+  border-radius: calc(var(--zvonok-radius, 10px) + 2px);
   background-color: #1c1f25;
 }
 
@@ -225,16 +232,16 @@
 .zvk-input {
   padding: 8px 12px;
   border: 1px solid #3a404d;
-  border-radius: 8px;
-  background-color: #16181d;
-  color: #e6e8eb;
+  border-radius: calc(var(--zvonok-radius, 10px) - 2px);
+  background-color: var(--zvonok-background-color, #16181d);
+  color: var(--zvonok-text-color, #e6e8eb);
   font-size: 14px;
   font-family: inherit;
 }
 
 .zvk-input:focus {
-  outline: 1px solid #5b7ca8;
-  border-color: #5b7ca8;
+  outline: 1px solid var(--zvonok-accent-color, #5b7ca8);
+  border-color: var(--zvonok-accent-color, #5b7ca8);
 }
 
 .zvk-toggle-row {

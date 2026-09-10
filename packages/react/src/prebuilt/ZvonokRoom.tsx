@@ -32,6 +32,9 @@ import { useParticipants } from "../use-participants.js";
 import { useZvonokConnection, type UseZvonokConnectionResult } from "../use-zvonok-connection.js";
 import { useDeviceControls, type ZvonokCaptureControl } from "../use-device-controls.js";
 import type { ZvonokParticipant } from "../types.js";
+import { useEgressControls } from "../use-egress-controls.js";
+import { useEgressState } from "../use-egress-state.js";
+import { useOwnCapabilities } from "../use-own-capabilities.js";
 import { ZvonokError } from "../errors.js";
 
 export interface ZvonokRoomProps {
@@ -237,6 +240,9 @@ function ZvonokRoomSurface({
   const connection: UseZvonokConnectionResult = useZvonokConnection({ roomSlug, token });
   const { participants } = useParticipants();
   const devices = useDeviceControls();
+  const ownCapabilities = useOwnCapabilities();
+  const { isRecording } = useEgressState();
+  const egressControls = useEgressControls();
 
   const prejoinSkipped = skipPrejoin === true || displayName !== undefined;
   const [nameDraft, setNameDraft] = useState(displayName ?? "");
@@ -390,6 +396,18 @@ function ZvonokRoomSurface({
     }
   }, []);
 
+  // Recording control appears only for participants the server granted
+  // start-recording; the capability list is server-delivered, never guessed.
+  const toggleRecord = useCallback(() => {
+    setNotice(null);
+    const action = isRecording
+      ? egressControls.stop()
+      : egressControls.start({ record: true });
+    void action.catch((error: unknown) => {
+      setNotice(error instanceof Error ? error.message : "Recording failed");
+    });
+  }, [isRecording, egressControls]);
+
   const handleLeave = useCallback(() => {
     devices.stop();
     connection.leave();
@@ -503,6 +521,16 @@ function ZvonokRoomSurface({
               onClick={() => void toggleScreenShare()}
             >
               Share screen
+            </button>
+          )}
+          {ownCapabilities.includes("start-recording") && (
+            <button
+              type="button"
+              className={isRecording ? "zvk-button" : "zvk-button zvk-button-off"}
+              aria-pressed={isRecording}
+              onClick={toggleRecord}
+            >
+              {isRecording ? "Stop recording" : "Record"}
             </button>
           )}
           <button type="button" className="zvk-button zvk-button-leave" onClick={handleLeave}>

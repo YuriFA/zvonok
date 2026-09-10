@@ -22,6 +22,7 @@ import type {
   SfuLockRoomPayload,
   SfuSetPreferredLayersPayload,
   SfuCloseProducerPayload,
+  SfuHostActionAck,
 } from './interfaces/sfu.interface';
 import { OnGatewayInit } from '@nestjs/websockets';
 
@@ -154,33 +155,35 @@ export class SfuGateway
   async handleKickPeer(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuKickPeerPayload,
-  ): Promise<void> {
+  ): Promise<SfuHostActionAck> {
     this.logger.log(`Kick peer ${payload.userId} requested by ${client.id}`);
-    await this.sfuService.kickPeer(client, payload.userId);
+    return this.sfuService.kickPeer(client, payload.userId);
   }
 
   @SubscribeMessage('sfu:mute-peer')
   async handleMutePeer(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuMutePeerPayload,
-  ): Promise<void> {
+  ): Promise<SfuHostActionAck> {
     this.logger.log(`Mute peer ${payload.userId} requested by ${client.id}`);
-    await this.sfuService.mutePeer(client, payload.userId);
+    return this.sfuService.mutePeer(client, payload.userId);
   }
 
   @SubscribeMessage('sfu:mute-all')
-  async handleMuteAll(@ConnectedSocket() client: Socket): Promise<void> {
+  async handleMuteAll(
+    @ConnectedSocket() client: Socket,
+  ): Promise<SfuHostActionAck> {
     this.logger.log(`Mute all requested by ${client.id}`);
-    await this.sfuService.muteAll(client);
+    return this.sfuService.muteAll(client);
   }
 
   @SubscribeMessage('sfu:lock-room')
   async handleLockRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuLockRoomPayload,
-  ): Promise<void> {
+  ): Promise<SfuHostActionAck> {
     this.logger.log(`Lock room ${payload.locked} requested by ${client.id}`);
-    await this.sfuService.lockRoom(client, payload.locked);
+    return this.sfuService.lockRoom(client, payload.locked);
   }
 
   @SubscribeMessage('sfu:set-preferred-layers')

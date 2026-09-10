@@ -123,7 +123,7 @@ const mockSfuManagerValue = {
   getProducerByKind: () => undefined,
   replaceTrack: vi.fn(),
   onQualityStats: () => () => {},
-  onPeerLeft: () => () => {},
+  onParticipantLeft: () => () => {},
   onStateChange: () => () => {},
   startStatsCollection: vi.fn(),
   stopStatsCollection: vi.fn(),
@@ -261,6 +261,16 @@ describe("RoomPage", () => {
         recvTransportConnected: true,
         audioProducerId: "audio-producer",
         videoProducerId: "video-producer",
+        capabilities: [
+          "send-audio",
+          "send-video",
+          "send-screenshare",
+          "mute-users",
+          "remove-participants",
+          "lock-room",
+          "start-recording",
+          "start-broadcast",
+        ],
       },
       remotePeers: [
         {

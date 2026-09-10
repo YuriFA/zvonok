@@ -1,8 +1,8 @@
 /**
  * Host control actions: mute one/all, room lock, kick.
  * Thin React binding over the framework-free createHostControls factory.
- * Denials arrive as sfu:host-error on the requesting socket and reject with
- * ZvonokHostError.
+ * Every action settles on the server's acknowledgement; denials reject
+ * with ZvonokHostError.
  */
 
 import { useMemo } from "react";
@@ -14,7 +14,7 @@ export interface UseHostControlsResult {
   mutePeer(userId: string): Promise<void>;
   muteAll(): Promise<void>;
   lockRoom(locked: boolean): Promise<void>;
-  kickPeer(userId: string): void;
+  kickPeer(userId: string): Promise<void>;
 }
 
 export function useHostControls(): UseHostControlsResult {

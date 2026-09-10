@@ -286,13 +286,13 @@ describe('Developer platform (e2e)', () => {
     );
   });
 
-  it('refuses publishing for a token without publish permission', async () => {
+  it('refuses publishing for a viewer-role token', async () => {
     const roomId = (globalThis as Record<string, unknown>)
       .__e2eRoomId as string;
     const mint = await request(app.getHttpServer())
       .post(`/v1/rooms/${roomId}/tokens`)
       .set(bearer)
-      .send({ publish: false });
+      .send({ role: 'viewer' });
 
     const socket = connectSocket();
     const joined = waitFor(socket, 'sfu:joined');

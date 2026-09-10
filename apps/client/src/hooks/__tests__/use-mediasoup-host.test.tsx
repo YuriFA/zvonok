@@ -1,4 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
+import { SfuHostActionError } from "@zvonok/client/sfu/types";
+import { ZvonokHostError } from "@zvonok/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 class MockMediaStream {
@@ -48,7 +50,10 @@ const sfuMock = vi.hoisted(() => {
     connect: vi.fn(),
     disconnect: vi.fn(),
     leaveRoom: vi.fn(),
-    kickPeer: vi.fn(),
+    kickPeer: vi.fn().mockResolvedValue(undefined),
+    mutePeer: vi.fn().mockResolvedValue(undefined),
+    muteAll: vi.fn().mockResolvedValue(undefined),
+    lockRoom: vi.fn().mockResolvedValue(undefined),
     joinRoom: vi.fn().mockResolvedValue(undefined),
     produce: vi.fn().mockResolvedValue({ id: "p", kind: "audio" }),
     produceScreen: vi.fn(),
@@ -67,8 +72,8 @@ const sfuMock = vi.hoisted(() => {
     })),
     onStateChange: vi.fn(() => noopUnsubscribe),
     onTrack: vi.fn(() => noopUnsubscribe),
-    onPeerJoined: vi.fn(() => noopUnsubscribe),
-    onPeerLeft: vi.fn(() => noopUnsubscribe),
+    onParticipantJoined: vi.fn(() => noopUnsubscribe),
+    onParticipantLeft: vi.fn(() => noopUnsubscribe),
     onKicked: vi.fn(() => noopUnsubscribe),
     onProducerStateChange: vi.fn(() => noopUnsubscribe),
     onScreenShareStopped: vi.fn(() => noopUnsubscribe),
@@ -151,44 +156,34 @@ describe("useMediasoup host features", () => {
     expect(result.current.mutedByHost).toBe(false);
   });
 
-  it("emits mute-peer and rejects with the server denial", async () => {
+  it("delegates mute-peer to the manager and rejects with the server denial", async () => {
     const { result } = renderMediasoup();
 
-    const promise = result.current.hostControls.mutePeer("user-2");
-    expect(sfuMock.socket.emit).toHaveBeenCalledWith("sfu:mute-peer", { userId: "user-2" });
+    sfuMock.manager.mutePeer.mockRejectedValueOnce(
+      new SfuHostActionError("MISSING_CAPABILITY", "Missing mute-users capability"),
+    );
 
-    // Attach the rejection expectation before emitting, so the rejection is
-    // handled in the same tick it happens.
-    const expectation = expect(promise).rejects.toMatchObject({
-      code: "NOT_ROOM_HOST",
-      message: "not the host",
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await result.current.hostControls.mutePeer("user-2");
+      } catch (error) {
+        caught = error;
+      }
     });
 
-    act(() => {
-      sfuMock.manager.emitSocketEvent("sfu:host-error", {
-        code: "NOT_ROOM_HOST",
-        message: "not the host",
-      });
-    });
-
-    await expectation;
+    expect(sfuMock.manager.mutePeer).toHaveBeenCalledWith("user-2");
+    expect(caught).toBeInstanceOf(ZvonokHostError);
+    expect((caught as ZvonokHostError).code).toBe("MISSING_CAPABILITY");
   });
 
-  it("emits lock-room toggles through host controls", async () => {
-    vi.useFakeTimers();
-    try {
-      const { result } = renderMediasoup();
+  it("resolves lock-room on the server acknowledgement", async () => {
+    const { result } = renderMediasoup();
 
-      const promise = result.current.hostControls.lockRoom(true);
-      expect(sfuMock.socket.emit).toHaveBeenCalledWith("sfu:lock-room", { locked: true });
+    await act(async () => {
+      await result.current.hostControls.lockRoom(true);
+    });
 
-      // No denial arrives: the action resolves once the denial window lapses.
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3000);
-      });
-      await expect(promise).resolves.toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(sfuMock.manager.lockRoom).toHaveBeenCalledWith(true);
   });
 });

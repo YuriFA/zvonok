@@ -171,6 +171,7 @@ export class EgressService implements OnModuleInit {
       restartTimes: [],
     };
     this.sessions.set(row.id, session);
+    this.notifyStatus(session, 'starting');
     session.unsubscribeProducerAdded = this.sfu.onRoomProducerAdded(
       roomId,
       () => this.scheduleMembershipRestart(session),
@@ -344,6 +345,7 @@ export class EgressService implements OnModuleInit {
           session.id,
           session.outputs,
         );
+        this.notifyStatus(session, 'live');
         this.logger.log(`Egress ${session.id} is live`);
       })
       .catch((error) =>
@@ -441,6 +443,7 @@ export class EgressService implements OnModuleInit {
     await rm(session.sdpDir, { recursive: true, force: true }).catch(
       () => undefined,
     );
+    this.notifyStatus(session, 'ended');
     this.logger.log(`Egress ${session.id} ended (${reason})`);
   }
 
@@ -466,10 +469,23 @@ export class EgressService implements OnModuleInit {
       session.outputs,
       error,
     );
-    await rm(session.sdpDir, { recursive: true, force: true }).catch(
-      () => undefined,
-    );
+    this.notifyStatus(session, 'failed');
     this.logger.warn(`Egress ${session.id} failed: ${error}`);
+  }
+
+  /** Tell the room's connected participants about a session state change. */
+  private notifyStatus(
+    session: ActiveSession,
+    status: 'starting' | 'live' | 'ended' | 'failed',
+  ): void {
+    this.sfu.broadcastToRoom(session.roomId, 'egress:status', {
+      sessionId: session.id,
+      outputs: {
+        record: session.outputs.record,
+        hls: session.outputs.hls,
+      },
+      status,
+    });
   }
 
   /**
@@ -575,6 +591,14 @@ export class EgressService implements OnModuleInit {
     for (const part of parts) {
       await rm(part, { force: true });
     }
+    this.webhooks.recordingReady(
+      session.roomId,
+      session.roomSlug,
+      session.id,
+      session.outputs,
+      `/v1/recordings/${session.id}/file`,
+      size,
+    );
     this.logger.log(`Egress ${session.id} recording finalized (${size} bytes)`);
   }
 

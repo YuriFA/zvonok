@@ -80,11 +80,13 @@ describe('EgressService', () => {
     createEgressConsumer: jest.Mock;
     onRoomProducerAdded: jest.Mock;
     onRoomClosed: jest.Mock;
+    broadcastToRoom: jest.Mock;
   };
   let webhooks: {
     egressStarted: jest.Mock;
     egressStopped: jest.Mock;
     egressFailed: jest.Mock;
+    recordingReady: jest.Mock;
   };
   let spawned: FakeProcess[];
 
@@ -166,11 +168,13 @@ describe('EgressService', () => {
       }),
       onRoomProducerAdded: jest.fn().mockReturnValue(jest.fn()),
       onRoomClosed: jest.fn().mockReturnValue(jest.fn()),
+      broadcastToRoom: jest.fn(),
     };
     webhooks = {
       egressStarted: jest.fn(),
       egressStopped: jest.fn(),
       egressFailed: jest.fn(),
+      recordingReady: jest.fn(),
     };
     (FFmpegProcess.spawn as jest.Mock).mockImplementation(() => {
       const fake = makeFakeProcess();
@@ -280,6 +284,42 @@ describe('EgressService', () => {
       'room-slug',
       expect.any(String),
       { rtmpEndpoints: ['rtmp://example.com/live'], hls: true, record: false },
+    );
+  });
+
+  it('broadcasts egress:status to the room on every transition', async () => {
+    const view = await service.start('project-1', 'room-1', {
+      rtmpEndpoints: [],
+      hls: true,
+      record: false,
+    });
+    expect(sfu.broadcastToRoom).toHaveBeenCalledWith(
+      'room-1',
+      'egress:status',
+      {
+        sessionId: view.id,
+        outputs: { record: false, hls: true },
+        status: 'starting',
+      },
+    );
+
+    prisma.egress.findUnique.mockResolvedValue(
+      makeRow({ id: view.id, status: 'live' }),
+    );
+    prisma.egress.findUniqueOrThrow.mockResolvedValue(
+      makeRow({ id: view.id, status: 'ended', endedReason: 'stopped' }),
+    );
+
+    await service.stop('project-1', view.id);
+    await flush();
+    expect(sfu.broadcastToRoom).toHaveBeenCalledWith(
+      'room-1',
+      'egress:status',
+      {
+        sessionId: view.id,
+        outputs: { record: false, hls: true },
+        status: 'ended',
+      },
     );
   });
 
@@ -502,6 +542,14 @@ describe('EgressService', () => {
         }),
       }),
     );
+    expect(webhooks.recordingReady).toHaveBeenCalledWith(
+      'room-1',
+      'room-slug',
+      started.id,
+      { rtmpEndpoints: [], hls: false, record: true },
+      `/v1/recordings/${started.id}/file`,
+      1234,
+    );
   });
 
   it('keeps raw parts when finalization fails', async () => {
@@ -529,5 +577,6 @@ describe('EgressService', () => {
       Object.hasOwn(call[0]?.data ?? {}, 'recordingSizeBytes'),
     );
     expect(sizeUpdates).toHaveLength(0);
+    expect(webhooks.recordingReady).not.toHaveBeenCalled();
   });
 });

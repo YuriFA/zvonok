@@ -19,19 +19,20 @@ describe("SfuEventRouter", () => {
       onTransportConnected: vi.fn(),
       onProducerCreated: vi.fn(),
       onProduceError: vi.fn(),
-      onPeerJoined: vi.fn(),
-      onExistingPeers: vi.fn(),
+      onParticipantJoined: vi.fn(),
+      onExistingParticipants: vi.fn(),
       onNewProducer: vi.fn(),
       onConsumerCreated: vi.fn().mockResolvedValue(undefined),
       onConsumerClosed: vi.fn(),
       onProducerStateChanged: vi.fn(),
-      onPeerLeft: vi.fn(),
+      onParticipantLeft: vi.fn(),
       onKicked: vi.fn(),
       onJoinError: vi.fn(),
       onRoomEnded: vi.fn(),
       onReconnectFailed: vi.fn(),
       onScreenShareStarted: vi.fn(),
       onScreenShareStopped: vi.fn(),
+      onEgressStatus: vi.fn(),
       onGuestJoinRequest: vi.fn(),
     };
 
@@ -77,7 +78,8 @@ describe("SfuEventRouter", () => {
     expect(events).toContain("sfu:screen-share-stopped");
     expect(events).toContain("sfu:guest-join-request");
     expect(events).toContain("sfu:join-error");
-    expect(events).toHaveLength(21);
+    expect(events).toContain("egress:status");
+    expect(events).toHaveLength(22);
   });
 
   it("routes connect event to onConnected", () => {
@@ -108,13 +110,13 @@ describe("SfuEventRouter", () => {
     expect(handlers.onJoined).toHaveBeenCalledWith(payload);
   });
 
-  it("routes sfu:peer-left event to onPeerLeft", () => {
+  it("routes sfu:peer-left event to onParticipantLeft", () => {
     router.setup();
     const handler = socket.on.mock.calls.find(
       (call: [string, ...unknown[]]) => call[0] === "sfu:peer-left",
     )?.[1] as (p: unknown) => void;
     handler({ userId: "user-1" });
-    expect(handlers.onPeerLeft).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(handlers.onParticipantLeft).toHaveBeenCalledWith({ userId: "user-1" });
   });
 
   it("does nothing on teardown if socket is null", () => {

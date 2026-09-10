@@ -13,7 +13,8 @@ export type WebhookEventType =
   | 'room.ended'
   | 'egress.started'
   | 'egress.stopped'
-  | 'egress.failed';
+  | 'egress.failed'
+  | 'egress.recording_ready';
 
 export interface WebhookParticipant {
   id: string;
@@ -96,6 +97,21 @@ export class WebhookDispatcher {
     this.emit(roomId, roomSlug, 'egress.failed', {
       egress: { id: egressId, outputs },
       error,
+    });
+  }
+
+  recordingReady(
+    roomId: string,
+    roomSlug: string | undefined,
+    egressId: string,
+    outputs: EgressOutputs,
+    recordingUrl: string,
+    recordingSizeBytes: number,
+  ): void {
+    this.emit(roomId, roomSlug, 'egress.recording_ready', {
+      egress: { id: egressId, outputs },
+      recordingUrl,
+      recordingSizeBytes,
     });
   }
 

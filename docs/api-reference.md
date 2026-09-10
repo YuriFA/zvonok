@@ -71,13 +71,18 @@ the slug. Idempotent per project: an already-ended room still answers `204`.
 `POST /v1/rooms/:id/tokens` (60 req/min)
 
 ```json
-{ "name": "Alice", "publish": true, "admin": false }
+{ "name": "Alice", "role": "host" }
 ```
 
-All fields optional; `publish` defaults `true`, `admin` defaults `false`.
-Returns `{ "token": "<jwt>", "expiresAt": "..." }` - the room token is valid
-for `ROOM_TOKEN_TTL_MINUTES` (default 60). Pass it to `@zvonok/react` to join,
-see the [quickstart](/quickstart).
+Both fields optional. `role` is the token's permission statement -
+`host`, `participant` (default), or `viewer` - resolved server-side to
+capabilities at join time (`host`: send + moderate + record/broadcast,
+`participant`: send audio/video/screen, `viewer`: no send). Unknown roles
+answer `400`. The join acknowledgement delivers the effective capability
+list to the client, so UIs gate on `useOwnCapabilities()` instead of
+decoding the token. Returns `{ "token": "<jwt>", "expiresAt": "..." }` -
+valid for `ROOM_TOKEN_TTL_MINUTES` (default 60). Pass it to
+`@zvonok/react` to join, see the [quickstart](/quickstart).
 
 ## Egress
 
@@ -144,14 +149,8 @@ Deliveries are POSTs signed with
 (timestamp in unix seconds; always verify against the raw body). Failed
 deliveries retry with backoff. Events: `room.started`, `participant.joined`,
 `participant.left`, `room.ended`, `egress.started`, `egress.stopped`,
-`egress.failed`.
-
-### Project media views
-
-- `GET /developers/projects/:id/rooms` - lifecycle fields only
-- `GET /developers/projects/:id/recordings` - recorded sessions, newest first
-- `GET /developers/projects/:id/recordings/:egressId/file` - download with
-  the same Range behavior as the `/v1` surface
+`egress.failed`, `egress.recording_ready` (carries `recordingUrl` and
+`recordingSizeBytes` when a recording finalizes).
 
 Foreign projects answer `404` on every route, like `/v1`.
 

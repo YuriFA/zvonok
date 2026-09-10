@@ -5,6 +5,7 @@ import { EGRESS_HLS_DIR } from './egress.config';
 import { EGRESS_HLS_ROOT } from './egress-playback.controller';
 import { EgressPlaybackController } from './egress-playback.controller';
 import { EgressService } from './egress.service';
+import { EgressSignalGateway } from './egress-signal.gateway';
 import { RecordingsService } from './recordings.service';
 
 @Module({
@@ -12,6 +13,7 @@ import { RecordingsService } from './recordings.service';
   controllers: [EgressPlaybackController],
   providers: [
     EgressService,
+    EgressSignalGateway,
     RecordingsService,
     { provide: EGRESS_HLS_ROOT, useValue: EGRESS_HLS_DIR },
   ],
