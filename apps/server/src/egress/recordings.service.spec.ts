@@ -91,7 +91,8 @@ describe('RecordingsService', () => {
             projectId: 'project-1',
             outputs: { path: ['record'], equals: true },
           }),
-          orderBy: { startedAt: 'desc' },
+          orderBy: { startedAt: 'desc', id: 'desc' },
+          take: 51,
         }),
       );
     });
@@ -103,13 +104,14 @@ describe('RecordingsService', () => {
           recordingFinalizedAt: new Date(),
         }),
       ]);
-      const views = await service.list('project-1', 'room-9');
+      const page = await service.list('project-1', 'room-9');
       expect(prisma.egress.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ roomId: 'room-9' }),
+          take: 51,
         }),
       );
-      expect(views[0]).toEqual(
+      expect(page.items[0]).toEqual(
         expect.objectContaining({
           id: 'egress-1',
           recordingUrl: '/v1/recordings/egress-1/file',

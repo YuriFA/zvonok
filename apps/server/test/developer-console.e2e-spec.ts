@@ -244,13 +244,14 @@ describe('Developer console surface (e2e)', () => {
       .get('/developers/projects')
       .set('Authorization', `Bearer ${developerToken}`);
     expect(list.status).toBe(200);
-    expect(list.body).toHaveLength(1);
-    expect(list.body[0]).toMatchObject({
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0]).toMatchObject({
       id: projectId,
       name: 'Console E2E',
       roomCount: 0,
     });
-    expect(list.body[0]).not.toHaveProperty('webhookSecret');
+    expect(list.body.items[0]).not.toHaveProperty('webhookSecret');
+    expect(list.body.next).toBeNull();
   });
 
   it('creates and lists an API key for the project', async () => {
@@ -286,10 +287,13 @@ describe('Developer console surface (e2e)', () => {
       .get(`/developers/projects/${projectId}/rooms`)
       .set('Authorization', `Bearer ${developerToken}`);
     expect(list.status).toBe(200);
-    expect(list.body).toHaveLength(1);
-    expect(list.body[0]).toMatchObject({ id: 'room-e2e', status: 'ended' });
-    expect(list.body[0]).not.toHaveProperty('messages');
-    expect(list.body[0]).not.toHaveProperty('ownerId');
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0]).toMatchObject({
+      id: 'room-e2e',
+      status: 'ended',
+    });
+    expect(list.body.items[0]).not.toHaveProperty('messages');
+    expect(list.body.items[0]).not.toHaveProperty('ownerId');
   });
 
   it('lists project recordings, newest first', async () => {
@@ -318,8 +322,9 @@ describe('Developer console surface (e2e)', () => {
       .get(`/developers/projects/${projectId}/recordings`)
       .set('Authorization', `Bearer ${developerToken}`);
     expect(list.status).toBe(200);
-    expect(list.body).toHaveLength(1);
-    expect(list.body[0]).toMatchObject({ id: 'egress-e2e' });
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0]).toMatchObject({ id: 'egress-e2e' });
+    expect(list.body.next).toBeNull();
   });
 
   it('hides foreign projects behind 404 on every read', async () => {

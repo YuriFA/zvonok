@@ -61,6 +61,23 @@ Both fields optional. Returns the room row: `id`, generated `slug`, `name`,
 
 `GET /v1/rooms` - newest first, full room rows.
 
+Every list on the platform is cursor-paginated the same way: `?limit=`
+(default 50, max 100) caps the page, `?cursor=` continues from a previous
+response's `next`, and the response is always the envelope
+`{ "items": [...], "next": "<cursor>" | null }` - `next` is `null` when
+the list is exhausted. The cursor encodes the last emitted row's sort
+tuple, so pages stay stable while rooms are created or deleted mid-walk:
+
+```
+GET /v1/rooms?limit=2
+{ "items": [roomC, roomB], "next": "eyJvcmRlciI6..." }
+GET /v1/rooms?limit=2&cursor=eyJvcmRlciI6...
+{ "items": [roomA], "next": null }
+```
+
+`limit` outside 1-100 or an unknown cursor answers `400`, never a
+partial page.
+
 ### End a room
 
 `DELETE /v1/rooms/:id` - `204`. Ends the session for everyone and releases
@@ -111,7 +128,8 @@ HLS playback, and server-side recording. One active session per room.
 
 ### Inspect and stop
 
-- `GET /v1/rooms/:id/egress` - the room's sessions
+- `GET /v1/rooms/:id/egress` - the room's sessions, newest first, in the
+  same `{ items, next }` cursor envelope as the room list
 - `GET /v1/egress/:id` - one session (carries `recordingUrl` when finalized)
 - `POST /v1/egress/:id/stop` - graceful stop
 
@@ -123,8 +141,9 @@ only loss. Details in [egress](/egress).
 ## Recordings
 
 - `GET /v1/recordings?roomId=<id>` - recorded sessions of the project,
-  newest first, with `recordingUrl`, `recordingSizeBytes`,
-  `recordingFinalizedAt`
+  newest first (optionally filtered by room), in the same
+  `{ items, next }` cursor envelope as the room list, with
+  `recordingUrl`, `recordingSizeBytes`, `recordingFinalizedAt`
 - `GET /v1/recordings/:egressId/file` - stream the material: the finalized
   MP4 (`video/mp4`) with `Range`/`206` support, or raw MPEG-TS parts
   (`video/mp2t`) for sessions that never finalized; `?part=N` picks a part
@@ -140,7 +159,8 @@ valid for 30 minutes - re-login or SSO when it expires.
 
 - `POST /developers/projects` - `{ "name": "my app" }`
 - `GET /developers/projects` - own projects, newest first, each with
-  `roomCount`. The webhook signing secret is never included
+  `roomCount`, in the same `{ items, next }` cursor envelope as `/v1`
+  lists. The webhook signing secret is never included
 
 ### API keys
 

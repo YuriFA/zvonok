@@ -11,6 +11,9 @@ import type {
 
 const TOKEN_STORAGE_KEY = "zvonok.dev-token";
 
+/** Server list responses: a page plus the continuation cursor. */
+type PageEnvelope<T> = { items: T[]; next: string | null };
+
 /**
  * HTTP client for the developer surface. Unlike the app's cookie-based
  * ApiClient, developer endpoints authenticate with a short-lived bearer
@@ -130,7 +133,8 @@ class DevApi {
   // --- Projects ---
 
   async listProjects(): Promise<DevProject[]> {
-    return this.request<DevProject[]>("/developers/projects");
+    const page = await this.request<PageEnvelope<DevProject>>("/developers/projects");
+    return page.items;
   }
 
   async createProject(name: string): Promise<DevProject> {
@@ -176,11 +180,17 @@ class DevApi {
   // --- Rooms and recordings ---
 
   async listRooms(projectId: string): Promise<DevProjectRoom[]> {
-    return this.request<DevProjectRoom[]>(`/developers/projects/${projectId}/rooms`);
+    const page = await this.request<PageEnvelope<DevProjectRoom>>(
+      `/developers/projects/${projectId}/rooms`,
+    );
+    return page.items;
   }
 
   async listRecordings(projectId: string): Promise<DevRecordingView[]> {
-    return this.request<DevRecordingView[]>(`/developers/projects/${projectId}/recordings`);
+    const page = await this.request<PageEnvelope<DevRecordingView>>(
+      `/developers/projects/${projectId}/recordings`,
+    );
+    return page.items;
   }
 
   /**

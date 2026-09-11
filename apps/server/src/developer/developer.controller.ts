@@ -28,6 +28,7 @@ import {
   RegisterDeveloperDto,
   SetWebhookDto,
 } from './dto/developer.dto';
+import { ListQueryDto } from 'src/platform/dto/platform.dto';
 
 /** Minimal shape of the injected express response for streaming. */
 interface StreamResponse {
@@ -89,8 +90,11 @@ export class DeveloperController {
   @SkipAuthGuard()
   @UseGuards(DevJwtGuard)
   @ApiOperation({ summary: 'List own projects with room counts' })
-  listProjects(@DevAccount() account: DevAccountIdentity) {
-    return this.developerService.listProjects(account.id);
+  listProjects(
+    @DevAccount() account: DevAccountIdentity,
+    @Query() query: ListQueryDto,
+  ) {
+    return this.developerService.listProjects(account.id, query);
   }
 
   @Get('projects/:id/rooms')
@@ -100,8 +104,9 @@ export class DeveloperController {
   listProjectRooms(
     @DevAccount() account: DevAccountIdentity,
     @Param('id') projectId: string,
+    @Query() query: ListQueryDto,
   ) {
-    return this.developerService.listProjectRooms(account.id, projectId);
+    return this.developerService.listProjectRooms(account.id, projectId, query);
   }
 
   @Get('projects/:id/recordings')
@@ -111,8 +116,13 @@ export class DeveloperController {
   listProjectRecordings(
     @DevAccount() account: DevAccountIdentity,
     @Param('id') projectId: string,
+    @Query() query: ListQueryDto,
   ) {
-    return this.developerService.listProjectRecordings(account.id, projectId);
+    return this.developerService.listProjectRecordings(
+      account.id,
+      projectId,
+      query,
+    );
   }
 
   @Get('projects/:id/recordings/:egressId/file')

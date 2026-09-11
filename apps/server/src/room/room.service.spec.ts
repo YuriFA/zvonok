@@ -203,15 +203,43 @@ describe('RoomService', () => {
   });
 
   describe('listProjectRooms', () => {
-    it('scopes the query to the project', async () => {
-      prisma.room.findMany.mockResolvedValue([]);
+    it('returns the first page scoped to the project', async () => {
+      const rows = [{ id: 'room-2' }, { id: 'room-1' }];
+      prisma.room.findMany.mockResolvedValue(rows);
 
-      await service.listProjectRooms('project-1');
+      const page = await service.listProjectRooms('project-1');
 
-      expect(prisma.room.findMany).toHaveBeenCalledWith({
-        where: { projectId: 'project-1' },
-        orderBy: { createdAt: 'desc' },
-      });
+      expect(prisma.room.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { projectId: 'project-1' },
+          take: 51,
+        }),
+      );
+      expect(page).toEqual({ items: rows, next: null });
+    });
+
+    it('continues from a cursor and reports the next one', async () => {
+      prisma.room.findMany.mockResolvedValue([
+        { id: 'room-2', createdAt: new Date('2026-09-02') },
+        { id: 'room-3', createdAt: new Date('2026-09-01') },
+      ]);
+
+      const page = await service.listProjectRooms('project-1', { limit: 1 });
+
+      expect(prisma.room.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 2 }),
+      );
+      expect(page.items).toEqual([
+        { id: 'room-2', createdAt: new Date('2026-09-02') },
+      ]);
+      expect(page.next).toBe(
+        Buffer.from(
+          JSON.stringify({
+            order: new Date('2026-09-02').toISOString(),
+            id: 'room-2',
+          }),
+        ).toString('base64url'),
+      );
     });
   });
 });

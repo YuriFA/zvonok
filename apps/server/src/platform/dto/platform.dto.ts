@@ -1,10 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsIn,
   IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
@@ -170,4 +172,41 @@ export class StartEgressDto {
   @IsOptional()
   @IsBoolean()
   record?: boolean;
+}
+
+export class ListQueryDto {
+  @ApiProperty({
+    required: false,
+    minimum: 1,
+    maximum: 100,
+    default: 50,
+    description: 'Page size; values outside 1..100 answer 400',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiProperty({
+    required: false,
+    type: 'string',
+    description:
+      'Opaque continuation cursor taken from a previous response next field',
+  })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+}
+
+export class ListRecordingsQueryDto extends ListQueryDto {
+  @ApiProperty({
+    required: false,
+    type: 'string',
+    description: 'Restrict the listing to one room',
+  })
+  @IsOptional()
+  @IsString()
+  roomId?: string;
 }

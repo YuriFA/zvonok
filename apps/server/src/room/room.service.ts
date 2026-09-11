@@ -1,5 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Prisma, Room } from '../generated/prisma/client';
+import { paginate } from '../platform/pagination.helper';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 
@@ -33,11 +35,20 @@ export class RoomService {
     });
   }
 
-  listProjectRooms(projectId: string) {
-    return this.prisma.room.findMany({
-      where: { projectId },
-      orderBy: { createdAt: 'desc' },
+  async listProjectRooms(
+    projectId: string,
+    page: { limit?: number; cursor?: string } = {},
+  ) {
+    const result = await paginate<Room>({
+      limit: page.limit,
+      cursor: page.cursor,
+      orderKey: 'createdAt',
+      scope: { projectId },
+      findPage: (query) =>
+        // Generated Prisma arg types cannot express the dynamic order key.
+        this.prisma.room.findMany(query as unknown as Prisma.RoomFindManyArgs),
     });
+    return result;
   }
 
   async findProjectRoom(id: string, projectId: string) {

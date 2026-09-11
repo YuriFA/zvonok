@@ -17,6 +17,7 @@ import { ApiKeyGuard } from './guards/api-key.guard';
 import { PlatformThrottlerGuard } from './guards/platform-throttler.guard';
 import { ApiKey } from './decorators/api-key.decorator';
 import type { ApiKeyContext } from './guards/api-key.guard';
+import { ListRecordingsQueryDto } from './dto/platform.dto';
 
 /** Minimal shape of the injected express response this controller needs. */
 interface StreamResponse {
@@ -33,8 +34,12 @@ export class RecordingsController {
 
   @Get()
   @ApiOperation({ summary: 'List recordings of the key project' })
-  list(@ApiKey() key: ApiKeyContext, @Query('roomId') roomId?: string) {
-    return this.recordings.list(key.projectId, roomId || undefined);
+  list(@ApiKey() key: ApiKeyContext, @Query() query: ListRecordingsQueryDto) {
+    return this.recordings.list(
+      key.projectId,
+      query.roomId || undefined,
+      query,
+    );
   }
 
   @Get(':egressId/file')

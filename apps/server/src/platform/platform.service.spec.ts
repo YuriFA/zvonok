@@ -180,12 +180,16 @@ describe('PlatformService', () => {
     });
   });
 
-  it('lists only the project rooms', async () => {
-    roomService.listProjectRooms.mockResolvedValue([]);
+  it('lists only the project rooms, passing the page query through', async () => {
+    const empty = { items: [], next: null };
+    roomService.listProjectRooms.mockResolvedValue(empty);
 
-    await service.listRooms('project-1');
+    const result = await service.listRooms('project-1', { limit: 10 });
 
-    expect(roomService.listProjectRooms).toHaveBeenCalledWith('project-1');
+    expect(roomService.listProjectRooms).toHaveBeenCalledWith('project-1', {
+      limit: 10,
+    });
+    expect(result).toBe(empty);
   });
 
   it('ends a room through soft-delete and SFU teardown', async () => {

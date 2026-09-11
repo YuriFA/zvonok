@@ -408,7 +408,7 @@ describe('DeveloperService project reads', () => {
         where: { developerAccountId: 'dev-1' },
       }),
     );
-    expect(result).toEqual([
+    expect(result.items).toEqual([
       { id: 'project-1', name: 'P1', roomCount: 3 },
       { id: 'project-2', name: 'P2', roomCount: 0 },
     ]);
@@ -457,19 +457,22 @@ describe('DeveloperService project reads', () => {
     expect(prisma.room.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { projectId: 'project-1' } }),
     );
-    expect(result).toHaveLength(1);
-    expect(result[0]).not.toHaveProperty('messages');
-    expect(result[0]).not.toHaveProperty('ownerId');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).not.toHaveProperty('messages');
+    expect(result.items[0]).not.toHaveProperty('ownerId');
   });
 
   it('lists recordings through RecordingsService after the ownership check', async () => {
     prisma.project.findFirst.mockResolvedValue(ownedProject);
-    recordings.list.mockResolvedValue([{ id: 'egress-1' }]);
+    recordings.list.mockResolvedValue({
+      items: [{ id: 'egress-1' }],
+      next: null,
+    });
 
     const result = await service.listProjectRecordings('dev-1', 'project-1');
 
-    expect(recordings.list).toHaveBeenCalledWith('project-1');
-    expect(result).toEqual([{ id: 'egress-1' }]);
+    expect(recordings.list).toHaveBeenCalledWith('project-1', undefined, {});
+    expect(result).toEqual({ items: [{ id: 'egress-1' }], next: null });
   });
 
   it('delegates downloads with part and range options', async () => {

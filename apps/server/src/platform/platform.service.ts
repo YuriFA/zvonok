@@ -4,6 +4,7 @@ import { RoomService } from 'src/room/room.service';
 import { SfuService } from 'src/sfu/sfu.service';
 import { EgressService } from 'src/egress/egress.service';
 import { RoomTokenHelper } from './room-token.helper';
+import type { Page } from './pagination.helper';
 import type { RoomTokenClaims } from './room-token.helper';
 import type {
   CreatePlatformRoomDto,
@@ -25,8 +26,8 @@ export class PlatformService {
     return this.roomService.createProjectRoom(projectId, dto);
   }
 
-  listRooms(projectId: string) {
-    return this.roomService.listProjectRooms(projectId);
+  listRooms(projectId: string, page: { limit?: number; cursor?: string }) {
+    return this.roomService.listProjectRooms(projectId, page);
   }
 
   async endRoom(projectId: string, roomId: string) {
@@ -82,9 +83,10 @@ export class PlatformService {
   async listEgress(
     projectId: string,
     roomId: string,
-  ): Promise<EgressSessionView[]> {
+    page: { limit?: number; cursor?: string },
+  ): Promise<Page<EgressSessionView>> {
     const room = await this.roomService.findProjectRoom(roomId, projectId);
-    return this.egressService.listForRoom(projectId, room.id);
+    return this.egressService.listForRoom(projectId, room.id, page);
   }
 
   getEgress(projectId: string, egressId: string): Promise<EgressSessionView> {

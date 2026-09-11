@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -19,6 +20,7 @@ import { ApiKey } from './decorators/api-key.decorator';
 import type { ApiKeyContext } from './guards/api-key.guard';
 import {
   CreatePlatformRoomDto,
+  ListQueryDto,
   MintRoomTokenDto,
   StartEgressDto,
 } from './dto/platform.dto';
@@ -40,8 +42,8 @@ export class PlatformController {
 
   @Get('rooms')
   @ApiOperation({ summary: 'List rooms of the key project' })
-  listRooms(@ApiKey() key: ApiKeyContext) {
-    return this.platformService.listRooms(key.projectId);
+  listRooms(@ApiKey() key: ApiKeyContext, @Query() query: ListQueryDto) {
+    return this.platformService.listRooms(key.projectId, query);
   }
 
   @Delete('rooms/:id')
@@ -82,8 +84,12 @@ export class PlatformController {
 
   @Get('rooms/:id/egress')
   @ApiOperation({ summary: "List a project room's egress sessions" })
-  listEgress(@ApiKey() key: ApiKeyContext, @Param('id') roomId: string) {
-    return this.platformService.listEgress(key.projectId, roomId);
+  listEgress(
+    @ApiKey() key: ApiKeyContext,
+    @Param('id') roomId: string,
+    @Query() query: ListQueryDto,
+  ) {
+    return this.platformService.listEgress(key.projectId, roomId, query);
   }
 
   @Get('egress/:id')

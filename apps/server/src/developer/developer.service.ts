@@ -17,6 +17,36 @@ import type {
   LoginDeveloperDto,
   RegisterDeveloperDto,
 } from './dto/developer.dto';
+import type { Prisma } from 'src/generated/prisma/client';
+import { paginate, type Page } from 'src/platform/pagination.helper';
+
+/** One listed project row before the room count is folded in. */
+/** A listed project room: lifecycle fields only. */
+export interface ProjectRoomRow {
+  id: string;
+  name: string | null;
+  slug: string;
+  status: string;
+  createdAt: Date;
+  endedAt: Date | null;
+}
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  webhookUrl: string | null;
+  createdAt: Date;
+  _count: { rooms: number };
+}
+
+/** A listed project: identity, webhook URL, creation time, room count. */
+export interface ProjectView {
+  id: string;
+  name: string;
+  webhookUrl: string | null;
+  createdAt: Date;
+  roomCount: number;
+}
 
 const DEV_TOKEN_TTL_MINUTES = 30;
 
@@ -131,38 +161,62 @@ export class DeveloperService {
    * The webhook signing secret is never returned here: it is shown once at
    * configuration time, like API keys.
    */
-  async listProjects(developerId: string) {
-    const projects = await this.prisma.project.findMany({
-      where: { developerAccountId: developerId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        webhookUrl: true,
-        createdAt: true,
-        _count: { select: { rooms: true } },
-      },
+  async listProjects(
+    developerId: string,
+    page: { limit?: number; cursor?: string } = {},
+  ): Promise<Page<ProjectView>> {
+    const result = await paginate<ProjectRow>({
+      limit: page.limit,
+      cursor: page.cursor,
+      orderKey: 'createdAt',
+      scope: { developerAccountId: developerId },
+      findPage: (query) =>
+        // Generated Prisma arg types cannot express the dynamic order key.
+        this.prisma.project.findMany({
+          ...(query as unknown as Prisma.ProjectFindManyArgs),
+          select: {
+            id: true,
+            name: true,
+            webhookUrl: true,
+            createdAt: true,
+            _count: { select: { rooms: true } },
+          },
+        }),
     });
-    return projects.map(({ _count, ...project }) => ({
-      ...project,
-      roomCount: _count.rooms,
-    }));
+    return {
+      items: result.items.map(({ _count, ...project }) => ({
+        ...project,
+        roomCount: _count.rooms,
+      })),
+      next: result.next,
+    };
   }
 
   /** The project's rooms, newest first, lifecycle fields only. */
-  async listProjectRooms(developerId: string, projectId: string) {
+  async listProjectRooms(
+    developerId: string,
+    projectId: string,
+    page: { limit?: number; cursor?: string } = {},
+  ) {
     await this.findOwnedProject(developerId, projectId);
-    return this.prisma.room.findMany({
-      where: { projectId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        status: true,
-        createdAt: true,
-        endedAt: true,
-      },
+    return paginate<ProjectRoomRow>({
+      limit: page.limit,
+      cursor: page.cursor,
+      orderKey: 'createdAt',
+      scope: { projectId },
+      findPage: (query) =>
+        // Generated Prisma arg types cannot express the dynamic order key.
+        this.prisma.room.findMany({
+          ...(query as unknown as Prisma.RoomFindManyArgs),
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            status: true,
+            createdAt: true,
+            endedAt: true,
+          },
+        }),
     });
   }
 
@@ -241,9 +295,13 @@ export class DeveloperService {
   }
 
   /** The project's recorded egress sessions, newest first. */
-  async listProjectRecordings(developerId: string, projectId: string) {
+  async listProjectRecordings(
+    developerId: string,
+    projectId: string,
+    page: { limit?: number; cursor?: string } = {},
+  ) {
     await this.findOwnedProject(developerId, projectId);
-    return this.recordings.list(projectId);
+    return this.recordings.list(projectId, undefined, page);
   }
 
   /**

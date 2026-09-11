@@ -6,6 +6,7 @@ import { io, Socket } from 'socket.io-client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { configureApp } from '../src/bootstrap';
+import { ThrottlerStorage } from '@nestjs/throttler';
 import { ApiKeyHelper } from '../src/developer/api-key.helper';
 import { WorkerManager } from '../src/sfu/worker-manager';
 import { EGRESS_RECORDINGS_DIR } from '../src/egress/egress.config';
@@ -27,6 +28,7 @@ jest.mock('../src/egress/ffmpeg/args-composer', () => ({
 }));
 
 interface TestRoom {
+  createdAt?: Date;
   id: string;
   name?: string;
   slug: string;
@@ -157,10 +159,40 @@ describe('Developer platform (e2e)', () => {
               return room;
             },
           ),
-          findMany: jest.fn(() =>
-            [...rooms.values()].filter(
-              (room) => room.projectId === 'project-e2e',
-            ),
+          findMany: jest.fn(
+            ({
+              where,
+              take,
+            }: {
+              where?: {
+                OR?: Array<{
+                  createdAt?: { lt?: string };
+                  id?: { lt?: string };
+                }>;
+              };
+              take?: number;
+            }) => {
+              let rows = [...rooms.values()].filter(
+                (room) => room.projectId === 'project-e2e',
+              );
+              // Mirror Prisma tuple-cursor semantics for the paginated list.
+              const [ltBranch, eqBranch] = where?.OR ?? [];
+              const orderLt = ltBranch?.createdAt?.lt;
+              if (orderLt !== undefined) {
+                rows = rows.filter((room) => {
+                  const iso = (room.createdAt ?? new Date(0)).toISOString();
+                  const idLt = eqBranch?.id?.lt ?? '';
+                  return iso < orderLt || (iso === orderLt && room.id < idLt);
+                });
+              }
+              rows.sort((a, b) => {
+                const at = (a.createdAt ?? new Date(0)).getTime();
+                const bt = (b.createdAt ?? new Date(0)).getTime();
+                if (bt !== at) return bt - at;
+                return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+              });
+              return take !== undefined ? rows.slice(0, take) : rows;
+            },
           ),
           create: jest.fn(({ data }: { data: Partial<TestRoom> }) => {
             const room: TestRoom = {
@@ -171,6 +203,7 @@ describe('Developer platform (e2e)', () => {
               name: data.name,
               status: 'active',
               maxParticipants: data.maxParticipants ?? 10,
+              createdAt: new Date(),
             };
             rooms.set(room.id, room);
             return room;
@@ -183,6 +216,19 @@ describe('Developer platform (e2e)', () => {
           ),
           deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
         },
+      })
+      // The suite fires dozens of /v1 calls inside one throttle window;
+      // rate limiting itself is covered elsewhere. A passthrough storage
+      // keeps both real guards active but never blocks.
+      .overrideProvider(ThrottlerStorage)
+      .useValue({
+        storage: new Map(),
+        increment: async () => ({
+          totalHits: 0,
+          timeFrameNextRefresh: 0,
+          isBlocked: false,
+          blockDurationNextRefresh: 0,
+        }),
       })
       .overrideProvider(WorkerManager)
       .useValue({
@@ -402,7 +448,8 @@ describe('Developer platform (e2e)', () => {
       .get(`/v1/rooms/${roomId}/egress`)
       .set(bearer);
     expect(list.status).toBe(200);
-    expect(list.body).toHaveLength(1);
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.next).toBeNull();
 
     const inspect = await request(app.getHttpServer())
       .get(`/v1/egress/${started.body.id}`)
@@ -468,12 +515,14 @@ describe('Developer platform (e2e)', () => {
       .get('/v1/recordings')
       .set(bearer);
     expect(list.status).toBe(200);
-    expect(list.body.map((r: { id: string }) => r.id)).toContain(egressId);
+    expect(list.body.items.map((r: { id: string }) => r.id)).toContain(
+      egressId,
+    );
 
     const listByRoom = await request(app.getHttpServer())
       .get(`/v1/recordings?roomId=${roomId}`)
       .set(bearer);
-    expect(listByRoom.body.map((r: { id: string }) => r.id)).toContain(
+    expect(listByRoom.body.items.map((r: { id: string }) => r.id)).toContain(
       egressId,
     );
 
@@ -534,7 +583,7 @@ describe('Developer platform (e2e)', () => {
     const list = await request(app.getHttpServer())
       .get('/v1/recordings')
       .set(bearer);
-    expect(list.body.map((r: { id: string }) => r.id)).not.toContain(
+    expect(list.body.items.map((r: { id: string }) => r.id)).not.toContain(
       'egress-foreign',
     );
 
@@ -544,6 +593,60 @@ describe('Developer platform (e2e)', () => {
     expect(download.status).toBe(404);
 
     rmSync(foreignDir, { recursive: true, force: true });
+  });
+
+  it('paginates the room list with stable cursors', async () => {
+    // The suite fired dozens of /v1 calls inside one throttle window; reset
+    // the counters so the walk can measure pagination, not budget.
+    // The suite has accumulated rooms for this project by now.
+    const full = await request(app.getHttpServer())
+      .get('/v1/rooms')
+      .set(bearer);
+    expect(full.status).toBe(200);
+    const expectedIds = (full.body.items as Array<{ id: string }>).map(
+      (r) => r.id,
+    );
+    expect(new Set(expectedIds).size).toBe(expectedIds.length);
+    expect(full.body.next).toBeNull();
+
+    // Walk one row at a time: exact coverage, newest-first, stable under
+    // a concurrent insert after the first page.
+    const walked: string[] = [];
+    let cursor: string | null = null;
+    let insertedBetweenPages = false;
+    do {
+      const page = await request(app.getHttpServer())
+        .get(`/v1/rooms?limit=1${cursor ? `&cursor=${cursor}` : ''}`)
+        .set(bearer);
+      expect(page.status).toBe(200);
+      expect(page.body.items).toHaveLength(1);
+      walked.push(page.body.items[0].id);
+      cursor = page.body.next;
+      if (!insertedBetweenPages) {
+        insertedBetweenPages = true;
+        const newer = await request(app.getHttpServer())
+          .post('/v1/rooms')
+          .set(bearer)
+          .send({});
+        expect(newer.status).toBe(201);
+      }
+    } while (cursor);
+
+    // The insert happened after page one: the walk keeps covering the
+    // previously observed rows exactly once, newest first.
+    expect(walked).toEqual(expectedIds);
+
+    // Invalid paging parameters answer 400, never a partial page.
+    const badLimit = await request(app.getHttpServer())
+      .get('/v1/rooms?limit=500')
+      .set(bearer);
+    expect(badLimit.status).toBe(400);
+    expect(badLimit.body.items).toBeUndefined();
+
+    const badCursor = await request(app.getHttpServer())
+      .get('/v1/rooms?cursor=not-a-cursor')
+      .set(bearer);
+    expect(badCursor.status).toBe(400);
   });
 
   it('ends a room via the public API', async () => {

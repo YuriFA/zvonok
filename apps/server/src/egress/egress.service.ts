@@ -41,7 +41,9 @@ import type {
   Egress,
   EgressEndedReason,
   EgressStatus,
+  Prisma,
 } from 'src/generated/prisma/client';
+import { paginate, type Page } from 'src/platform/pagination.helper';
 
 const ACTIVE_STATUSES: EgressStatus[] = ['starting', 'live', 'stopping'];
 
@@ -202,12 +204,23 @@ export class EgressService implements OnModuleInit {
   async listForRoom(
     projectId: string,
     roomId: string,
-  ): Promise<EgressSessionView[]> {
-    const rows = await this.prisma.egress.findMany({
-      where: { roomId, projectId },
-      orderBy: { startedAt: 'desc' },
+    page: { limit?: number; cursor?: string } = {},
+  ): Promise<Page<EgressSessionView>> {
+    const result = await paginate<Egress>({
+      limit: page.limit,
+      cursor: page.cursor,
+      orderKey: 'startedAt',
+      scope: { roomId, projectId },
+      findPage: (query) =>
+        // Generated Prisma arg types cannot express the dynamic order key.
+        this.prisma.egress.findMany(
+          query as unknown as Prisma.EgressFindManyArgs,
+        ),
     });
-    return rows.map((row) => this.view(row));
+    return {
+      items: result.items.map((row) => this.view(row)),
+      next: result.next,
+    };
   }
 
   async get(projectId: string, egressId: string): Promise<EgressSessionView> {

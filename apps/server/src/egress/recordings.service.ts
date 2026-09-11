@@ -15,7 +15,9 @@ import type {
   Egress,
   EgressEndedReason,
   EgressStatus,
+  Prisma,
 } from 'src/generated/prisma/client';
+import { paginate, type Page } from 'src/platform/pagination.helper';
 
 /** One listed recording, serialized for the platform API. */
 export interface RecordingView {
@@ -76,16 +78,30 @@ export class RecordingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Recordings of the key's project, newest first, optional room filter. */
-  async list(projectId: string, roomId?: string): Promise<RecordingView[]> {
-    const rows = await this.prisma.egress.findMany({
-      where: {
+  async list(
+    projectId: string,
+    roomId?: string,
+    page: { limit?: number; cursor?: string } = {},
+  ): Promise<Page<RecordingView>> {
+    const result = await paginate<Egress>({
+      limit: page.limit,
+      cursor: page.cursor,
+      orderKey: 'startedAt',
+      scope: {
         projectId,
         ...(roomId ? { roomId } : {}),
         outputs: { path: ['record'], equals: true },
       },
-      orderBy: { startedAt: 'desc' },
+      findPage: (query) =>
+        // Generated Prisma arg types cannot express the dynamic order key.
+        this.prisma.egress.findMany(
+          query as unknown as Prisma.EgressFindManyArgs,
+        ),
     });
-    return rows.map((row) => this.toView(row));
+    return {
+      items: result.items.map((row) => this.toView(row)),
+      next: result.next,
+    };
   }
 
   /**
