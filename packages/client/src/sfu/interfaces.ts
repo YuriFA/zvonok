@@ -23,6 +23,7 @@ import type {
   SfuProduceErrorCode,
   SfuJoinError,
   SfuScreenShareStoppedCallback,
+  SfuBroadcastMessage,
 } from "./types.js";
 
 /**
@@ -175,6 +176,27 @@ interface ISfuStateNotifier {
 }
 
 /**
+ * Ephemeral data channel: topic-scoped broadcasts to the other
+ * participants of the room. Sends settle on the server's acknowledgement;
+ * received relays never include the local sender's own messages.
+ */
+interface ISfuDataChannel {
+  /**
+   * Broadcast a JSON payload on a topic (1-64 chars of [A-Za-z0-9._-],
+   * serialized payload at most 8192 bytes). Resolves on the server's
+   * acknowledgement, rejects with SfuBroadcastError on a coded denial,
+   * disconnection, or acknowledgement timeout.
+   */
+  sendBroadcast(
+    topic: string,
+    payload: unknown,
+    options?: { timeoutMs?: number },
+  ): Promise<void>;
+  /** Subscribe to broadcasts relayed from other participants. */
+  onBroadcast(callback: (message: SfuBroadcastMessage) => void): () => void;
+}
+
+/**
  * Facade combining all SFU concerns.
  * Note: Transport management (device, send/recv transports) is an internal
  * implementation detail and not exposed on the public interface.
@@ -185,6 +207,7 @@ export interface ISfuManager
     ISfuRoomMembership,
     ISfuHostControls,
     ISfuEgressControls,
+    ISfuDataChannel,
     ISfuProducerManager,
     ISfuParticipantRegistry,
     ISfuStatsCollector,

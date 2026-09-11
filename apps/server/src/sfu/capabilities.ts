@@ -24,7 +24,8 @@ export type CapabilityId =
   | 'remove-participants'
   | 'lock-room'
   | 'start-recording'
-  | 'start-broadcast';
+  | 'start-broadcast'
+  | 'send-data-message';
 
 export const PARTICIPANT_ROLES: readonly ParticipantRole[] = [
   'host',
@@ -36,6 +37,7 @@ const PARTICIPANT_CAPABILITIES: readonly CapabilityId[] = [
   'send-audio',
   'send-video',
   'send-screenshare',
+  'send-data-message',
 ];
 
 const HOST_CAPABILITIES: readonly CapabilityId[] = [

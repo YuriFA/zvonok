@@ -187,7 +187,34 @@ export type SfuHostActionErrorCode =
   | 'TARGET_NOT_FOUND'; // target peer absent from the room
 
 export type SfuHostActionAck =
-  { ok: true } | { ok: false; code: SfuHostActionErrorCode; message: string };
+  | { ok: true }
+  | { ok: false; code: SfuHostActionErrorCode; message: string };
+
+// Data channel: a participant emits sfu:broadcast {topic, payload}; the
+// acknowledgement lands on the requesting socket, and on success every
+// other participant in the room receives the relayed message below.
+export interface SfuBroadcastPayload {
+  topic: string;
+  payload: unknown;
+}
+
+export interface SfuBroadcastMessage {
+  senderId: string;
+  topic: string;
+  payload: unknown;
+  /** ISO timestamp set by the server at relay time. */
+  timestamp: string;
+}
+
+export type SfuBroadcastErrorCode =
+  | 'NOT_IN_ROOM' // requester has no peer state in a room
+  | 'MISSING_CAPABILITY' // requester lacks send-data-message
+  | 'PAYLOAD_TOO_LARGE' // serialized payload exceeds 8192 bytes
+  | 'INVALID_TOPIC'; // topic is not 1-64 chars of [A-Za-z0-9._-]
+
+export type SfuBroadcastAck =
+  | { ok: true }
+  | { ok: false; code: SfuBroadcastErrorCode; message: string };
 
 // Peer joined payload - sent when a peer joins the room (independent of media)
 export interface SfuPeerJoinedPayload {

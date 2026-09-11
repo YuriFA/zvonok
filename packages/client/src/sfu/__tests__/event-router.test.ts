@@ -13,6 +13,7 @@ describe("SfuEventRouter", () => {
   beforeEach(() => {
     handlers = {
       onConnected: vi.fn(),
+      onBroadcast: vi.fn(),
       onDisconnected: vi.fn(),
       onJoined: vi.fn().mockResolvedValue(undefined),
       onTransportCreated: vi.fn().mockResolvedValue(undefined),
@@ -56,7 +57,9 @@ describe("SfuEventRouter", () => {
   it("registers all event listeners on setup", () => {
     router.setup();
 
-    const events = socket.on.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
+    const events = socket.on.mock.calls.map(
+      (call: [string, ...unknown[]]) => call[0],
+    );
     expect(events).toContain("connect");
     expect(events).toContain("disconnect");
     expect(events).toContain("sfu:joined");
@@ -79,7 +82,7 @@ describe("SfuEventRouter", () => {
     expect(events).toContain("sfu:guest-join-request");
     expect(events).toContain("sfu:join-error");
     expect(events).toContain("egress:status");
-    expect(events).toHaveLength(22);
+    expect(events).toHaveLength(23);
   });
 
   it("routes connect event to onConnected", () => {
@@ -116,7 +119,9 @@ describe("SfuEventRouter", () => {
       (call: [string, ...unknown[]]) => call[0] === "sfu:peer-left",
     )?.[1] as (p: unknown) => void;
     handler({ userId: "user-1" });
-    expect(handlers.onParticipantLeft).toHaveBeenCalledWith({ userId: "user-1" });
+    expect(handlers.onParticipantLeft).toHaveBeenCalledWith({
+      userId: "user-1",
+    });
   });
 
   it("does nothing on teardown if socket is null", () => {
@@ -125,6 +130,22 @@ describe("SfuEventRouter", () => {
     router.teardown();
     expect(socket.off).not.toHaveBeenCalled();
     expect(socket.removeAllListeners).not.toHaveBeenCalled();
+  });
+
+  it("routes sfu:broadcast to onBroadcast with payload", () => {
+    router.setup();
+
+    const handler = socket.on.mock.calls.find(
+      (call: [string, ...unknown[]]) => call[0] === "sfu:broadcast",
+    )?.[1] as (p: unknown) => void;
+    handler({ senderId: "u2", topic: "t", payload: 1, timestamp: "now" });
+
+    expect(handlers.onBroadcast).toHaveBeenCalledWith({
+      senderId: "u2",
+      topic: "t",
+      payload: 1,
+      timestamp: "now",
+    });
   });
 
   it("routes reconnect_failed event to onReconnectFailed", () => {
@@ -139,7 +160,9 @@ describe("SfuEventRouter", () => {
   it("removes only registered listeners on teardown without touching other listeners", () => {
     router.setup();
 
-    const registeredEvents = socket.on.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
+    const registeredEvents = socket.on.mock.calls.map(
+      (call: [string, ...unknown[]]) => call[0],
+    );
     router.teardown();
 
     // off() called once per registered listener
@@ -148,7 +171,9 @@ describe("SfuEventRouter", () => {
     expect(socket.removeAllListeners).not.toHaveBeenCalled();
 
     // Each off() call matches a registered event+handler pair
-    const offEvents = socket.off.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
+    const offEvents = socket.off.mock.calls.map(
+      (call: [string, ...unknown[]]) => call[0],
+    );
     expect(offEvents.sort()).toEqual(registeredEvents.sort());
   });
 

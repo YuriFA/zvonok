@@ -21,6 +21,7 @@ describe('EgressSignalGateway', () => {
     'send-audio',
     'send-video',
     'send-screenshare',
+    'send-data-message',
     'mute-users',
     'remove-participants',
     'lock-room',
@@ -31,6 +32,7 @@ describe('EgressSignalGateway', () => {
     'send-audio',
     'send-video',
     'send-screenshare',
+    'send-data-message',
   ];
 
   function socket(id = 'socket-1') {

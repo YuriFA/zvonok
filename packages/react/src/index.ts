@@ -34,6 +34,12 @@ export {
   type UseEgressControlsResult,
 } from "./use-egress-controls.js";
 export {
+  useBroadcast,
+  useBroadcasts,
+  type UseBroadcastResult,
+  type UseBroadcastsResult,
+} from "./use-broadcast.js";
+export {
   EMPTY_ROOM_STATE,
   RoomTracker,
   type RoomTrackerState,
@@ -52,6 +58,7 @@ export {
   ZvonokHostError,
   ZvonokJoinError,
   ZvonokEgressError,
+  ZvonokBroadcastError,
   type ZvonokEgressLocalErrorCode,
   type ZvonokHostLocalErrorCode,
   type ZvonokServerEgressErrorCode,

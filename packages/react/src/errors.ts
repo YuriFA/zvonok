@@ -71,6 +71,17 @@ export class ZvonokEgressError extends ZvonokError {
   }
 }
 
+/**
+ * Data-channel broadcast failures. The server answers sendBroadcast with
+ * an acknowledgement; coded denials land here unchanged.
+ */
+export class ZvonokBroadcastError extends ZvonokError {
+  constructor(code: string, message: string) {
+    super(code, message);
+    this.name = "ZvonokBroadcastError";
+  }
+}
+
 /** Codes the server sends in egress action acknowledgement denials. */
 export type ZvonokServerEgressErrorCode =
   | "NOT_IN_ROOM"

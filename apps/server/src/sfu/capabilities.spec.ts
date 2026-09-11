@@ -14,6 +14,7 @@ describe('roles and capabilities', () => {
       'send-audio',
       'send-video',
       'send-screenshare',
+      'send-data-message',
     ]);
   });
 
@@ -22,6 +23,7 @@ describe('roles and capabilities', () => {
       'send-audio',
       'send-video',
       'send-screenshare',
+      'send-data-message',
       'mute-users',
       'remove-participants',
       'lock-room',
@@ -39,7 +41,7 @@ describe('roles and capabilities', () => {
   it('returns fresh arrays so callers cannot mutate the bundles', () => {
     const bundle = capabilitiesForRole('host');
     bundle.pop();
-    expect(ROLE_CAPABILITIES.host.length).toBe(8);
+    expect(ROLE_CAPABILITIES.host.length).toBe(9);
     expect(capabilitiesForRole('host')).toEqual(ROLE_CAPABILITIES.host);
   });
 

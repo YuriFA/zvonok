@@ -51,12 +51,14 @@ import type {
   SfuJoinErrorPayload,
   SfuEgressStatusPayload,
   SfuEgressOutputRequest,
+  SfuBroadcastMessage,
 } from "./types.js";
 import {
   SfuProduceError,
   SfuJoinError,
   SfuHostActionError,
   SfuEgressActionError,
+  SfuBroadcastError,
 } from "./types.js";
 
 /**
@@ -132,6 +134,7 @@ export class SfuManager implements ISfuManager {
     isScreenShareBlocked: false,
     capabilities: [],
     egress: null,
+    lastBroadcast: null,
   };
   private stateCallbacks = new Set<SfuStateCallback>();
   private trackCallbacks = new Set<SfuTrackCallback>();
@@ -150,6 +153,9 @@ export class SfuManager implements ISfuManager {
     new Set<SfuScreenShareStoppedCallback>();
   private guestJoinRequestCallbacks = new Set<
     (payload: SfuGuestJoinRequestPayload) => void
+  >();
+  private broadcastCallbacks = new Set<
+    (message: SfuBroadcastMessage) => void
   >();
 
   // Event router
@@ -191,6 +197,7 @@ export class SfuManager implements ISfuManager {
       onScreenShareStopped: (p) => this.handleScreenShareStopped(p),
       onGuestJoinRequest: (p) => this.handleGuestJoinRequest(p),
       onEgressStatus: (p) => this.handleEgressStatus(p),
+      onBroadcast: (p) => this.handleBroadcast(p),
     };
   }
 
@@ -406,6 +413,70 @@ export class SfuManager implements ISfuManager {
         );
       });
     });
+  }
+
+  // Data channel (ephemeral topic-scoped broadcasts)
+  async sendBroadcast(
+    topic: string,
+    payload: unknown,
+    options?: { timeoutMs?: number },
+  ): Promise<void> {
+    const socket = this.connection.getSocket();
+    if (!socket) {
+      return Promise.reject(
+        new SfuBroadcastError(
+          "DISCONNECTED",
+          "Join the room before broadcasting",
+        ),
+      );
+    }
+
+    const wait = options?.timeoutMs ?? SfuManager.BROADCAST_TIMEOUT_MS;
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          new SfuBroadcastError(
+            "BROADCAST_TIMEOUT",
+            `Server did not acknowledge sfu:broadcast within ${wait}ms`,
+          ),
+        );
+      }, wait);
+      socket.emit("sfu:broadcast", { topic, payload }, (ack: unknown) => {
+        clearTimeout(timer);
+        const { ok, code, message } = (ack ?? {}) as {
+          ok?: boolean;
+          code?: string;
+          message?: string;
+        };
+        if (ok === true) {
+          resolve();
+          return;
+        }
+        reject(
+          new SfuBroadcastError(
+            (code as SfuBroadcastError["code"]) ?? "MISSING_CAPABILITY",
+            message ?? "Server denied sfu:broadcast",
+          ),
+        );
+      });
+    });
+  }
+
+  /** How long to wait for a broadcast acknowledgement before failing. */
+  private static readonly BROADCAST_TIMEOUT_MS = 10_000;
+
+  onBroadcast(callback: (message: SfuBroadcastMessage) => void): () => void {
+    this.broadcastCallbacks.add(callback);
+    return () => this.broadcastCallbacks.delete(callback);
+  }
+
+  private handleBroadcast(message: SfuBroadcastMessage): void {
+    // The server never echoes a sender's own message, so every relay that
+    // lands here came from another participant.
+    this.updateState({ lastBroadcast: message });
+    for (const callback of this.broadcastCallbacks) {
+      callback(message);
+    }
   }
 
   private handleEgressStatus(payload: SfuEgressStatusPayload): void {
@@ -1362,6 +1433,7 @@ export class SfuManager implements ISfuManager {
       isScreenShareBlocked: false,
       capabilities: [],
       egress: null,
+      lastBroadcast: null,
     };
     this.notifyStateChange();
   }

@@ -92,6 +92,14 @@ export function createMockSfuManager() {
     (payload: { userId: string }) => void
   >();
   const produceErrorListeners = new Set<(code: string) => void>();
+  const broadcastListeners = new Set<
+    (message: {
+      senderId: string;
+      topic: string;
+      payload: unknown;
+      timestamp: string;
+    }) => void
+  >();
 
   let connectionState = "disconnected";
   let capabilities: string[] = [];
@@ -116,6 +124,7 @@ export function createMockSfuManager() {
     lockRoom: vi.fn(async () => {}),
     startEgress: vi.fn(async () => {}),
     stopEgress: vi.fn(async () => {}),
+    sendBroadcast: vi.fn(async () => {}),
     setPreferredLayers: vi.fn(),
     getVideoConsumerIdForUserId: vi.fn(),
     produce: vi.fn(async (track: MediaStreamTrack) => ({
@@ -139,6 +148,19 @@ export function createMockSfuManager() {
     stopStatsCollection: vi.fn(),
     getStats: vi.fn(() => new Map()),
     onQualityStats: vi.fn(() => () => {}),
+    onBroadcast: vi.fn(
+      (
+        listener: (message: {
+          senderId: string;
+          topic: string;
+          payload: unknown;
+          timestamp: string;
+        }) => void,
+      ) => {
+        broadcastListeners.add(listener);
+        return () => broadcastListeners.delete(listener);
+      },
+    ),
     onProduceError: vi.fn((callback: (code: string) => void) => {
       produceErrorListeners.add(callback);
       return () => produceErrorListeners.delete(callback);
@@ -199,6 +221,14 @@ export function createMockSfuManager() {
       stateListeners.forEach((listener) =>
         listener({ connectionState, capabilities, egress }),
       );
+    },
+    simulateBroadcast(message: {
+      senderId: string;
+      topic: string;
+      payload: unknown;
+      timestamp: string;
+    }): void {
+      broadcastListeners.forEach((listener) => listener(message));
     },
     simulateLocalUser(next: string | null): void {
       localUserId = next;

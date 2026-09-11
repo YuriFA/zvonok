@@ -332,6 +332,103 @@ describe('Developer platform (e2e)', () => {
     );
   });
 
+  it('relays data-channel broadcasts with coded denials', async () => {
+    const room = await request(app.getHttpServer())
+      .post('/v1/rooms')
+      .set(bearer)
+      .send({});
+    const roomId = room.body.id as string;
+
+    const mintFor = async (body: Record<string, unknown>) => {
+      const mint = await request(app.getHttpServer())
+        .post(`/v1/rooms/${roomId}/tokens`)
+        .set(bearer)
+        .send(body);
+      expect(mint.status).toBe(201);
+      return mint.body.token as string;
+    };
+
+    const joinWith = async (token: string) => {
+      const socket = connectSocket();
+      const joined = waitFor(socket, 'sfu:joined');
+      socket.emit('sfu:join', { roomId, token });
+      await joined;
+      return socket;
+    };
+
+    const alice = await joinWith(await mintFor({ name: 'Alice' }));
+    const bob = await joinWith(await mintFor({ name: 'Bob' }));
+    const viewer = await joinWith(
+      await mintFor({ name: 'Watch', role: 'viewer' }),
+    );
+    let aliceBroadcasts = 0;
+    alice.on('sfu:broadcast', () => {
+      aliceBroadcasts += 1;
+    });
+    const relayed = waitFor<{
+      senderId: string;
+      topic: string;
+      payload: unknown;
+      timestamp: string;
+    }>(bob, 'sfu:broadcast');
+    const viewerRelay = waitFor(viewer, 'sfu:broadcast');
+
+    const ack = new Promise<Record<string, unknown>>((resolve) => {
+      alice.emit(
+        'sfu:broadcast',
+        { topic: 'reactions', payload: { emoji: 'wave' } },
+        resolve,
+      );
+    });
+    expect(await ack).toEqual({ ok: true });
+
+    const message = await relayed;
+    expect(message).toEqual({
+      senderId: expect.any(String),
+      topic: 'reactions',
+      payload: { emoji: 'wave' },
+      timestamp: expect.any(String),
+    });
+    // The viewer is a participant of the room and receives the relay too;
+    // only the sender is skipped.
+    expect(await viewerRelay).toEqual(message);
+    expect(aliceBroadcasts).toBe(0);
+
+    // Viewer-role denial: coded ack, nothing relayed.
+    const viewerAck = new Promise<Record<string, unknown>>((resolve) => {
+      viewer.emit('sfu:broadcast', { topic: 'reactions', payload: 1 }, resolve);
+    });
+    expect(await viewerAck).toEqual({
+      ok: false,
+      code: 'MISSING_CAPABILITY',
+      message: expect.any(String),
+    });
+
+    // Oversized payload: coded ack, nothing relayed.
+    const bigAck = new Promise<Record<string, unknown>>((resolve) => {
+      alice.emit(
+        'sfu:broadcast',
+        { topic: 'blob', payload: { data: 'x'.repeat(8193) } },
+        resolve,
+      );
+    });
+    expect(await bigAck).toEqual({
+      ok: false,
+      code: 'PAYLOAD_TOO_LARGE',
+      message: expect.any(String),
+    });
+
+    // Malformed topic: coded ack.
+    const topicAck = new Promise<Record<string, unknown>>((resolve) => {
+      alice.emit('sfu:broadcast', { topic: 'has space', payload: 1 }, resolve);
+    });
+    expect(await topicAck).toEqual({
+      ok: false,
+      code: 'INVALID_TOPIC',
+      message: expect.any(String),
+    });
+  });
+
   it('refuses publishing for a viewer-role token', async () => {
     const roomId = (globalThis as Record<string, unknown>)
       .__e2eRoomId as string;

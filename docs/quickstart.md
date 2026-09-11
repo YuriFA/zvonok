@@ -180,6 +180,48 @@ Open the printed localhost URL in two browser windows (mint a second token for
 the second window) - both participants land in the same room with live
 participant events.
 
+## 4. React to anything: the data channel
+
+Every connected participant (except viewers) can broadcast ephemeral JSON
+messages on a topic, and subscribe to other participants' messages - the
+transport for reactions, custom sync, or driving an external UI:
+
+```jsx
+import { useBroadcast, useBroadcasts } from "@zvonok/react";
+
+function Reactions() {
+  const { send } = useBroadcast();               // ack-settled send action
+  const { messages } = useBroadcasts("reactions"); // topic-filtered receive
+
+  return (
+    <div>
+      <button onClick={() => send("reactions", { emoji: "wave" })}>
+        Wave
+      </button>
+      <ul>
+        {messages.map((m) => (
+          <li key={m.timestamp + m.senderId}>
+            {m.senderId}: {m.payload.emoji}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+The rules:
+
+- `send` resolves on the server's acknowledgement and rejects with a typed
+  `ZvonokBroadcastError` on denial: `MISSING_CAPABILITY` without the
+  `send-data-message` capability (host and participant roles have it,
+  viewers do not), `PAYLOAD_TOO_LARGE` over 8192 serialized bytes,
+  `INVALID_TOPIC` outside 1-64 chars of `[A-Za-z0-9._-]`
+- the server relays to every *other* participant - you never receive your
+  own message back
+- delivery is ephemeral: no persistence, no replay for late joiners;
+  per-sender ordering follows their socket
+
 ## What the SDK exposes
 
 - `ZvonokProvider` - carries the server URL and the shared media manager
@@ -200,6 +242,9 @@ participant events.
 - `useHostControls()` - `mutePeer`, `muteAll`, `lockRoom`, `kickPeer` for
   participants whose capabilities include the matching moderation right;
   every action settles on the server's acknowledgement
+- `useBroadcast()` / `useBroadcasts(topic)` - the data channel: send an
+  ack-settled broadcast on a topic and receive other participants' messages
+  filtered to one topic (see step 4)
 - `useQualityControls()` - manual simulcast preference per remote participant:
   `setParticipantQuality(userId, "low" | "medium" | "high")`; affects only
   your own subscription, never audio or other subscribers

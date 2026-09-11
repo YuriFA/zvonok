@@ -800,12 +800,18 @@ describe('room-token join', () => {
       'send-audio',
       'send-video',
       'send-screenshare',
+      'send-data-message',
     ]);
     expect(socket.emit).toHaveBeenCalledWith(
       'sfu:joined',
       expect.objectContaining({
         participant: { id: 'participant-1', username: 'Alice' },
-        capabilities: ['send-audio', 'send-video', 'send-screenshare'],
+        capabilities: [
+          'send-audio',
+          'send-video',
+          'send-screenshare',
+          'send-data-message',
+        ],
       }),
     );
   });
@@ -1482,6 +1488,125 @@ describe('host controls', () => {
 
     expect(state().roomLocks.has('room-empty')).toBe(false);
     expect(workerManager.closeRouter).not.toHaveBeenCalled();
+  });
+
+  describe('data channel broadcast', () => {
+    it('relays a valid broadcast to the room minus the sender', () => {
+      const sender = createSocket('socket-sender');
+      seedPeer(sender, 'user-1', 'room-1', { ownerId: 'user-1' });
+      const other = createSocket('socket-other');
+      seedPeer(other, 'user-2', 'room-1');
+
+      const ack = service.broadcast(sender, {
+        topic: 'reactions',
+        payload: { emoji: 'wave' },
+      });
+
+      expect(ack).toEqual({ ok: true });
+      expect(other.emit).toHaveBeenCalledWith('sfu:broadcast', {
+        senderId: 'user-1',
+        topic: 'reactions',
+        payload: { emoji: 'wave' },
+        timestamp: expect.any(String),
+      });
+      expect(sender.emit).not.toHaveBeenCalledWith(
+        'sfu:broadcast',
+        expect.anything(),
+      );
+    });
+
+    it('denies a viewer without the capability and relays nothing', () => {
+      const sender = createSocket('socket-viewer');
+      seedPeer(sender, 'v-1', 'room-1', { role: 'viewer' });
+      const other = createSocket('socket-other-v');
+      seedPeer(other, 'user-2', 'room-1');
+
+      const ack = service.broadcast(sender, {
+        topic: 'reactions',
+        payload: 1,
+      });
+
+      expect(ack).toEqual({
+        ok: false,
+        code: 'MISSING_CAPABILITY',
+        message: 'Missing send-data-message capability',
+      });
+      expect(other.emit).not.toHaveBeenCalledWith(
+        'sfu:broadcast',
+        expect.anything(),
+      );
+    });
+
+    it('rejects an oversized serialized payload with PAYLOAD_TOO_LARGE', () => {
+      const sender = createSocket('socket-sender-big');
+      seedPeer(sender, 'user-1', 'room-1', { ownerId: 'user-1' });
+      const other = createSocket('socket-other-big');
+      seedPeer(other, 'user-2', 'room-1');
+
+      const ack = service.broadcast(sender, {
+        topic: 'blob',
+        payload: { data: 'x'.repeat(8193) },
+      });
+
+      expect(ack).toEqual({
+        ok: false,
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'payload must serialize to at most 8192 bytes',
+      });
+      expect(other.emit).not.toHaveBeenCalledWith(
+        'sfu:broadcast',
+        expect.anything(),
+      );
+    });
+
+    it('accepts a payload serializing to exactly the cap', () => {
+      const sender = createSocket('socket-sender-edge');
+      seedPeer(sender, 'user-1', 'room-1', { ownerId: 'user-1' });
+
+      // {"data":"xxxx..."} serializes to exactly 8192 bytes.
+      const filler = 'x'.repeat(8192 - '{"data":""}'.length);
+      const ack = service.broadcast(sender, {
+        topic: 'blob',
+        payload: { data: filler },
+      });
+
+      expect(ack).toEqual({ ok: true });
+    });
+
+    it.each(['', 'has space', 'unnícíde', 'a'.repeat(65)])(
+      'rejects malformed topic %j with INVALID_TOPIC',
+      (topic) => {
+        const sender = createSocket('socket-sender-topic');
+        seedPeer(sender, 'user-1', 'room-1', { ownerId: 'user-1' });
+        const other = createSocket('socket-other-topic');
+        seedPeer(other, 'user-2', 'room-1');
+
+        const ack = service.broadcast(sender, { topic, payload: 1 });
+
+        expect(ack).toEqual({
+          ok: false,
+          code: 'INVALID_TOPIC',
+          message: 'topic must be 1-64 characters of [A-Za-z0-9._-]',
+        });
+        expect(other.emit).not.toHaveBeenCalledWith(
+          'sfu:broadcast',
+          expect.anything(),
+        );
+      },
+    );
+
+    it('answers NOT_IN_ROOM for an unjoined socket', () => {
+      const ack = service.broadcast(createSocket('socket-stray'), {
+        topic: 'reactions',
+        payload: 1,
+      });
+
+      expect(ack).toEqual({
+        ok: false,
+        code: 'NOT_IN_ROOM',
+        message: 'Join the room before broadcasting',
+      });
+    });
   });
 });
 

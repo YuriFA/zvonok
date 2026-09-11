@@ -23,6 +23,8 @@ import type {
   SfuSetPreferredLayersPayload,
   SfuCloseProducerPayload,
   SfuHostActionAck,
+  SfuBroadcastAck,
+  SfuBroadcastPayload,
 } from './interfaces/sfu.interface';
 import { OnGatewayInit } from '@nestjs/websockets';
 
@@ -184,6 +186,17 @@ export class SfuGateway
   ): Promise<SfuHostActionAck> {
     this.logger.log(`Lock room ${payload.locked} requested by ${client.id}`);
     return this.sfuService.lockRoom(client, payload.locked);
+  }
+
+  @SubscribeMessage('sfu:broadcast')
+  handleBroadcast(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: SfuBroadcastPayload,
+  ): SfuBroadcastAck {
+    this.logger.log(
+      `Broadcast on topic ${payload?.topic} requested by ${client.id}`,
+    );
+    return this.sfuService.broadcast(client, payload);
   }
 
   @SubscribeMessage('sfu:set-preferred-layers')

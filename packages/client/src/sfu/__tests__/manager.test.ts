@@ -198,8 +198,12 @@ describe("SfuManager", () => {
       });
     });
 
-    expect(testContext.mockSocket.emit).toHaveBeenCalledWith("sfu:create-send-transport");
-    expect(testContext.mockSocket.emit).toHaveBeenCalledWith("sfu:create-recv-transport");
+    expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
+      "sfu:create-send-transport",
+    );
+    expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
+      "sfu:create-recv-transport",
+    );
     expect(stateCallback).toHaveBeenCalledWith(
       expect.objectContaining({
         connectionState: "connected",
@@ -258,9 +262,12 @@ describe("SfuManager", () => {
       kind: "video",
       rtpParameters: { codecs: [] },
     });
-    expect(testContext.mockSocket.emit).toHaveBeenCalledWith("sfu:resume-consumer", {
-      consumerId: "consumer-1",
-    });
+    expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
+      "sfu:resume-consumer",
+      {
+        consumerId: "consumer-1",
+      },
+    );
     expect(onTrack).toHaveBeenCalledWith(
       testContext.mockConsumerTrack,
       "video",
@@ -293,14 +300,18 @@ describe("SfuManager", () => {
       expect.objectContaining({ track: originalTrack }),
     );
     expect(replaced).toBe(true);
-    expect(testContext.mockProducer.replaceTrack).toHaveBeenCalledWith({ track: nextTrack });
+    expect(testContext.mockProducer.replaceTrack).toHaveBeenCalledWith({
+      track: nextTrack,
+    });
   });
 
   it("serializes concurrent replaceTrack calls per kind", async () => {
     manager.connect();
     testContext.mockSocket.connected = true;
     await testContext.emitSocketEvent("connect");
-    await testContext.emitSocketEvent("sfu:joined", { routerRtpCapabilities: { codecs: [] } });
+    await testContext.emitSocketEvent("sfu:joined", {
+      routerRtpCapabilities: { codecs: [] },
+    });
     await testContext.emitSocketEvent("sfu:transport-created", {
       ...transportPayload,
       direction: "send",
@@ -308,8 +319,11 @@ describe("SfuManager", () => {
     });
     await manager.produce({ kind: "video" } as MediaStreamTrack);
 
-    const { promise: firstSwap, resolve: releaseFirst } = Promise.withResolvers<void>();
-    testContext.mockProducer.replaceTrack.mockImplementationOnce(() => firstSwap);
+    const { promise: firstSwap, resolve: releaseFirst } =
+      Promise.withResolvers<void>();
+    testContext.mockProducer.replaceTrack.mockImplementationOnce(
+      () => firstSwap,
+    );
 
     const firstTrack = { kind: "video" } as MediaStreamTrack;
     const secondTrack = { kind: "video" } as MediaStreamTrack;
@@ -324,7 +338,9 @@ describe("SfuManager", () => {
     releaseFirst();
     await Promise.all([first, second]);
     expect(testContext.mockProducer.replaceTrack).toHaveBeenCalledTimes(2);
-    expect(testContext.mockProducer.replaceTrack).toHaveBeenNthCalledWith(1, { track: firstTrack });
+    expect(testContext.mockProducer.replaceTrack).toHaveBeenNthCalledWith(1, {
+      track: firstTrack,
+    });
     expect(testContext.mockProducer.replaceTrack).toHaveBeenNthCalledWith(2, {
       track: secondTrack,
     });
@@ -339,7 +355,10 @@ describe("SfuManager", () => {
       routerRtpCapabilities: { codecs: [] },
     });
 
-    const earlyTrack = { kind: "video", readyState: "live" } as MediaStreamTrack;
+    const earlyTrack = {
+      kind: "video",
+      readyState: "live",
+    } as MediaStreamTrack;
     const producePromise = manager.produce(earlyTrack);
 
     // Device/transport creation is still in flight: nothing produced yet.
@@ -394,7 +413,10 @@ describe("SfuManager", () => {
 
     expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
       "sfu:join",
-      expect.objectContaining({ roomId: "room-id-123", roomSlug: "i-was-slug" }),
+      expect.objectContaining({
+        roomId: "room-id-123",
+        roomSlug: "i-was-slug",
+      }),
     );
   });
 
@@ -442,7 +464,9 @@ describe("SfuManager", () => {
 
       testContext.mockSocket.connected = true;
       await testContext.emitSocketEvent("connect");
-      await testContext.emitSocketEvent("sfu:joined", { routerRtpCapabilities: { codecs: [] } });
+      await testContext.emitSocketEvent("sfu:joined", {
+        routerRtpCapabilities: { codecs: [] },
+      });
       await testContext.emitSocketEvent("sfu:transport-created", {
         ...transportPayload,
         direction: "send",
@@ -456,7 +480,10 @@ describe("SfuManager", () => {
       await testContext.emitSocketEvent("disconnect");
 
       expect(stateCallback).toHaveBeenCalledWith(
-        expect.objectContaining({ isDeviceLoaded: false, isSendTransportCreated: false }),
+        expect.objectContaining({
+          isDeviceLoaded: false,
+          isSendTransportCreated: false,
+        }),
       );
     });
 
@@ -634,7 +661,9 @@ describe("SfuManager", () => {
         id: "screen-consumer",
         producerId: "screen-producer",
       };
-      testContext.mockRecvTransport.consume.mockResolvedValueOnce(screenConsumer);
+      testContext.mockRecvTransport.consume.mockResolvedValueOnce(
+        screenConsumer,
+      );
 
       await testContext.emitSocketEvent("sfu:new-producer", {
         producerId: "screen-producer",
@@ -680,7 +709,9 @@ describe("SfuManager", () => {
     it("returns undefined when no video consumer exists for the peer", async () => {
       await setupWithRecvTransport();
 
-      expect(manager.getVideoConsumerIdForUserId("user-unknown")).toBeUndefined();
+      expect(
+        manager.getVideoConsumerIdForUserId("user-unknown"),
+      ).toBeUndefined();
     });
   });
 
@@ -758,6 +789,78 @@ describe("SfuManager", () => {
       (call?.[2] as (ack: unknown) => void)({ ok: true });
 
       await expect(promise).resolves.toBeUndefined();
+    });
+  });
+
+  describe("data channel", () => {
+    it("mirrors received broadcasts into state and callbacks", async () => {
+      manager.connect();
+      const received: unknown[] = [];
+      manager.onBroadcast((message) => received.push(message));
+
+      const message = {
+        senderId: "user-2",
+        topic: "reactions",
+        payload: { emoji: "wave" },
+        timestamp: "2026-09-11T10:00:00.000Z",
+      };
+      await testContext.emitSocketEvent("sfu:broadcast", message);
+
+      expect(manager.getState().lastBroadcast).toEqual(message);
+      expect(received).toEqual([message]);
+    });
+
+    it("resolves sendBroadcast on the server acknowledgement", async () => {
+      manager.connect();
+
+      const promise = manager.sendBroadcast("reactions", { emoji: "wave" });
+      const call = testContext.mockSocket.emit.mock.calls.find(
+        (args) => args[0] === "sfu:broadcast",
+      );
+      expect(call?.[1]).toEqual({
+        topic: "reactions",
+        payload: { emoji: "wave" },
+      });
+      (call?.[2] as (ack: unknown) => void)({ ok: true });
+
+      await expect(promise).resolves.toBeUndefined();
+    });
+
+    it("rejects sendBroadcast with the server's coded denial", async () => {
+      manager.connect();
+
+      const promise = manager.sendBroadcast("reactions", 1);
+      const call = testContext.mockSocket.emit.mock.calls.find(
+        (args) => args[0] === "sfu:broadcast",
+      );
+      (call?.[2] as (ack: unknown) => void)({
+        ok: false,
+        code: "PAYLOAD_TOO_LARGE",
+        message: "payload must serialize to at most 8192 bytes",
+      });
+
+      await expect(promise).rejects.toMatchObject({
+        name: "SfuBroadcastError",
+        code: "PAYLOAD_TOO_LARGE",
+      });
+    });
+
+    it("rejects when the acknowledgement never arrives", async () => {
+      manager.connect();
+
+      const promise = manager.sendBroadcast("reactions", 1, { timeoutMs: 5 });
+      await expect(promise).rejects.toMatchObject({
+        code: "BROADCAST_TIMEOUT",
+      });
+    });
+
+    it("rejects immediately when disconnected", async () => {
+      await expect(manager.sendBroadcast("reactions", 1)).rejects.toMatchObject(
+        {
+          name: "SfuBroadcastError",
+          code: "DISCONNECTED",
+        },
+      );
     });
   });
 });

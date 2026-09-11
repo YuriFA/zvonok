@@ -22,6 +22,7 @@ import type {
   SfuProducerStateCallback,
   SfuProduceErrorCode,
   SfuScreenShareStoppedCallback,
+  SfuBroadcastMessage,
 } from "../types.js";
 
 export interface MockSfuManagerConfig {
@@ -41,6 +42,7 @@ const DEFAULT_STATE: SfuState = {
   screenProducerId: null,
   capabilities: [],
   egress: null,
+  lastBroadcast: null,
 };
 
 export function createMockSfuManager(
@@ -77,6 +79,7 @@ export function createMockSfuManager(
   const peerJoinedCallbacks = new Set<SfuParticipantCallback>();
   const peerLeftCallbacks = new Set<(userId: string) => void>();
   const kickedCallbacks = new Set<(payload: SfuKickedPayload) => void>();
+  const broadcastCallbacks = new Set<(message: SfuBroadcastMessage) => void>();
   const roomEndedCallbacks = new Set<(payload: SfuRoomEndedPayload) => void>();
   const qualityStatsCallbacks = new Set<QualityStatsCallback>();
   const producerStateCallbacks = new Set<SfuProducerStateCallback>();
@@ -143,6 +146,7 @@ export function createMockSfuManager(
     async lockRoom(): Promise<void> {},
     async startEgress(): Promise<void> {},
     async stopEgress(): Promise<void> {},
+    async sendBroadcast(): Promise<void> {},
 
     onKicked(callback: (payload: SfuKickedPayload) => void): () => void {
       kickedCallbacks.add(callback);
@@ -345,6 +349,11 @@ export function createMockSfuManager(
     // ISfuStateNotifier
     getState(): SfuState {
       return state;
+    },
+
+    onBroadcast(callback: (message: SfuBroadcastMessage) => void): () => void {
+      broadcastCallbacks.add(callback);
+      return () => broadcastCallbacks.delete(callback);
     },
 
     onStateChange(callback: SfuStateCallback): () => void {

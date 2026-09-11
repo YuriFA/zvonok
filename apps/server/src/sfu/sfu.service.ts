@@ -16,6 +16,9 @@ import type {
   SfuMediaSource,
   SfuJoinErrorCode,
   SfuHostActionAck,
+  SfuBroadcastAck,
+  SfuBroadcastMessage,
+  SfuBroadcastPayload,
   SfuProduceAppData,
 } from './interfaces/sfu.interface';
 import type {
@@ -36,6 +39,9 @@ import type {
   EgressTapDescriptor,
   EgressTapSource,
 } from '../egress/egress.types';
+
+/** Serialized data-channel payload cap, measured on the wire. */
+const BROADCAST_PAYLOAD_MAX_BYTES = 8192;
 
 @Injectable()
 export class SfuService implements OnModuleDestroy {
@@ -1040,6 +1046,72 @@ export class SfuService implements OnModuleDestroy {
     this.roomLocks.set(roomId, nextLocked);
     for (const roomPeer of this.getRoomPeers(roomId)) {
       roomPeer.socket.emit('sfu:room-locked', { locked: nextLocked });
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Data channel broadcast: validates capability, topic, and serialized
+   * payload size, acknowledges on the requesting socket, and relays the
+   * message to every other participant in the room. Ephemeral: nothing is
+   * persisted and the sender never receives their own message back.
+   */
+  broadcast(socket: Socket, payload: SfuBroadcastPayload): SfuBroadcastAck {
+    const requester = this.getPeer(socket.id);
+    const roomId = this.getRoomId(socket);
+
+    if (!requester || !roomId) {
+      this.logger.warn(`Broadcast request from unknown peer ${socket.id}`);
+      return {
+        ok: false,
+        code: 'NOT_IN_ROOM',
+        message: 'Join the room before broadcasting',
+      };
+    }
+
+    if (!requester.capabilities.includes('send-data-message')) {
+      this.logger.warn(
+        `Unauthorized broadcast request from ${requester.userId} in room ${roomId}`,
+      );
+      return {
+        ok: false,
+        code: 'MISSING_CAPABILITY',
+        message: 'Missing send-data-message capability',
+      };
+    }
+
+    if (
+      typeof payload?.topic !== 'string' ||
+      !/^[A-Za-z0-9._-]{1,64}$/.test(payload.topic)
+    ) {
+      return {
+        ok: false,
+        code: 'INVALID_TOPIC',
+        message: 'topic must be 1-64 characters of [A-Za-z0-9._-]',
+      };
+    }
+
+    const serialized = JSON.stringify(payload?.payload);
+    if (
+      serialized === undefined ||
+      Buffer.byteLength(serialized, 'utf8') > BROADCAST_PAYLOAD_MAX_BYTES
+    ) {
+      return {
+        ok: false,
+        code: 'PAYLOAD_TOO_LARGE',
+        message: `payload must serialize to at most ${BROADCAST_PAYLOAD_MAX_BYTES} bytes`,
+      };
+    }
+
+    const message: SfuBroadcastMessage = {
+      senderId: requester.userId,
+      topic: payload.topic,
+      payload: payload.payload,
+      timestamp: new Date().toISOString(),
+    };
+    for (const roomPeer of this.getRoomPeers(roomId)) {
+      if (roomPeer.id === socket.id) continue;
+      roomPeer.socket.emit('sfu:broadcast', message);
     }
     return { ok: true };
   }
