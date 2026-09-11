@@ -40,6 +40,19 @@ authenticate with a room token, and app-embedded usage authenticates with the
 browser session the server already verifies (handshake cookies). Join-refusal
 errors surface as typed errors on every identity path.
 
+After a successful join, the SDK SHALL recover from signalling disconnects
+automatically: on disconnect it enters a `reconnecting` status while
+retaining local tracks; on transport reconnect it rejoins the room (same
+identity), recreates transports, republishes the retained local tracks, and
+resubscribes to current producers before returning to `joined`. Reconnect
+attempts exhausted SHALL surface `failed` with a typed error. A rejoin
+denied as kicked SHALL surface the kicked state and stop reconnecting. Join
+options MAY carry `tokenProvider` (an async function returning a fresh room
+token); when a rejoin is rejected because the stored token expired, the SDK
+SHALL call the provider once, retry the join with the fresh token, and keep
+it for later rejoins; without a provider, an expired-token rejoin SHALL
+surface a typed error and stop.
+
 #### Scenario: Token-based join from external app
 - **WHEN** an external app connects with a server URL, room slug, and a valid room token
 - **THEN** the SDK joins and receives participant and track events for other participants, named with the participant vocabulary throughout the public surface
@@ -51,6 +64,22 @@ errors surface as typed errors on every identity path.
 #### Scenario: Correlation fields on participants
 - **WHEN** a remote participant joined with a token carrying `externalId` and `metadata`
 - **THEN** the participant info exposed to the consumer carries both fields
+
+#### Scenario: Network blip recovers the room
+- **WHEN** the signalling connection drops and returns while the participant was joined with published tracks
+- **THEN** the status moves joined -> reconnecting -> joined, local tracks are republished, remote producers are resubscribed, and no consumer signalling is required
+
+#### Scenario: Token refresh mid-call
+- **WHEN** a rejoin is rejected because the stored token expired and a `tokenProvider` is configured
+- **THEN** the provider is called, the join retries with the fresh token, and recovery completes
+
+#### Scenario: Expired token without provider fails typed
+- **WHEN** a rejoin is rejected because the stored token expired and no `tokenProvider` is configured
+- **THEN** the SDK surfaces a typed expired-token error and does not retry into a dead room
+
+#### Scenario: Kick during reconnect is terminal
+- **WHEN** the participant was removed by kick and their automatic rejoin is denied
+- **THEN** the kicked state surfaces and no further rejoin is attempted
 
 #### Scenario: Invalid token surfaces typed error
 - **WHEN** the connection is attempted with an expired or invalid token
