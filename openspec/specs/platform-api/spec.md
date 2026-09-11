@@ -46,11 +46,28 @@ rooms, and return the room identifier and slug.
 
 ### Requirement: List rooms
 `GET /v1/rooms` SHALL return the project's rooms with status metadata, scoped
-to the authenticated key's project only.
+to the authenticated key's project only, newest first, as a cursor-paginated
+envelope: `limit` (default 50, max 100) caps the page size, `cursor` (opaque
+string from a previous response's `next`) continues after that page, and the
+response carries `{ items, next }` where `next` is the continuation cursor
+or `null` when no older rooms remain. `limit` outside 1-100 or a malformed
+cursor SHALL be rejected with 400.
 
 #### Scenario: List shows only own project
 - **WHEN** a key lists rooms and other projects have rooms too
 - **THEN** only rooms of the key's project are returned
+
+#### Scenario: Pagination walks the rooms
+- **WHEN** a project has more rooms than the requested limit and the consumer follows `next`
+- **THEN** every room appears exactly once in newest-first order until `next` is null
+
+#### Scenario: Insertion during pagination
+- **WHEN** a new room is created between two pages of a walk
+- **THEN** the walk continues from the cursor's position and neither skips older rooms nor repeats any
+
+#### Scenario: Invalid paging parameters
+- **WHEN** a list request carries `limit=500` or an unknown cursor
+- **THEN** the server responds 400 and no items are returned
 
 ### Requirement: End room
 `DELETE /v1/rooms/:id` SHALL end a project-owned room: status becomes ended,
@@ -118,7 +135,8 @@ The `/v1` surface SHALL expose egress management under API-key auth and the
 existing per-key rate limits: `POST /v1/rooms/:id/egress` starts a session
 for a project room with validated outputs (one to three `rtmp(s)://`
 endpoints and/or local HLS), `GET /v1/rooms/:id/egress` lists the room's
-sessions, `GET /v1/egress/:id` inspects one session, and
+sessions (newest first, same cursor envelope and limits as room listing),
+`GET /v1/egress/:id` inspects one session, and
 `POST /v1/egress/:id/stop` stops an active session. All four SHALL be scoped
 to the authenticated key's project exactly like the room endpoints.
 
@@ -136,8 +154,9 @@ to the authenticated key's project exactly like the room endpoints.
 
 ### Requirement: Recordings endpoints
 The platform API SHALL expose a project-scoped recordings surface with API-key
-authentication: list recordings (filterable by room, newest first), download a
-session's finalized recording (HTTP Range supported), and delete a recording.
+authentication: list recordings (filterable by room, newest first, same
+cursor envelope and limits as room listing), download a session's finalized
+recording (HTTP Range supported), and delete a recording.
 Access SHALL be limited to the key's own project: another project's recording
 SHALL respond 404. Downloads SHALL be served after finalization for ended
 sessions and SHALL serve the raw parts for sessions reconciled as `failed`
