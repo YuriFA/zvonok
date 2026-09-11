@@ -9,6 +9,7 @@ import { configureApp } from '../src/bootstrap';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import { ApiKeyHelper } from '../src/developer/api-key.helper';
 import { WorkerManager } from '../src/sfu/worker-manager';
+import { SfuService } from '../src/sfu/sfu.service';
 import { EGRESS_RECORDINGS_DIR } from '../src/egress/egress.config';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -427,6 +428,99 @@ describe('Developer platform (e2e)', () => {
       code: 'INVALID_TOPIC',
       message: expect.any(String),
     });
+  });
+
+  it('recovers blips through the grace window and keeps kicks terminal', async () => {
+    const sfuService = app.get(SfuService);
+    const previousGrace = sfuService.rejoinGraceMs;
+    sfuService.rejoinGraceMs = 400;
+
+    const sleep = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+    const collect = (socket: Socket, event: string) => {
+      const seen: Array<Record<string, unknown>> = [];
+      socket.on(event, (payload: Record<string, unknown>) =>
+        seen.push(payload),
+      );
+      return seen;
+    };
+
+    try {
+      const room = await request(app.getHttpServer())
+        .post('/v1/rooms')
+        .set(bearer)
+        .send({});
+      const roomId = room.body.id as string;
+
+      const mintFor = async (body: Record<string, unknown>) => {
+        const mint = await request(app.getHttpServer())
+          .post(`/v1/rooms/${roomId}/tokens`)
+          .set(bearer)
+          .send(body);
+        expect(mint.status).toBe(201);
+        return mint.body.token as string;
+      };
+      const joinWith = async (token: string) => {
+        const socket = connectSocket();
+        const joined = waitFor(socket, 'sfu:joined');
+        socket.emit('sfu:join', { roomId, token });
+        const payload = (await joined) as { participant?: { id?: string } };
+        return { socket, participantId: payload.participant?.id as string };
+      };
+
+      const host = await joinWith(
+        await mintFor({ name: 'Host', role: 'host' }),
+      );
+      const bobToken = await mintFor({ name: 'Bob' });
+      const bob = await joinWith(bobToken);
+
+      const hostLeft = collect(host.socket, 'sfu:peer-left');
+      const hostJoined = collect(host.socket, 'sfu:peer-joined');
+
+      // Blip: bob's socket dies and a fresh socket rejoins with the same
+      // token (same participant id) inside the grace window.
+      bob.socket.disconnect();
+      await sleep(150);
+      expect(hostLeft).toHaveLength(0);
+
+      const bobAgain = await joinWith(bobToken);
+      expect(hostLeft).toHaveLength(0);
+      expect(hostJoined).toHaveLength(0);
+
+      // Grace expiry: a peer that never returns is announced as gone.
+      bobAgain.socket.disconnect();
+      const departed = await waitFor<{ userId?: string }>(
+        host.socket,
+        'sfu:peer-left',
+      );
+      expect(departed.userId).toBe(bob.participantId);
+
+      // Kick terminality: a kicked participant's rejoin is refused with the
+      // kick denial even inside what would be their grace window.
+      const carolToken = await mintFor({ name: 'Carol' });
+      const carol = await joinWith(carolToken);
+      const kickAck = new Promise<{ ok?: boolean }>((resolve) => {
+        host.socket.emit(
+          'sfu:kick-peer',
+          { userId: carol.participantId },
+          (ack: { ok?: boolean }) => resolve(ack),
+        );
+      });
+      expect(await kickAck).toEqual({ ok: true });
+      await sleep(150); // let the kicked socket's disconnect settle
+
+      const carolAgain = connectSocket();
+      const joinError = waitFor<{ code?: string }>(
+        carolAgain,
+        'sfu:join-error',
+      );
+      carolAgain.emit('sfu:join', { roomId, token: carolToken });
+      expect(await joinError).toEqual(
+        expect.objectContaining({ code: 'KICKED_FROM_ROOM' }),
+      );
+    } finally {
+      sfuService.rejoinGraceMs = previousGrace;
+    }
   });
 
   it('refuses publishing for a viewer-role token', async () => {

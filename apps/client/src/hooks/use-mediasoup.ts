@@ -163,6 +163,11 @@ export function useMediasoup({
     }
 
     joinedRef.current = true;
+    // Automatic recovery already replayed the join for an established
+    // session; a manual join here would double-join the same socket.
+    if (sfuManager.hasJoinedSession()) {
+      return;
+    }
     const joinPayload = {
       roomId,
       ...(roomSlug ? { roomSlug } : {}),

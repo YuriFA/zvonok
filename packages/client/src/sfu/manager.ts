@@ -28,6 +28,7 @@ import type {
   SfuNewProducerPayload,
   SfuConsumerCreatedPayload,
   SfuProducerCreatedPayload,
+  SfuJoinOptions,
   SfuJoinPayload,
   SfuKickedPayload,
   SfuRoomEndedPayload,
@@ -56,6 +57,7 @@ import type {
 import {
   SfuProduceError,
   SfuJoinError,
+  SfuReconnectError,
   SfuHostActionError,
   SfuEgressActionError,
   SfuBroadcastError,
@@ -157,6 +159,24 @@ export class SfuManager implements ISfuManager {
   private broadcastCallbacks = new Set<
     (message: SfuBroadcastMessage) => void
   >();
+  private reconnectErrorCallbacks = new Set<
+    (error: SfuReconnectError) => void
+  >();
+
+  // Automatic recovery: the last accepted join payload is replayed after a
+  // signalling drop, so the session survives blips without consumer action.
+  private lastJoinPayload: SfuJoinPayload | null = null;
+  /** True once a join succeeded; disconnects then enter recovery. */
+  private sessionEstablished = false;
+  private joinOptions: SfuJoinOptions | null = null;
+  /** One token refresh attempt per rejoin. */
+  private tokenRefreshAttempted = false;
+  /** Live local tracks + produce intents held across a reconnect blip. */
+  private retainedLocalProduces: Array<{
+    track: MediaStreamTrack;
+    source?: SfuMediaSource;
+    options: { isMobile?: boolean };
+  }> = [];
 
   // Event router
   private eventRouter = new SfuEventRouter(
@@ -236,11 +256,16 @@ export class SfuManager implements ISfuManager {
   }
 
   // ISfuRoomMembership
-  async joinRoom(payload: SfuJoinPayload): Promise<void> {
+  async joinRoom(
+    payload: SfuJoinPayload,
+    options?: SfuJoinOptions,
+  ): Promise<void> {
     const socket = this.connection.getSocket();
     if (!socket) {
       throw new Error("Socket not connected");
     }
+    this.joinOptions = options ?? this.joinOptions;
+    this.lastJoinPayload = payload;
     // The room token is authoritative: its `sub` claim is the room id the
     // server minted it for. Callers frequently only know the room slug, and
     // sending a slug as roomId fails verification with
@@ -259,11 +284,18 @@ export class SfuManager implements ISfuManager {
     if (socket) {
       socket.emit("sfu:leave");
     }
+    this.clearSession();
     this.closeAll();
   }
 
   getLocalUserId(): string | null {
     return this.localUserId;
+  }
+
+  /** True once a join succeeded and the session was not terminated; a
+   * connected socket with this false still needs an explicit joinRoom. */
+  hasJoinedSession(): boolean {
+    return this.sessionEstablished;
   }
   // ISfuHostControls
   async mutePeer(
@@ -592,6 +624,9 @@ export class SfuManager implements ISfuManager {
       const isScreen = source === "screen";
       const producer = await this.sendTransport.produce({
         track,
+        // Tracks are caller-owned: teardown (including a reconnect blip)
+        // must never stop the capture, so retained tracks replay on rejoin.
+        stopTracks: false,
         encodings: isVideo && !isScreen ? SIMULCAST_ENCODINGS : undefined,
         codecOptions: isVideo
           ? { videoGoogleStartBitrate: 1000 }
@@ -659,6 +694,13 @@ export class SfuManager implements ISfuManager {
   onJoinError(callback: (error: SfuJoinError) => void): () => void {
     this.joinErrorCallbacks.add(callback);
     return () => this.joinErrorCallbacks.delete(callback);
+  }
+
+  /** Subscribe to automatic-recovery failures (exhausted retries,
+   * terminal rejoin denials). Returns an unsubscribe function. */
+  onReconnectError(callback: (error: SfuReconnectError) => void): () => void {
+    this.reconnectErrorCallbacks.add(callback);
+    return () => this.reconnectErrorCallbacks.delete(callback);
   }
 
   private getScreenProducer(): Producer | undefined {
@@ -850,6 +892,13 @@ export class SfuManager implements ISfuManager {
   // Event handlers
   private handleConnected(): void {
     console.log("[SFU] Connected");
+    if (this.sessionEstablished && this.lastJoinPayload) {
+      // socket.io reconnected mid-session: replay the join pipeline and
+      // keep the reconnecting status until the join ack lands.
+      this.tokenRefreshAttempted = false;
+      void this.joinRoom(this.lastJoinPayload).catch(() => undefined);
+      return;
+    }
     this.updateState({ connectionState: "connected" });
   }
 
@@ -859,18 +908,73 @@ export class SfuManager implements ISfuManager {
     // notification from closeAll() never has isSendTransportCreated=true while
     // the send transport is already null (which would trigger spurious produce
     // attempts in consumers of onStateChange).
+    const recovering = this.sessionEstablished && this.lastJoinPayload !== null;
     this.updateState({
-      connectionState: "connecting",
+      connectionState: recovering ? "reconnecting" : "connecting",
       isDeviceLoaded: false,
       isSendTransportCreated: false,
     });
+    if (recovering) {
+      this.retainLocalProduces();
+    }
     this.closeAll();
     this.device = null;
     this.pendingNewProducers = [];
   }
 
+  /**
+   * Holds live local tracks and buffered produce intents across the blip:
+   * they replay through the rebuilt join pipeline after the rejoin ack.
+   * Tracks are never re-acquired (no getUserMedia) and never stopped here.
+   */
+  private retainLocalProduces(): void {
+    for (const producer of this.producers.values()) {
+      const track = producer.track;
+      if (!track || track.readyState !== "live") continue;
+      const source = (producer.appData as Record<string, unknown> | undefined)
+        ?.source as SfuMediaSource | undefined;
+      this.retainedLocalProduces.push({
+        track,
+        source: source ?? (producer.kind === "video" ? "camera" : undefined),
+        options: {},
+      });
+    }
+    for (const pending of this.pendingLocalProduces.splice(0)) {
+      this.retainedLocalProduces.push({
+        track: pending.track,
+        source: pending.source,
+        options: pending.options,
+      });
+      // Settle the original caller: nothing is being produced right now;
+      // the replay re-produces the same track after recovery.
+      pending.resolve(null);
+    }
+  }
+
+  private replayRetainedProduces(): void {
+    if (this.retainedLocalProduces.length === 0) return;
+    const retained = this.retainedLocalProduces.splice(0);
+    console.log(
+      "[SFU] Replaying",
+      retained.length,
+      "retained local produce(s)",
+    );
+    for (const entry of retained) {
+      void this.produceWithSource(entry.track, entry.source, entry.options);
+    }
+  }
+
   private handleReconnectFailed(): void {
     console.log("[SFU] Reconnect failed");
+    if (this.sessionEstablished && this.lastJoinPayload) {
+      this.failRecovery(
+        new SfuReconnectError(
+          "RECONNECT_EXHAUSTED",
+          "Could not re-establish the signalling connection",
+        ),
+      );
+      return;
+    }
     this.updateState({ connectionState: "failed" });
   }
 
@@ -881,6 +985,13 @@ export class SfuManager implements ISfuManager {
     // decoded from the token client-side.
     this.localUserId = payload.participant?.id ?? null;
     this.updateState({ capabilities: payload.capabilities ?? [] });
+    if (this.sessionEstablished) {
+      // Recovery complete: back to connected; retained tracks re-produce
+      // through the rebuilt pipeline (buffered until the transport exists).
+      this.updateState({ connectionState: "connected" });
+      this.replayRetainedProduces();
+    }
+    this.sessionEstablished = true;
     await this.loadDevice(payload.routerRtpCapabilities);
   }
 
@@ -1084,7 +1195,62 @@ export class SfuManager implements ISfuManager {
   private handleJoinError(payload: SfuJoinErrorPayload): void {
     console.error("[SFU] Join error:", payload.code, payload.message);
     const error = new SfuJoinError(payload.code, payload.message);
+
+    if (this.sessionEstablished && this.lastJoinPayload) {
+      // A rejoin denial during recovery: kicked is terminal, an expired
+      // token retries once through the provider, anything else stops.
+      if (payload.code === "KICKED_FROM_ROOM") {
+        this.handleKicked({ roomId: this.lastJoinPayload.roomId });
+        return;
+      }
+      if (payload.code === "ROOM_TOKEN_EXPIRED") {
+        void this.refreshTokenAndRejoin(error);
+        return;
+      }
+      this.failRecovery(error);
+      return;
+    }
+
     for (const cb of this.joinErrorCallbacks) {
+      cb(error);
+    }
+  }
+
+  /** One provider retry per rejoin; any further denial fails typed. */
+  private async refreshTokenAndRejoin(error: SfuJoinError): Promise<void> {
+    const provider = this.joinOptions?.tokenProvider;
+    if (!provider || this.tokenRefreshAttempted) {
+      this.failRecovery(error);
+      return;
+    }
+    this.tokenRefreshAttempted = true;
+    try {
+      const token = await provider();
+      if (!this.lastJoinPayload) return;
+      this.lastJoinPayload = { ...this.lastJoinPayload, token };
+      await this.joinRoom(this.lastJoinPayload);
+    } catch (providerError) {
+      this.failRecovery(
+        new SfuJoinError(
+          "ROOM_TOKEN_EXPIRED",
+          `Token provider failed: ${providerError instanceof Error ? providerError.message : "unknown error"}`,
+        ),
+      );
+    }
+  }
+
+  /** Terminal recovery failure: stop retrying, fail typed, release state. */
+  private failRecovery(error: SfuJoinError | SfuReconnectError): void {
+    this.clearSession();
+    this.closeAll();
+    this.updateState({ connectionState: "failed" });
+    if (error instanceof SfuJoinError) {
+      for (const cb of this.joinErrorCallbacks) {
+        cb(error);
+      }
+      return;
+    }
+    for (const cb of this.reconnectErrorCallbacks) {
       cb(error);
     }
   }
@@ -1257,7 +1423,12 @@ export class SfuManager implements ISfuManager {
     this.kickedCallbacks.forEach((callback) => {
       callback(payload);
     });
+    this.clearSession();
     this.closeAll();
+    // Kick is terminal: stop socket.io reconnection attempts so the dead
+    // session cannot idle back into a connected-but-roomless socket.
+    this.connection.disconnect();
+    this.eventRouter.teardown();
     this.updateState({ connectionState: "disconnected" });
   }
 
@@ -1266,6 +1437,7 @@ export class SfuManager implements ISfuManager {
     for (const callback of this.roomEndedCallbacks) {
       callback(payload);
     }
+    this.clearSession();
     this.closeAll();
     this.updateState({ connectionState: "disconnected" });
   }
@@ -1408,7 +1580,17 @@ export class SfuManager implements ISfuManager {
     });
   }
 
+  /** Drops all recovery bookkeeping: the session is intentionally over. */
+  private clearSession(): void {
+    this.sessionEstablished = false;
+    this.lastJoinPayload = null;
+    this.joinOptions = null;
+    this.tokenRefreshAttempted = false;
+    this.retainedLocalProduces = [];
+  }
+
   private resetState(): void {
+    this.clearSession();
     this.device = null;
     this.sendTransport = null;
     this.recvTransport = null;

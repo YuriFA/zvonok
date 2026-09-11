@@ -74,6 +74,7 @@ const sfuMock = vi.hoisted(() => {
     leaveRoom: vi.fn(),
     kickPeer: vi.fn(),
     joinRoom: vi.fn().mockResolvedValue(undefined),
+    hasJoinedSession: vi.fn(() => false),
     produce: vi.fn().mockImplementation(async (track: MediaStreamTrack) => ({
       id: `${track.kind}-producer`,
       kind: track.kind,

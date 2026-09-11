@@ -24,6 +24,7 @@ import type {
   SfuJoinError,
   SfuScreenShareStoppedCallback,
   SfuBroadcastMessage,
+  SfuJoinOptions,
 } from "./types.js";
 
 /**
@@ -47,7 +48,9 @@ interface ISfuConnection {
  */
 interface ISfuRoomMembership {
   /** Join a room */
-  joinRoom(payload: SfuJoinPayload): Promise<void>;
+  joinRoom(payload: SfuJoinPayload, options?: SfuJoinOptions): Promise<void>;
+  /** True once a join succeeded; automatic recovery is in progress or done. */
+  hasJoinedSession(): boolean;
   /** Leave the current room */
   leaveRoom(): void;
   /** Server-verified id of the local participant; null before a successful join */

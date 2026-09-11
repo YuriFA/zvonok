@@ -92,6 +92,9 @@ export function createMockSfuManager() {
     (payload: { userId: string }) => void
   >();
   const produceErrorListeners = new Set<(code: string) => void>();
+  const reconnectErrorListeners = new Set<
+    (error: { code: string; message: string }) => void
+  >();
   const broadcastListeners = new Set<
     (message: {
       senderId: string;
@@ -169,6 +172,12 @@ export function createMockSfuManager() {
       stateListeners.add(listener);
       return () => stateListeners.delete(listener);
     }),
+    onReconnectError: vi.fn(
+      (listener: (error: { code: string; message: string }) => void) => {
+        reconnectErrorListeners.add(listener);
+        return () => reconnectErrorListeners.delete(listener);
+      },
+    ),
     onTrack: vi.fn((listener: TrackListener) => {
       trackListeners.add(listener);
       return () => trackListeners.delete(listener);
@@ -236,6 +245,11 @@ export function createMockSfuManager() {
     simulateConnected(state = "connected"): void {
       connectionState = state;
       stateListeners.forEach((listener) => listener({ connectionState }));
+    },
+    simulateReconnectError(code: string, message: string): void {
+      reconnectErrorListeners.forEach((listener) =>
+        listener({ code, message }),
+      );
     },
     emitTrack(
       track: MediaStreamTrack,

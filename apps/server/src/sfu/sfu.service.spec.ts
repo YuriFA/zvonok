@@ -1744,17 +1744,22 @@ describe('webhook emissions', () => {
     );
   });
 
-  it('emits participant.left with reason disconnect on socket close', async () => {
+  it('emits participant.left with reason disconnect on grace expiry', async () => {
     seedPeer(socket, 'user-1', 'room-1');
+    const previousGrace = service.rejoinGraceMs;
+    service.rejoinGraceMs = 10;
 
     await service.closePeer(socket);
+    expect(webhooks.participantLeft).not.toHaveBeenCalled();
 
+    await new Promise((resolve) => setTimeout(resolve, 40));
     expect(webhooks.participantLeft).toHaveBeenCalledWith(
       'room-1',
       undefined,
       { id: 'user-1', displayName: 'user-1' },
       'disconnect',
     );
+    service.rejoinGraceMs = previousGrace;
   });
 
   it('emits participant.left(room-end) for every peer, then room.ended', async () => {
@@ -1790,6 +1795,214 @@ describe('webhook emissions', () => {
 
     expect(webhooks.roomEnded).toHaveBeenCalledWith('room-empty', undefined);
     expect(workerManager.closeRouter).not.toHaveBeenCalled();
+  });
+});
+
+describe('rejoin grace', () => {
+  const wait = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  function seed(
+    sock: Socket,
+    userId: string,
+    roomId: string,
+    options: { ownerId?: string } = {},
+  ): Peer {
+    const peer: Peer = {
+      id: sock.id,
+      userId,
+      username: userId,
+      socket: sock,
+      producers: new Map(),
+      consumers: new Map(),
+      capabilities: capabilitiesForRole(
+        options.ownerId === userId ? 'host' : 'participant',
+      ),
+    };
+    const state = service as unknown as {
+      peers: Map<string, Peer>;
+      rooms: Map<string, Set<string>>;
+      roomOwners: Map<string, string>;
+    };
+    state.peers.set(peer.id, peer);
+    const roomPeers = state.rooms.get(roomId) ?? new Set<string>();
+    roomPeers.add(peer.id);
+    state.rooms.set(roomId, roomPeers);
+    if (options.ownerId) {
+      state.roomOwners.set(roomId, options.ownerId);
+    }
+    return peer;
+  }
+
+  function joinViaUser(
+    sock: Socket,
+    userId: string,
+    overrides: Partial<SfuJoinPayload> = {},
+  ): Promise<void> {
+    workerManager.createRouter.mockResolvedValue({} as Router<AppData>);
+    workerManager.getRtpCapabilities.mockReturnValue(
+      {} as unknown as RtpCapabilities,
+    );
+    jwtService.verify.mockReturnValue({ id: userId });
+    prisma.user.findUnique.mockResolvedValue({ username: userId });
+    prisma.room.findUnique.mockResolvedValue({
+      slug: 'room-1-slug',
+      ownerId: null,
+    });
+    return service.joinRoom(sock, {
+      roomId: 'room-1',
+      roomSlug: 'room-1-slug',
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    service.rejoinGraceMs = 10;
+  });
+
+  afterEach(() => {
+    service.rejoinGraceMs = 30_000;
+  });
+
+  it('restores a same-id rejoin silently: no events, no webhooks', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+    webhooks.participantJoined.mockClear();
+    webhooks.roomStarted.mockClear();
+    (alice.emit as jest.Mock).mockClear();
+
+    await service.closePeer(bob);
+    await joinViaUser(createSocket('socket-bob-2'), 'user-2');
+
+    expect(webhooks.participantJoined).not.toHaveBeenCalled();
+    expect(webhooks.roomStarted).not.toHaveBeenCalled();
+    const aliceEvents = (alice.emit as jest.Mock).mock.calls.map(
+      (call: unknown[]) => call[0],
+    );
+    expect(aliceEvents).not.toContain('sfu:peer-left');
+    expect(aliceEvents).not.toContain('sfu:peer-joined');
+  });
+
+  it('answers the rejoin with the normal acknowledgement and peers', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+
+    await service.closePeer(bob);
+    const restored = createSocket('socket-bob-2');
+    await joinViaUser(restored, 'user-2');
+
+    const restoredEvents = (restored.emit as jest.Mock).mock.calls.filter(
+      (call: unknown[]) => call[0] === 'sfu:existing-peers',
+    );
+    expect(restoredEvents.length).toBe(1);
+    expect((restored.emit as jest.Mock).mock.calls).toContainEqual([
+      'sfu:joined',
+      expect.objectContaining({
+        participant: expect.objectContaining({ id: 'user-2' }),
+      }),
+    ]);
+  });
+
+  it('runs the leave flow with reason disconnect on expiry', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+    webhooks.participantJoined.mockClear();
+
+    await service.closePeer(bob);
+    await wait(40);
+
+    expect(webhooks.participantLeft).toHaveBeenCalledWith(
+      'room-1',
+      'room-1-slug',
+      { id: 'user-2', displayName: 'user-2' },
+      'disconnect',
+    );
+    expect(alice.emit).toHaveBeenCalledWith('sfu:peer-left', {
+      userId: 'user-2',
+    });
+  });
+
+  it('refuses a kicked peer rejoin for the room lifetime', async () => {
+    const owner = createSocket('socket-owner');
+    const target = createSocket('socket-target');
+    seed(owner, 'user-1', 'room-1', { ownerId: 'user-1' });
+    seed(target, 'user-2', 'room-1');
+
+    await service.kickPeer(owner, 'user-2');
+    const rejoiner = createSocket('socket-target-2');
+    await joinViaUser(rejoiner, 'user-2');
+
+    expect(rejoiner.emit).toHaveBeenCalledWith('sfu:join-error', {
+      code: 'KICKED_FROM_ROOM',
+      message: 'Removed from the room by the host',
+    });
+    const state = service as unknown as { peers: Map<string, Peer> };
+    expect(
+      Array.from(state.peers.values()).some((peer) => peer.userId === 'user-2'),
+    ).toBe(false);
+  });
+
+  it('clears kick terminality when the room empties', async () => {
+    const owner = createSocket('socket-owner');
+    const target = createSocket('socket-target');
+    seed(owner, 'user-1', 'room-1', { ownerId: 'user-1' });
+    seed(target, 'user-2', 'room-1');
+
+    await service.kickPeer(owner, 'user-2');
+    await service.leaveRoom(owner);
+    workerManager.closeRouter.mockResolvedValue(undefined);
+
+    const rejoiner = createSocket('socket-kicked-2');
+    await joinViaUser(rejoiner, 'user-2');
+
+    expect(rejoiner.emit).not.toHaveBeenCalledWith(
+      'sfu:join-error',
+      expect.anything(),
+    );
+    expect(webhooks.participantJoined).toHaveBeenCalledWith(
+      'room-1',
+      'room-1-slug',
+      expect.objectContaining({ id: 'user-2' }),
+    );
+  });
+
+  it('keeps an explicit leave immediate with a fresh join afterwards', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+    webhooks.participantJoined.mockClear();
+
+    await service.leaveRoom(bob);
+
+    expect(webhooks.participantLeft).toHaveBeenCalledWith(
+      'room-1',
+      'room-1-slug',
+      { id: 'user-2', displayName: 'user-2' },
+      'leave',
+    );
+    await joinViaUser(createSocket('socket-bob-2'), 'user-2');
+    expect(webhooks.participantJoined).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resurrect a peer whose room ended during grace', async () => {
+    const bob = createSocket('socket-bob');
+    seed(bob, 'user-2', 'room-1');
+
+    await service.closePeer(bob);
+    workerManager.closeRouter.mockResolvedValue(undefined);
+    await service.endRoom('room-1');
+    webhooks.participantLeft.mockClear();
+
+    await wait(40);
+
+    expect(webhooks.participantLeft).not.toHaveBeenCalled();
   });
 });
 
@@ -1991,13 +2204,18 @@ describe('egress taps', () => {
     serviceState().rooms.set('room-1', new Set(['socket-1']));
     const closed = jest.fn();
     service.onRoomClosed('room-1', closed);
+    const previousGrace = service.rejoinGraceMs;
+    service.rejoinGraceMs = 10;
 
     await service.closePeer(createSocket('socket-1'));
+    expect(closed).not.toHaveBeenCalled();
 
+    await new Promise((resolve) => setTimeout(resolve, 40));
     expect(closed).toHaveBeenCalledTimes(1);
     expect(closed.mock.invocationCallOrder[0]).toBeLessThan(
       workerManager.closeRouter.mock.invocationCallOrder[0],
     );
+    service.rejoinGraceMs = previousGrace;
   });
 
   it('honors room-closed unsubscribe and fires only for the closed room', async () => {

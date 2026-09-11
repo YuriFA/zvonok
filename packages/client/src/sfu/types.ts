@@ -68,11 +68,33 @@ export type SfuJoinErrorCode =
   | "ROOM_TOKEN_ROOM_MISMATCH"
   | "ROOM_LOCKED"
   | "SFU_JOIN_UNAUTHORIZED"
-  | "SFU_JOIN_FORBIDDEN";
+  | "SFU_JOIN_FORBIDDEN"
+  | "KICKED_FROM_ROOM";
 
 export interface SfuJoinErrorPayload {
   code: SfuJoinErrorCode;
   message: string;
+}
+
+/**
+ * Join options that shape automatic recovery. tokenProvider is consulted
+ * at most once per rejoin when the stored room token expired; the initial
+ * join never calls it.
+ */
+export interface SfuJoinOptions {
+  tokenProvider?: () => Promise<string>;
+}
+
+/** Automatic recovery from a signalling drop could not be completed. */
+export type SfuReconnectErrorCode = "RECONNECT_EXHAUSTED" | "REJOIN_FAILED";
+
+export class SfuReconnectError extends Error {
+  readonly code: SfuReconnectErrorCode;
+  constructor(code: SfuReconnectErrorCode, message: string) {
+    super(message);
+    this.name = "SfuReconnectError";
+    this.code = code;
+  }
 }
 
 export class SfuJoinError extends Error {
@@ -357,7 +379,7 @@ export interface SfuExistingParticipantsPayload {
 
 // SFU connection state
 export type SfuConnectionState =
-  "disconnected" | "connecting" | "connected" | "failed";
+  "disconnected" | "connecting" | "connected" | "reconnecting" | "failed";
 
 // SFU manager state
 export interface SfuState {

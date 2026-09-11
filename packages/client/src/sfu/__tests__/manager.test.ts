@@ -792,6 +792,216 @@ describe("SfuManager", () => {
     });
   });
 
+  describe("reconnection recovery", () => {
+    async function establishSession() {
+      manager.connect();
+      testContext.mockSocket.connected = true;
+      await testContext.emitSocketEvent("connect");
+      await manager.joinRoom({ roomId: "room-1", token: "stale-token" });
+      await testContext.emitSocketEvent("sfu:joined", {
+        routerRtpCapabilities: { codecs: [] },
+        participant: { id: "user-1" },
+        capabilities: [],
+      });
+    }
+
+    it("enters reconnecting after a post-join disconnect and replays the join on reconnect", async () => {
+      await establishSession();
+      await testContext.emitSocketEvent("disconnect");
+
+      expect(manager.getState().connectionState).toBe("reconnecting");
+
+      await testContext.emitSocketEvent("connect");
+      const joinCall = testContext.mockSocket.emit.mock.calls.find(
+        (args) => args[0] === "sfu:join",
+      );
+      expect(joinCall).toBeDefined();
+
+      await testContext.emitSocketEvent("sfu:joined", {
+        routerRtpCapabilities: { codecs: [] },
+        participant: { id: "user-1" },
+        capabilities: [],
+      });
+      expect(manager.getState().connectionState).toBe("connected");
+    });
+
+    it("keeps the connecting status for a disconnect before any join", async () => {
+      manager.connect();
+      await testContext.emitSocketEvent("connect");
+      await testContext.emitSocketEvent("disconnect");
+
+      expect(manager.getState().connectionState).toBe("connecting");
+    });
+
+    it("reproduces retained local tracks after recovery, without re-acquiring them", async () => {
+      await establishSession();
+      const track = { kind: "audio", readyState: "live" } as MediaStreamTrack;
+      await testContext.emitSocketEvent("disconnect");
+
+      // Producing while reconnecting buffers the intent; the same track
+      // reference must be replayed after the rejoin, never a new capture.
+      void manager.produce(track);
+      const produced: MediaStreamTrack[] = [];
+      testContext.mockSendTransport.produce.mockImplementation(
+        async (params: { track: MediaStreamTrack }) => {
+          produced.push(params.track);
+          return testContext.mockProducer;
+        },
+      );
+
+      await testContext.emitSocketEvent("connect");
+      await testContext.emitSocketEvent("sfu:joined", {
+        routerRtpCapabilities: { codecs: [] },
+        participant: { id: "user-1" },
+        capabilities: [],
+      });
+      await testContext.emitSocketEvent("sfu:transport-created", {
+        direction: "send",
+        transportId: "send-transport",
+        iceParameters: {},
+        iceCandidates: [],
+        dtlsParameters: {},
+      });
+
+      expect(produced).toEqual([track]);
+    });
+
+    it("retains live producer tracks across the blip and replays them", async () => {
+      await establishSession();
+      await testContext.emitSocketEvent("sfu:transport-created", {
+        direction: "send",
+        transportId: "send-transport",
+        iceParameters: {},
+        iceCandidates: [],
+        dtlsParameters: {},
+      });
+      const liveTrack = {
+        kind: "video",
+        readyState: "live",
+      } as MediaStreamTrack;
+      await manager.produce(liveTrack);
+      // The mock producer always returns the shared instance; hand it the
+      // live track it is supposed to be carrying.
+      testContext.mockProducer.track = liveTrack;
+      const produced: MediaStreamTrack[] = [];
+      testContext.mockSendTransport.produce.mockImplementation(
+        async (params: { track: MediaStreamTrack }) => {
+          produced.push(params.track);
+          return testContext.mockProducer;
+        },
+      );
+
+      await testContext.emitSocketEvent("disconnect");
+      await testContext.emitSocketEvent("connect");
+      await testContext.emitSocketEvent("sfu:joined", {
+        routerRtpCapabilities: { codecs: [] },
+        participant: { id: "user-1" },
+        capabilities: [],
+      });
+      await testContext.emitSocketEvent("sfu:transport-created", {
+        direction: "send",
+        transportId: "send-transport",
+        iceParameters: {},
+        iceCandidates: [],
+        dtlsParameters: {},
+      });
+
+      expect(produced).toEqual([liveTrack]);
+    });
+
+    it("surfaces reconnect exhaustion typed and stops", async () => {
+      await establishSession();
+      const failures: string[] = [];
+      manager.onReconnectError((error) => failures.push(error.code));
+
+      await testContext.emitSocketEvent("disconnect");
+      await testContext.emitSocketEvent("reconnect_failed");
+
+      expect(manager.getState().connectionState).toBe("failed");
+      expect(failures).toEqual(["RECONNECT_EXHAUSTED"]);
+
+      // No further recovery: a late connect must not replay a join.
+      testContext.mockSocket.emit.mockClear();
+      await testContext.emitSocketEvent("connect");
+      expect(
+        testContext.mockSocket.emit.mock.calls.some(
+          (args) => args[0] === "sfu:join",
+        ),
+      ).toBe(false);
+    });
+
+    it("refreshes an expired token once through the provider and rejoins", async () => {
+      await establishSession();
+      const provider = vi.fn(async () => "fresh-token");
+      await manager.joinRoom(
+        { roomId: "room-1", token: "stale-token" },
+        { tokenProvider: provider },
+      );
+
+      await testContext.emitSocketEvent("disconnect");
+      await testContext.emitSocketEvent("connect");
+      await testContext.emitSocketEvent("sfu:join-error", {
+        code: "ROOM_TOKEN_EXPIRED",
+        message: "Room token is not valid",
+      });
+      await waitFor(() => expect(provider).toHaveBeenCalledTimes(1));
+
+      const joinCalls = testContext.mockSocket.emit.mock.calls.filter(
+        (args) => args[0] === "sfu:join",
+      );
+      expect(joinCalls.at(-1)?.[1]).toMatchObject({ token: "fresh-token" });
+    });
+
+    it("fails typed on expired token without a provider", async () => {
+      await establishSession();
+      const errors: string[] = [];
+      manager.onJoinError((error) => errors.push(error.code));
+
+      await testContext.emitSocketEvent("disconnect");
+      await testContext.emitSocketEvent("connect");
+      await testContext.emitSocketEvent("sfu:join-error", {
+        code: "ROOM_TOKEN_EXPIRED",
+        message: "Room token is not valid",
+      });
+
+      expect(manager.getState().connectionState).toBe("failed");
+      expect(errors).toEqual(["ROOM_TOKEN_EXPIRED"]);
+    });
+
+    it("treats a kicked rejoin denial as terminal and fires kicked callbacks", async () => {
+      await establishSession();
+      const kicks: string[] = [];
+      manager.onKicked(() => kicks.push("kicked"));
+
+      await testContext.emitSocketEvent("disconnect");
+      await testContext.emitSocketEvent("connect");
+      await testContext.emitSocketEvent("sfu:join-error", {
+        code: "KICKED_FROM_ROOM",
+        message: "Removed from the room by the host",
+      });
+
+      expect(kicks).toEqual(["kicked"]);
+      expect(manager.getState().connectionState).toBe("disconnected");
+      expect(testContext.mockSocket.disconnect).toHaveBeenCalled();
+    });
+
+    it("does not recover after an explicit leave", async () => {
+      await establishSession();
+      manager.leaveRoom();
+
+      await testContext.emitSocketEvent("disconnect");
+      testContext.mockSocket.emit.mockClear();
+      await testContext.emitSocketEvent("connect");
+
+      expect(
+        testContext.mockSocket.emit.mock.calls.some(
+          (args) => args[0] === "sfu:join",
+        ),
+      ).toBe(false);
+      expect(manager.getState().connectionState).toBe("connected");
+    });
+  });
+
   describe("data channel", () => {
     it("mirrors received broadcasts into state and callbacks", async () => {
       manager.connect();

@@ -97,11 +97,10 @@ describe("useZvonokConnection", () => {
     const { result } = renderConnection();
     await joinFully(result);
 
-    expect(lastSfu().manager.joinRoom).toHaveBeenCalledWith({
-      roomId: "room-1",
-      roomSlug: "room-1",
-      token: TOKEN,
-    });
+    expect(lastSfu().manager.joinRoom).toHaveBeenCalledWith(
+      { roomId: "room-1", roomSlug: "room-1", token: TOKEN },
+      { tokenProvider: undefined },
+    );
   });
 
   it("rejects join with a typed error on sfu:join-error and surfaces status error", async () => {

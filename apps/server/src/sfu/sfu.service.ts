@@ -58,6 +58,34 @@ export class SfuService implements OnModuleDestroy {
   > = new Map();
   private roomClosedHandlers: Map<string, Set<() => void>> = new Map();
 
+  /**
+   * Disconnect grace: sockets that drop without an explicit leave hold
+   * their seat and identity for {@link rejoinGraceMs} so a network blip
+   * restores silently. Expiry runs the normal disconnect leave flow.
+   * Keyed `${roomId}:${userId}`.
+   */
+  private readonly heldSeats = new Map<
+    string,
+    {
+      roomId: string;
+      socketId: string;
+      participant: {
+        id: string;
+        displayName: string;
+        externalId?: string;
+        metadata?: Record<string, unknown>;
+      };
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  /** Kicked participants are unrestorable for the room's lifetime. */
+  private readonly kickedUsers = new Map<string, Set<string>>();
+  /**
+   * Grace window before a dropped peer's leave flow runs. Production
+   * default 30s; mutable so tests can shrink it.
+   */
+  rejoinGraceMs = 30_000;
+
   registerSlug(slug: string, roomId: string): void {
     this.slugToRoomId.set(slug, roomId);
   }
@@ -128,6 +156,9 @@ export class SfuService implements OnModuleDestroy {
     this.roomLocks.clear();
     this.egressTapHandlers.clear();
     this.roomClosedHandlers.clear();
+    for (const seat of this.heldSeats.values()) clearTimeout(seat.timer);
+    this.heldSeats.clear();
+    this.kickedUsers.clear();
     this.slugToRoomId.clear();
     this.logger.log('SFU Service closed');
   }
@@ -260,17 +291,13 @@ export class SfuService implements OnModuleDestroy {
     return { roomId, peer, producer };
   }
 
-  private async removePeer(
-    socketId: string,
-    reason?: WebhookLeaveReason,
-  ): Promise<{ roomId: string; userId: string } | null> {
-    const peer = this.getPeer(socketId);
-    const roomId = this.getRoomIdBySocketId(socketId);
-
-    if (!peer || !roomId) {
-      return null;
-    }
-
+  /**
+   * Tears a peer's media state down (producers, screen-share lock,
+   * transports, room membership) without presence notifications, webhooks,
+   * or room cleanup - the shared step of both the immediate leave flow and
+   * the disconnect grace hold.
+   */
+  private detachPeer(socketId: string, roomId: string, peer: Peer): void {
     // Close all producers through the shared path so screen-share lock is
     // released and peers are notified consistently.
     for (const producerId of Array.from(peer.producers.keys())) {
@@ -295,6 +322,44 @@ export class SfuService implements OnModuleDestroy {
     peer.sendTransport?.close();
     peer.recvTransport?.close();
     this.peers.delete(socketId);
+  }
+
+  /** Runs the room-empty cleanup unless a grace seat still holds it alive. */
+  private async cleanupRoomIfEmpty(roomId: string): Promise<void> {
+    if ((this.rooms.get(roomId)?.size ?? 0) > 0) return;
+    if (this.roomHasHeldSeat(roomId)) return;
+    // Stop egress taps while the room is still resolvable.
+    this.notifyRoomClosed(roomId);
+    await this.workerManager.closeRouter(roomId);
+    this.rooms.delete(roomId);
+    this.roomOwners.delete(roomId);
+    this.roomLocks.delete(roomId);
+    // The room's lifetime ends here, so kicked-users terminality ends with it.
+    this.kickedUsers.delete(roomId);
+    for (const [slug, rid] of this.slugToRoomId) {
+      if (rid === roomId) this.slugToRoomId.delete(slug);
+    }
+  }
+
+  private roomHasHeldSeat(roomId: string): boolean {
+    for (const seat of this.heldSeats.values()) {
+      if (seat.roomId === roomId) return true;
+    }
+    return false;
+  }
+
+  private async removePeer(
+    socketId: string,
+    reason?: WebhookLeaveReason,
+  ): Promise<{ roomId: string; userId: string } | null> {
+    const peer = this.getPeer(socketId);
+    const roomId = this.getRoomIdBySocketId(socketId);
+
+    if (!peer || !roomId) {
+      return null;
+    }
+
+    this.detachPeer(socketId, roomId, peer);
     this.notifyPeerLeft(roomId, peer.userId, socketId);
     if (reason) {
       this.webhooks.participantLeft(
@@ -310,17 +375,7 @@ export class SfuService implements OnModuleDestroy {
       );
     }
 
-    if (this.rooms.get(roomId)?.size === 0) {
-      // Stop egress taps while the room is still resolvable.
-      this.notifyRoomClosed(roomId);
-      await this.workerManager.closeRouter(roomId);
-      this.rooms.delete(roomId);
-      this.roomOwners.delete(roomId);
-      this.roomLocks.delete(roomId);
-      for (const [slug, rid] of this.slugToRoomId) {
-        if (rid === roomId) this.slugToRoomId.delete(slug);
-      }
-    }
+    await this.cleanupRoomIfEmpty(roomId);
 
     return {
       roomId,
@@ -350,6 +405,26 @@ export class SfuService implements OnModuleDestroy {
     if (!peer) {
       return;
     }
+
+    // A kicked participant is unrestorable for the room's lifetime: the
+    // rejoin is refused with the kick denial regardless of the grace window.
+    if (this.kickedUsers.get(roomId)?.has(peer.userId)) {
+      this.emitJoinError(
+        socket,
+        'KICKED_FROM_ROOM',
+        'Removed from the room by the host',
+      );
+      return;
+    }
+
+    // A same-id rejoin inside the grace window restores the held seat
+    // silently: the room saw no departure, so it gets no arrival either.
+    const restoredSeat = this.heldSeats.get(`${roomId}:${peer.userId}`);
+    if (restoredSeat) {
+      clearTimeout(restoredSeat.timer);
+      this.heldSeats.delete(`${roomId}:${peer.userId}`);
+    }
+
     this.peers.set(peerId, peer);
 
     if (!this.rooms.has(roomId)) {
@@ -361,7 +436,9 @@ export class SfuService implements OnModuleDestroy {
       return;
     }
 
-    const firstPeer = roomPeers.size === 0;
+    // A grace seat (the rejoiner's own or anyone else's) means the room never
+    // emptied, so room.started must not fire again.
+    const firstPeer = roomPeers.size === 0 && !this.roomHasHeldSeat(roomId);
     roomPeers.add(peerId);
     if (peer.ownsRoom) {
       this.roomOwners.set(roomId, peer.userId);
@@ -371,15 +448,17 @@ export class SfuService implements OnModuleDestroy {
     }
     this.logger.log(`Peer ${peerId} joined SFU room ${roomId}`);
 
-    // Notify existing peers about the new peer
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      if (roomPeer.id !== socket.id) {
-        roomPeer.socket.emit('sfu:peer-joined', {
-          userId: peer.userId,
-          username: peer.username,
-          externalId: peer.externalId,
-          metadata: peer.metadata,
-        });
+    // Notify existing peers about the new peer - never for a silent restore
+    if (!restoredSeat) {
+      for (const roomPeer of this.getRoomPeers(roomId)) {
+        if (roomPeer.id !== socket.id) {
+          roomPeer.socket.emit('sfu:peer-joined', {
+            userId: peer.userId,
+            username: peer.username,
+            externalId: peer.externalId,
+            metadata: peer.metadata,
+          });
+        }
       }
     }
 
@@ -416,12 +495,14 @@ export class SfuService implements OnModuleDestroy {
     if (firstPeer) {
       this.webhooks.roomStarted(roomId, roomSlug);
     }
-    this.webhooks.participantJoined(roomId, roomSlug, {
-      id: peer.userId,
-      displayName: peer.username,
-      externalId: peer.externalId,
-      metadata: peer.metadata,
-    });
+    if (!restoredSeat) {
+      this.webhooks.participantJoined(roomId, roomSlug, {
+        id: peer.userId,
+        displayName: peer.username,
+        externalId: peer.externalId,
+        metadata: peer.metadata,
+      });
+    }
   }
 
   async leaveRoom(socket: Socket): Promise<void> {
@@ -950,6 +1031,10 @@ export class SfuService implements OnModuleDestroy {
       };
     }
 
+    const kicked = this.kickedUsers.get(roomId) ?? new Set<string>();
+    kicked.add(targetPeer.userId);
+    this.kickedUsers.set(roomId, kicked);
+
     targetPeer.socket.emit('sfu:kicked', { roomId });
     // The acknowledgement lands only after teardown completes, so a resolved
     // kick promise is a usable ordering guarantee for consumer UIs.
@@ -1132,8 +1217,67 @@ export class SfuService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Socket dropped without an explicit leave: hold the peer's seat and
+   * identity for the grace window, tearing down media state only. A same-id
+   * rejoin inside the window restores silently; expiry runs the normal
+   * disconnect leave flow.
+   */
   async closePeer(socket: Socket): Promise<void> {
-    await this.removePeer(socket.id, 'disconnect');
+    const peer = this.getPeer(socket.id);
+    const roomId = this.getRoomIdBySocketId(socket.id);
+    if (!peer || !roomId) {
+      return;
+    }
+
+    const key = `${roomId}:${peer.userId}`;
+    const previous = this.heldSeats.get(key);
+    if (previous) {
+      clearTimeout(previous.timer);
+    }
+    const timer = setTimeout(() => {
+      void this.expireHeldSeat(key);
+    }, this.rejoinGraceMs);
+    this.heldSeats.set(key, {
+      roomId,
+      socketId: socket.id,
+      participant: {
+        id: peer.userId,
+        displayName: peer.username,
+        externalId: peer.externalId,
+        metadata: peer.metadata,
+      },
+      timer,
+    });
+
+    this.detachPeer(socket.id, roomId, peer);
+    this.logger.log(
+      `Peer ${socket.id} disconnected from room ${roomId}; seat held for ${this.rejoinGraceMs}ms`,
+    );
+  }
+
+  /** Deferred disconnect leave flow: runs when the grace window lapses. */
+  private async expireHeldSeat(key: string): Promise<void> {
+    const seat = this.heldSeats.get(key);
+    if (!seat) {
+      return;
+    }
+    this.heldSeats.delete(key);
+
+    // The room may have ended (e.g. DELETE /v1) while the seat was held:
+    // its lifetime already ran the leave flow for everyone.
+    if (!this.rooms.has(seat.roomId)) {
+      return;
+    }
+
+    this.notifyPeerLeft(seat.roomId, seat.participant.id, seat.socketId);
+    this.webhooks.participantLeft(
+      seat.roomId,
+      this.findRoomSlug(seat.roomId),
+      seat.participant,
+      'disconnect',
+    );
+    await this.cleanupRoomIfEmpty(seat.roomId);
   }
 
   /**
@@ -1171,6 +1315,15 @@ export class SfuService implements OnModuleDestroy {
     // A /v1 DELETE teardown must clear a lock even when the room has no SFU
     // peers left, so a recreated room can be joined again.
     this.roomLocks.delete(roomId);
+    // The room's lifetime ends: grace seats lapse immediately and kicked
+    // users stop being terminal (a recreated room is a fresh lifetime).
+    for (const [key, seat] of Array.from(this.heldSeats)) {
+      if (seat.roomId === roomId) {
+        clearTimeout(seat.timer);
+        this.heldSeats.delete(key);
+      }
+    }
+    this.kickedUsers.delete(roomId);
     // Fire room-closed handlers up front so egress pipelines stop before any
     // teardown; removePeer's empty branch is a no-op afterwards.
     this.notifyRoomClosed(roomId);

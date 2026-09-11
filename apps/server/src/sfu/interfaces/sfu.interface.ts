@@ -50,7 +50,8 @@ export type SfuJoinErrorCode =
   | 'ROOM_TOKEN_ROOM_MISMATCH'
   | 'ROOM_LOCKED'
   | 'SFU_JOIN_UNAUTHORIZED'
-  | 'SFU_JOIN_FORBIDDEN';
+  | 'SFU_JOIN_FORBIDDEN'
+  | 'KICKED_FROM_ROOM';
 
 export interface SfuJoinErrorPayload {
   code: SfuJoinErrorCode;

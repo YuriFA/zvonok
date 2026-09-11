@@ -21,6 +21,11 @@ export interface UseZvonokConnectionOptions {
   roomSlug: string;
   /** Room token minted by the server; the server derives identity from it. */
   token: string;
+  /**
+   * Supplies a fresh room token when a rejoin is denied for expiry. Called
+   * at most once per rejoin; the initial join never calls it.
+   */
+  tokenProvider?: () => Promise<string>;
 }
 
 export interface UseZvonokConnectionResult {
@@ -121,7 +126,7 @@ function createJoinAckWaiter(
   };
 }
 
-export function useZvonokConnection({ roomSlug, token }: UseZvonokConnectionOptions): UseZvonokConnectionResult {
+export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvonokConnectionOptions): UseZvonokConnectionResult {
   const session = useZvonokSession();
   const managerRef = useRef<SfuManager | null>(null);
   const joinPromiseRef = useRef<Promise<void> | null>(null);
@@ -179,7 +184,10 @@ export function useZvonokConnection({ roomSlug, token }: UseZvonokConnectionOpti
         manager.getSocket() as Socket,
         JOIN_TIMEOUT_MS,
         () => {
-          void manager.joinRoom({ roomId: roomSlug, roomSlug, token });
+          void manager.joinRoom(
+            { roomId: roomSlug, roomSlug, token },
+            { tokenProvider },
+          );
         },
       );
 
@@ -196,7 +204,40 @@ export function useZvonokConnection({ roomSlug, token }: UseZvonokConnectionOpti
       joinPromiseRef.current = null;
     });
     return joinPromiseRef.current;
-  }, [ensureManager, roomSlug, session, token]);
+  }, [ensureManager, roomSlug, session, token, tokenProvider]);
+
+  // Automatic recovery: mirror the manager's reconnecting/connected cycle
+  // into the session status. A recovery failure surfaces typed as an error.
+  const reconnectingRef = useRef(false);
+  useEffect(() => {
+    const manager = session.manager;
+    if (!manager) {
+      return;
+    }
+    // The flag lives in a ref: the effect resubscribes whenever the session
+    // object is recreated, but the recovery cycle must not restart mid-blip.
+    const offState = manager.onStateChange((state) => {
+      if (state.connectionState === "reconnecting") {
+        reconnectingRef.current = true;
+        session.update({ status: "reconnecting" });
+        return;
+      }
+      if (state.connectionState === "connected" && reconnectingRef.current) {
+        reconnectingRef.current = false;
+        session.update({ status: "joined" });
+      }
+    });
+    const offReconnectError = manager.onReconnectError((error) => {
+      session.update({
+        status: "error",
+        error: new ZvonokError("RECONNECT_FAILED", error.message),
+      });
+    });
+    return () => {
+      offState();
+      offReconnectError();
+    };
+  }, [session.manager, session]);
 
   // A kicked peer loses its room membership; reflect it in the status.
   useEffect(() => {

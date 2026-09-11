@@ -222,6 +222,39 @@ The rules:
 - delivery is ephemeral: no persistence, no replay for late joiners;
   per-sender ordering follows their socket
 
+## 5. Surviving network blips
+
+Signalling drops no longer end the call. After a successful join the SDK
+recovers automatically: the status moves to `reconnecting`, local camera
+and microphone tracks are kept alive (never re-acquired), and when the
+socket returns the SDK rejoins the same room, rebuilds transports,
+republishes your tracks, and resubscribes to everyone else - status back
+to `joined`. No consumer code is involved.
+
+The server holds a dropped participant's seat for 30 seconds: other
+participants see no departure events and no `participant.left`/`participant.joined`
+webhooks fire for the blip. If the peer does not return in time, the leave
+flow runs with departure reason `disconnect`. A kicked participant is
+terminal for the room's lifetime: their rejoin is refused with a
+`KICKED_FROM_ROOM` denial and recovery stops.
+
+One caveat for long calls: room tokens expire. Hand the hook a
+`tokenProvider` and a rejoin denied for expiry is retried once with a
+fresh token - the provider is never called for the initial join:
+
+```jsx
+const connection = useZvonokConnection({
+  roomSlug,
+  token,
+  tokenProvider: async () => fetchFreshTokenFromYourBackend(),
+});
+
+// connection.status: "joined" | "reconnecting" | "error" | ...
+```
+
+Without a provider, an expired-token rejoin surfaces as a typed
+`ZvonokJoinError` and the SDK stops retrying.
+
 ## What the SDK exposes
 
 - `ZvonokProvider` - carries the server URL and the shared media manager
@@ -245,6 +278,10 @@ The rules:
 - `useBroadcast()` / `useBroadcasts(topic)` - the data channel: send an
   ack-settled broadcast on a topic and receive other participants' messages
   filtered to one topic (see step 4)
+- `useZvonokConnection({ roomSlug, token, tokenProvider? })` - join lifecycle
+  with automatic blip recovery: `reconnecting` status, silent server-side
+  seat hold (30s), track republish on return, optional one-shot token
+  refresh (see step 5)
 - `useQualityControls()` - manual simulcast preference per remote participant:
   `setParticipantQuality(userId, "low" | "medium" | "high")`; affects only
   your own subscription, never audio or other subscribers

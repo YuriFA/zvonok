@@ -259,7 +259,10 @@ function ZvonokRoomSurface({
   const screenShareServiceRef = useRef<ScreenShareService | null>(null);
   const autoJoinStartedRef = useRef(false);
 
-  const inRoom = connection.status === "joined" || connection.status === "connecting";
+  const inRoom =
+    connection.status === "joined" ||
+    connection.status === "connecting" ||
+    connection.status === "reconnecting";
   // Screen share orchestration over the joined manager. The service keeps
   // its own state (sharing, stream, blocked by another sharer).
   const manager = connection.manager;
@@ -451,6 +454,11 @@ function ZvonokRoomSurface({
         {connection.status === "connecting" && (
           <p className="zvk-status" role="status">
             Connecting...
+          </p>
+        )}
+        {connection.status === "reconnecting" && (
+          <p className="zvk-status" role="status">
+            Connection lost - reconnecting...
           </p>
         )}
         <div className="zvk-grid">

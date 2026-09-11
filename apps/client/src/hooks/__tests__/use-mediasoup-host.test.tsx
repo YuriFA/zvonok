@@ -55,6 +55,7 @@ const sfuMock = vi.hoisted(() => {
     muteAll: vi.fn().mockResolvedValue(undefined),
     lockRoom: vi.fn().mockResolvedValue(undefined),
     joinRoom: vi.fn().mockResolvedValue(undefined),
+    hasJoinedSession: vi.fn(() => false),
     produce: vi.fn().mockResolvedValue({ id: "p", kind: "audio" }),
     produceScreen: vi.fn(),
     closeScreenProducer: vi.fn(),

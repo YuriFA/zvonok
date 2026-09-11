@@ -123,6 +123,9 @@ export function createMockSfuManager(
     },
 
     // ISfuRoomMembership
+    hasJoinedSession(): boolean {
+      return state.connectionState === "connected";
+    },
     async joinRoom(payload: SfuJoinPayload): Promise<void> {
       joinRoomCalls.push(payload);
       state = { ...state, isSendTransportCreated: true, isDeviceLoaded: true };
