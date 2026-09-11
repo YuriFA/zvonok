@@ -10,8 +10,19 @@ export {
   type UseZvonokConnectionOptions,
   type UseZvonokConnectionResult,
 } from "./use-zvonok-connection.js";
-export { useParticipants, type UseParticipantsResult } from "./use-participants.js";
-export { useHostControls, type UseHostControlsResult } from "./use-host-controls.js";
+export {
+  useParticipants,
+  type UseParticipantsResult,
+} from "./use-participants.js";
+export {
+  useActiveSpeaker,
+  useAudioLevels,
+  type AudioActivitySnapshot,
+} from "./use-audio-activity.js";
+export {
+  useHostControls,
+  type UseHostControlsResult,
+} from "./use-host-controls.js";
 export { createHostControls, type HostControls } from "./host-controls.js";
 export { useOwnCapabilities } from "./use-own-capabilities.js";
 export {
@@ -27,7 +38,10 @@ export {
   RoomTracker,
   type RoomTrackerState,
 } from "./room-tracker.js";
-export { useDeviceControls, type UseDeviceControlsResult } from "./use-device-controls.js";
+export {
+  useDeviceControls,
+  type UseDeviceControlsResult,
+} from "./use-device-controls.js";
 export {
   useQualityControls,
   type UseQualityControlsResult,

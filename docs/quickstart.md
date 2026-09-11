@@ -188,6 +188,10 @@ participant events.
 - `useZvonokConnection({ roomSlug, token })` - join lifecycle plus publishing
   controls (`produceTrack`, `pauseProducer`, `resumeProducer`, `replaceTrack`)
   and the underlying `manager` for advanced use
+- `useActiveSpeaker()` - the currently speaking participant's id (or `null`
+  in silence), computed from local and remote audio tracks client-side
+- `useAudioLevels()` - smoothed 0..1 audio level per audio-active
+  participant id, local microphone included
 - `useParticipants()` - remote participants with their camera/screen/audio
   streams and enabled flags
 - `useOwnCapabilities()` - the server-delivered capability list for the local

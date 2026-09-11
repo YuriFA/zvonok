@@ -43,7 +43,9 @@ const DEFAULT_STATE: SfuState = {
   egress: null,
 };
 
-export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuManager & {
+export function createMockSfuManager(
+  config: MockSfuManagerConfig = {},
+): ISfuManager & {
   // Test utilities
   setState(state: Partial<SfuState>): void;
   simulateConnection(): void;
@@ -51,7 +53,11 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
   simulateParticipantJoined(peer: SfuParticipantInfo): void;
   simulateParticipantLeft(userId: string): void;
   emitQualityStats(stats: Map<string, PeerQualityStats>): void;
-  simulateTrackReceived(track: MediaStreamTrack, kind: "audio" | "video", userId: string): void;
+  simulateTrackReceived(
+    track: MediaStreamTrack,
+    kind: "audio" | "video",
+    userId: string,
+  ): void;
   simulateKicked(roomId: string): void;
   simulateRoomEnded(roomId: string): void;
   getJoinRoomCalls(): SfuJoinPayload[];
@@ -79,6 +85,7 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
   const produceCalls: MediaStreamTrack[] = [];
 
   const producers = new Map<"audio" | "video", Producer>();
+  let localUserId: string | null = null;
   let statsInterval: ReturnType<typeof setInterval> | null = null;
 
   const notifyStateChange = () => {
@@ -122,7 +129,12 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
     leaveRoom(): void {
       state = { ...DEFAULT_STATE };
       peers.clear();
+      localUserId = null;
       notifyStateChange();
+    },
+
+    getLocalUserId(): string | null {
+      return localUserId;
     },
 
     async kickPeer(): Promise<void> {},
@@ -189,12 +201,16 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
     },
 
     pauseProducer(producerId: string): void {
-      const producer = Array.from(producers.values()).find((p) => p.id === producerId);
+      const producer = Array.from(producers.values()).find(
+        (p) => p.id === producerId,
+      );
       producer?.pause();
     },
 
     resumeProducer(producerId: string): void {
-      const producer = Array.from(producers.values()).find((p) => p.id === producerId);
+      const producer = Array.from(producers.values()).find(
+        (p) => p.id === producerId,
+      );
       producer?.resume();
     },
 
@@ -240,7 +256,9 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
     },
 
     onProduceError(callback: (code: SfuProduceErrorCode) => void): () => void {
-      const produceErrorCallbacks = new Set<(code: SfuProduceErrorCode) => void>();
+      const produceErrorCallbacks = new Set<
+        (code: SfuProduceErrorCode) => void
+      >();
       produceErrorCallbacks.add(callback);
       return () => produceErrorCallbacks.delete(callback);
     },
@@ -340,7 +358,8 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
     },
 
     onScreenShareStopped(callback: SfuScreenShareStoppedCallback): () => void {
-      const screenShareStoppedCallbacks = new Set<SfuScreenShareStoppedCallback>();
+      const screenShareStoppedCallbacks =
+        new Set<SfuScreenShareStoppedCallback>();
       screenShareStoppedCallbacks.add(callback);
       return () => screenShareStoppedCallbacks.delete(callback);
     },
@@ -386,7 +405,11 @@ export function createMockSfuManager(config: MockSfuManagerConfig = {}): ISfuMan
       });
     },
 
-    simulateTrackReceived(track: MediaStreamTrack, kind: "audio" | "video", userId: string): void {
+    simulateTrackReceived(
+      track: MediaStreamTrack,
+      kind: "audio" | "video",
+      userId: string,
+    ): void {
       trackCallbacks.forEach((cb) => {
         cb(track, kind, userId);
       });

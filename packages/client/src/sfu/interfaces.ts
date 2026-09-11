@@ -49,6 +49,8 @@ interface ISfuRoomMembership {
   joinRoom(payload: SfuJoinPayload): Promise<void>;
   /** Leave the current room */
   leaveRoom(): void;
+  /** Server-verified id of the local participant; null before a successful join */
+  getLocalUserId(): string | null;
   /** Subscribe to kicked events */
   onKicked(callback: (payload: SfuKickedPayload) => void): () => void;
   /** Subscribe to room-ended events */
@@ -92,7 +94,10 @@ interface ISfuEgressControls {
  */
 interface ISfuProducerManager {
   /** Produce a local track */
-  produce(track: MediaStreamTrack, params?: { isMobile?: boolean }): Promise<Producer | null>;
+  produce(
+    track: MediaStreamTrack,
+    params?: { isMobile?: boolean },
+  ): Promise<Producer | null>;
   /** Produce a screen share track */
   produceScreen(track: MediaStreamTrack): Promise<Producer | null>;
   /** Close the screen share producer */
@@ -104,11 +109,17 @@ interface ISfuProducerManager {
   /** Close a producer by kind */
   closeProducer(kind: "audio" | "video"): void;
   /** Replace track in a producer */
-  replaceTrack(kind: "audio" | "video", track: MediaStreamTrack | null): Promise<boolean>;
+  replaceTrack(
+    kind: "audio" | "video",
+    track: MediaStreamTrack | null,
+  ): Promise<boolean>;
   /** Get producer by kind */
   getProducerByKind(kind: "audio" | "video"): Producer | undefined;
   /** Request a simulcast spatial layer switch for a consumer */
-  setPreferredLayers(consumerId: string, spatialLayer: SimulcastSpatialLayer): void;
+  setPreferredLayers(
+    consumerId: string,
+    spatialLayer: SimulcastSpatialLayer,
+  ): void;
   /** Get the video consumer ID for a remote peer, if one exists */
   getVideoConsumerIdForUserId(userId: string): string | undefined;
   /** Check if screen share is blocked by another participant */
