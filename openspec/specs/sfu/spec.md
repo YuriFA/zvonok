@@ -172,15 +172,25 @@ The `/sfu` join SHALL accept an ephemeral room token as one of its verified
 credential paths. When a join presents a valid room token, the server SHALL
 derive participant identity and the participant's role solely from the
 verified token, resolve the role to capabilities, and SHALL ignore
-client-supplied identity fields for that participant. Credentials that
-identify a user or guest through the connection handshake (a valid access JWT
-cookie or an approved guest JWT) SHALL be accepted only from app origins in
-the configured allowlist; the room-token path SHALL remain acceptable from
-any origin so third-party SDK embeds keep working.
+client-supplied identity fields for that participant. Token-carried
+correlation fields (`externalId`, `metadata`) SHALL be surfaced with the
+participant in peer identity events - the join acknowledgement's
+participant, the peer-joined broadcast, and the existing-participants
+snapshot - verbatim from the verified token; cookie and guest identity
+paths carry neither field. Correlation fields SHALL NOT be read by any
+authorization decision. Credentials that identify a user or guest through
+the connection handshake (a valid access JWT cookie or an approved guest
+JWT) SHALL be accepted only from app origins in the configured allowlist;
+the room-token path SHALL remain acceptable from any origin so third-party
+SDK embeds keep working.
 
 #### Scenario: Valid token join
 - **WHEN** a client joins with a non-expired token minted for that room
 - **THEN** the participant joins under the token's participant id and display name, and other peers see that identity in peer events
+
+#### Scenario: Correlation fields surface in peer events
+- **WHEN** a token minted with `externalId` and `metadata` is used to join
+- **THEN** the join acknowledgement, the peer-joined broadcast, and the existing-participants snapshot all carry that `externalId` and `metadata` verbatim
 
 #### Scenario: Expired or malformed token
 - **WHEN** a client joins with an expired, malformed, or wrong-room token
