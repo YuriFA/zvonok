@@ -12,6 +12,9 @@ export interface RoomTokenClaims {
   name: string;
   /** Permission statement of the token; resolved to capabilities at join. */
   role: ParticipantRole;
+  /** Consumer correlation fields, carried verbatim; absent when not minted. */
+  externalId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export type RoomTokenFailureCode = 'ROOM_TOKEN_EXPIRED' | 'ROOM_TOKEN_INVALID';
@@ -27,10 +30,16 @@ interface DecodedRoomToken {
   participantId: string;
   name: string;
   role: ParticipantRole;
+  externalId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isDecodedRoomToken(value: unknown): value is DecodedRoomToken {
-  if (typeof value !== 'object' || value === null) return false;
+  if (!isPlainObject(value)) return false;
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.sub === 'string' &&
@@ -38,7 +47,10 @@ function isDecodedRoomToken(value: unknown): value is DecodedRoomToken {
     typeof candidate.keyId === 'string' &&
     typeof candidate.participantId === 'string' &&
     typeof candidate.name === 'string' &&
-    isParticipantRole(candidate.role)
+    isParticipantRole(candidate.role) &&
+    (candidate.externalId === undefined ||
+      typeof candidate.externalId === 'string') &&
+    (candidate.metadata === undefined || isPlainObject(candidate.metadata))
   );
 }
 
@@ -57,6 +69,10 @@ export class RoomTokenHelper {
         participantId: claims.participantId,
         name: claims.name,
         role: claims.role,
+        ...(claims.externalId !== undefined && {
+          externalId: claims.externalId,
+        }),
+        ...(claims.metadata !== undefined && { metadata: claims.metadata }),
       },
       {
         subject: claims.roomId,
@@ -100,6 +116,10 @@ export class RoomTokenHelper {
         participantId: decoded.participantId,
         name: decoded.name,
         role: decoded.role,
+        ...(decoded.externalId !== undefined && {
+          externalId: decoded.externalId,
+        }),
+        ...(decoded.metadata !== undefined && { metadata: decoded.metadata }),
       },
     };
   }

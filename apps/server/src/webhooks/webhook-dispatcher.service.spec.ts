@@ -239,6 +239,32 @@ describe('WebhookDispatcher', () => {
     });
   });
 
+  it('delivers participant events carrying token correlation fields verbatim', async () => {
+    const stub = await startStub();
+    prisma.project.findUnique.mockResolvedValue({
+      ...project,
+      webhookUrl: stub.url,
+    });
+    const { dispatcher } = makeDispatcher(prisma);
+    const metadata = { tenant: 'acme', seat: 4 };
+
+    dispatcher.participantJoined('room-1', 'slug-1', {
+      id: 'participant-1',
+      displayName: 'Alice',
+      externalId: 'user-42',
+      metadata,
+    });
+    await waitForRequests(stub, 1);
+
+    expect(stub.requests[0].parsed.data.participant).toEqual({
+      id: 'participant-1',
+      displayName: 'Alice',
+      externalId: 'user-42',
+      metadata,
+    });
+    await stub.close();
+  });
+
   it('retries with the contracted backoff schedule and drops after exhaustion', async () => {
     const stub = await startStub(() => 'fail');
     prisma.project.findUnique.mockResolvedValue({

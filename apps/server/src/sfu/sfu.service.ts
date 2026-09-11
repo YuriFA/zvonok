@@ -294,7 +294,12 @@ export class SfuService implements OnModuleDestroy {
       this.webhooks.participantLeft(
         roomId,
         this.findRoomSlug(roomId),
-        { id: peer.userId, displayName: peer.username },
+        {
+          id: peer.userId,
+          displayName: peer.username,
+          externalId: peer.externalId,
+          metadata: peer.metadata,
+        },
         reason,
       );
     }
@@ -366,6 +371,8 @@ export class SfuService implements OnModuleDestroy {
         roomPeer.socket.emit('sfu:peer-joined', {
           userId: peer.userId,
           username: peer.username,
+          externalId: peer.externalId,
+          metadata: peer.metadata,
         });
       }
     }
@@ -373,18 +380,27 @@ export class SfuService implements OnModuleDestroy {
     // Notify new peer about existing peers (even those without producers)
     const existingPeers: SfuExistingPeerPayload[] = this.getRoomPeers(roomId)
       .filter((p) => p.id !== socket.id)
-      .map((p) => ({ userId: p.userId, username: p.username }));
+      .map((p) => ({
+        userId: p.userId,
+        username: p.username,
+        externalId: p.externalId,
+        metadata: p.metadata,
+      }));
 
     if (existingPeers.length > 0) {
       socket.emit('sfu:existing-peers', existingPeers);
     }
 
     await this.workerManager.createRouter(roomId);
-
     const routerRtpCapabilities = this.workerManager.getRtpCapabilities(roomId);
     socket.emit('sfu:joined', {
       routerRtpCapabilities,
-      participant: { id: peer.userId, username: peer.username },
+      participant: {
+        id: peer.userId,
+        username: peer.username,
+        externalId: peer.externalId,
+        metadata: peer.metadata,
+      },
       capabilities: peer.capabilities,
     });
 
@@ -397,6 +413,8 @@ export class SfuService implements OnModuleDestroy {
     this.webhooks.participantJoined(roomId, roomSlug, {
       id: peer.userId,
       displayName: peer.username,
+      externalId: peer.externalId,
+      metadata: peer.metadata,
     });
   }
 
@@ -446,6 +464,8 @@ export class SfuService implements OnModuleDestroy {
       id: socket.id,
       userId: claims.participantId,
       username: claims.name,
+      externalId: claims.externalId,
+      metadata: claims.metadata,
       socket,
       producers: new Map(),
       consumers: new Map(),

@@ -2,11 +2,16 @@ jest.mock('src/prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
 
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { RoomTokenHelper } from './room-token.helper';
 import type { RoomTokenClaims } from './room-token.helper';
 import { PlatformService } from './platform.service';
+import { MintRoomTokenDto } from './dto/platform.dto';
 import { RoomService } from 'src/room/room.service';
 import { SfuService } from 'src/sfu/sfu.service';
 import { ApiKeyGuard } from './guards/api-key.guard';
@@ -49,6 +54,35 @@ describe('RoomTokenHelper', () => {
     const result = helper.verify(helper.mint(claims));
 
     expect(result).toEqual({ ok: true, claims });
+  });
+
+  it('round-trips correlation fields verbatim and keeps them absent when omitted', () => {
+    const base: RoomTokenClaims = {
+      roomId: 'room-1',
+      projectId: 'project-1',
+      keyId: 'key-1',
+      participantId: 'participant-1',
+      name: 'Alice',
+      role: 'participant',
+    };
+    const metadata = {
+      tenant: 'acme',
+      avatar: 'https://cdn.example.com/a.png',
+    };
+
+    const withFields = helper.verify(
+      helper.mint({ ...base, externalId: 'user-42', metadata }),
+    );
+    expect(withFields).toEqual({
+      ok: true,
+      claims: { ...base, externalId: 'user-42', metadata },
+    });
+    const withoutFields = helper.verify(helper.mint(base));
+    expect(withoutFields).toEqual({ ok: true, claims: base });
+    if (withoutFields.ok) {
+      expect('externalId' in withoutFields.claims).toBe(false);
+      expect('metadata' in withoutFields.claims).toBe(false);
+    }
   });
 
   it('reports expired tokens with a distinct code', () => {
@@ -187,6 +221,27 @@ describe('PlatformService', () => {
         role: 'participant',
       }),
     );
+    // Absent means absent: no null placeholders for correlation fields.
+    const mintedClaims = (roomTokenHelper.mint as jest.Mock).mock.calls[0][0];
+    expect('externalId' in mintedClaims).toBe(false);
+    expect('metadata' in mintedClaims).toBe(false);
+  });
+
+  it('mints a token carrying correlation fields verbatim', async () => {
+    roomService.findProjectRoom.mockResolvedValue({
+      id: 'room-1',
+      status: 'active',
+    });
+    const metadata = { tenant: 'acme', seat: 4 };
+
+    await service.mintRoomToken('project-1', 'key-1', 'room-1', {
+      externalId: 'user-42',
+      metadata,
+    });
+
+    expect(roomTokenHelper.mint).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: 'user-42', metadata }),
+    );
   });
 
   it('refuses to mint tokens for ended rooms', async () => {
@@ -269,5 +324,54 @@ describe('ApiKeyGuard', () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(request.apiKey).toEqual({ id: 'key-1', projectId: 'project-1' });
+  });
+});
+
+describe('MintRoomTokenDto validation', () => {
+  const pipe = new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  });
+
+  const transform = (value: unknown) =>
+    pipe.transform(value, {
+      type: 'body',
+      metatype: MintRoomTokenDto,
+    });
+
+  it('accepts correlation fields within the limits', async () => {
+    const metadata = { tenant: 'acme', seat: 4 };
+    const dto = await transform({
+      name: 'Alice',
+      externalId: 'user-42',
+      metadata,
+    });
+    expect(dto).toEqual({ name: 'Alice', externalId: 'user-42', metadata });
+  });
+
+  it('rejects an oversized metadata object with 400', async () => {
+    await expect(
+      transform({
+        metadata: { blob: 'x'.repeat(2048) },
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects non-object metadata with 400', async () => {
+    for (const metadata of ['acme', 42, ['acme'], null]) {
+      await expect(transform({ metadata })).rejects.toThrow(
+        BadRequestException,
+      );
+    }
+  });
+
+  it('rejects an out-of-range externalId with 400', async () => {
+    await expect(transform({ externalId: '' })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(transform({ externalId: 'x'.repeat(65) })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 });

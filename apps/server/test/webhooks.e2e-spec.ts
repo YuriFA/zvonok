@@ -469,6 +469,45 @@ describe('Project webhooks (e2e)', () => {
     });
   });
 
+  it('carries token correlation fields through participant.joined and participant.left', async () => {
+    const metadata = { tenant: 'acme', seat: 4 };
+    const mint = await request(app.getHttpServer())
+      .post(`/v1/rooms/${roomId}/tokens`)
+      .set({ Authorization: `Bearer ${apiKey}` })
+      .send({ name: 'Corr', externalId: 'user-42', metadata });
+    const socket = connectSocket();
+    const joined = waitForSocketEvent(socket, 'sfu:joined');
+    socket.emit('sfu:join', { roomId, token: mint.body.token });
+    await joined;
+
+    const joinedHook = await waitForHook(
+      (r) =>
+        r.parsed.type === 'participant.joined' &&
+        (r.parsed.data.participant as { displayName?: string })?.displayName ===
+          'Corr',
+    );
+    expect(joinedHook.parsed.data.participant).toEqual({
+      id: expect.any(String),
+      displayName: 'Corr',
+      externalId: 'user-42',
+      metadata,
+    });
+
+    socket.emit('sfu:leave');
+    const leftHook = await waitForHook(
+      (r) =>
+        r.parsed.type === 'participant.left' &&
+        (r.parsed.data.participant as { displayName?: string })?.displayName ===
+          'Corr',
+    );
+    expect(leftHook.parsed.data.participant).toEqual({
+      id: expect.any(String),
+      displayName: 'Corr',
+      externalId: 'user-42',
+      metadata,
+    });
+  });
+
   it('delivers room.ended when the project room is ended via the API', async () => {
     const mint = await request(app.getHttpServer())
       .post(`/v1/rooms/${roomId}/tokens`)

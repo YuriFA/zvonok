@@ -17,6 +17,9 @@ export interface Peer {
   id: string;
   userId: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: Record<string, unknown>;
   socket: Socket;
   sendTransport?: WebRtcTransport;
   recvTransport?: WebRtcTransport;
@@ -56,13 +59,16 @@ export interface SfuJoinErrorPayload {
 
 export interface SfuJoinedPayload {
   routerRtpCapabilities: RtpCapabilities;
-  /** The server-verified identity of this participant. */
-  participant: { id: string; username: string };
+  participant: {
+    id: string;
+    username: string;
+    externalId?: string;
+    metadata?: Record<string, unknown>;
+  };
   /** The participant's effective capabilities from the verified
    * credential path (single source of truth; clients never decode tokens). */
   capabilities: CapabilityId[];
 }
-
 export type SfuTransportDirection = 'send' | 'recv';
 
 export interface SfuTransportCreatedPayload {
@@ -181,19 +187,24 @@ export type SfuHostActionErrorCode =
   | 'TARGET_NOT_FOUND'; // target peer absent from the room
 
 export type SfuHostActionAck =
-  | { ok: true }
-  | { ok: false; code: SfuHostActionErrorCode; message: string };
+  { ok: true } | { ok: false; code: SfuHostActionErrorCode; message: string };
 
 // Peer joined payload - sent when a peer joins the room (independent of media)
 export interface SfuPeerJoinedPayload {
   userId: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // Existing peer info - sent to new peer about existing room members
 export interface SfuExistingPeerPayload {
   userId: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // Payload for sfu:set-preferred-layers (client → server)

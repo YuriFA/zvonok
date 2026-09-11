@@ -1025,6 +1025,8 @@ export class SfuManager implements ISfuManager {
       peer = {
         userId: payload.userId,
         username: payload.username,
+        externalId: payload.externalId,
+        metadata: payload.metadata,
         producers: new Map(),
       };
       this.peers.set(payload.userId, peer);
@@ -1046,6 +1048,8 @@ export class SfuManager implements ISfuManager {
         peer = {
           userId: peerData.userId,
           username: peerData.username,
+          externalId: peerData.externalId,
+          metadata: peerData.metadata,
           producers: new Map(),
         };
         this.peers.set(peerData.userId, peer);

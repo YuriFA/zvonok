@@ -883,6 +883,91 @@ describe('room-token join', () => {
       message: 'API key is not active',
     });
   });
+
+  it('surfaces token-carried correlation fields in peer events and webhooks', async () => {
+    const metadata = { tenant: 'acme', seat: 4 };
+    (roomTokenHelper.verify as jest.Mock).mockReturnValue(
+      verifyResult({
+        ...tokenClaims,
+        externalId: 'user-42',
+        metadata,
+      }),
+    );
+    prisma.apiKey.findUnique.mockResolvedValue({ revokedAt: null });
+    await service.joinRoom(socket, {
+      roomId: 'room-1',
+      token: 'signed-token',
+    });
+
+    expect(socket.emit).toHaveBeenCalledWith(
+      'sfu:joined',
+      expect.objectContaining({
+        participant: {
+          id: 'participant-1',
+          username: 'Alice',
+          externalId: 'user-42',
+          metadata,
+        },
+      }),
+    );
+    expect(webhooks.participantJoined).toHaveBeenCalledWith(
+      'room-1',
+      undefined,
+      {
+        id: 'participant-1',
+        displayName: 'Alice',
+        externalId: 'user-42',
+        metadata,
+      },
+    );
+
+    // A second token join (no correlation fields of its own) sees Alice's
+    // fields through the existing-participants snapshot, and Alice sees the
+    // newcomer's peer-joined event without them.
+    (roomTokenHelper.verify as jest.Mock).mockReturnValue(
+      verifyResult({
+        ...tokenClaims,
+        participantId: 'participant-2',
+        name: 'Bob',
+      }),
+    );
+    const second = createSocket('socket-2');
+    await service.joinRoom(second, {
+      roomId: 'room-1',
+      token: 'signed-token',
+    });
+    // Alice is notified about Bob without correlation fields of his own...
+    expect(socket.emit).toHaveBeenCalledWith('sfu:peer-joined', {
+      userId: 'participant-2',
+      username: 'Bob',
+    });
+    // ...and Bob's existing-participants snapshot carries Alice's fields.
+    expect(second.emit).toHaveBeenCalledWith('sfu:existing-peers', [
+      {
+        userId: 'participant-1',
+        username: 'Alice',
+        externalId: 'user-42',
+        metadata,
+      },
+    ]);
+  });
+
+  it('omits correlation fields entirely on non-token joins', async () => {
+    await service.joinRoom(socket, { roomId: 'room-1' });
+
+    expect(webhooks.participantJoined).toHaveBeenCalledWith(
+      'room-1',
+      undefined,
+      {
+        id: 'user-1',
+        displayName: 'alice',
+      },
+    );
+    const ack = (socket.emit as jest.Mock).mock.calls.find(
+      ([event]: [string]) => event === 'sfu:joined',
+    );
+    expect(ack?.[1].participant).toEqual({ id: 'user-1', username: 'alice' });
+  });
   it('refuses produce for a viewer-role participant per kind', async () => {
     (roomTokenHelper.verify as jest.Mock).mockReturnValue(
       verifyResult({ ...tokenClaims, role: 'viewer' }),

@@ -289,6 +289,69 @@ describe('SFU join identity matrix (e2e)', () => {
     });
   });
 
+  it('surfaces token-carried correlation fields in the join and peer events', async () => {
+    const metadata = { tenant: 'acme', seat: 4 };
+    const token = roomTokenHelper.mint({
+      roomId: projectRoom.id,
+      projectId: 'project-e2e',
+      keyId: 'key-e2e',
+      participantId: 'participant-corr',
+      name: 'Corr',
+      role: 'participant',
+      externalId: 'user-42',
+      metadata,
+    });
+    const first = connectSocket();
+    await expect(
+      join(first, { roomId: projectRoom.id, token }),
+    ).resolves.toEqual({
+      ok: true,
+      participant: {
+        id: 'participant-corr',
+        username: 'Corr',
+        externalId: 'user-42',
+        metadata,
+      },
+    });
+
+    // A second plain-token joiner sees the correlation fields in the
+    // existing-participants snapshot; the first peer sees a plain identity.
+    const second = connectSocket();
+    const existing = waitFor<Array<Record<string, unknown>>>(
+      second,
+      'sfu:existing-peers',
+    );
+    const peerJoined = waitFor<Record<string, unknown>>(
+      first,
+      'sfu:peer-joined',
+    );
+    second.emit('sfu:join', {
+      roomId: projectRoom.id,
+      token: roomTokenHelper.mint({
+        roomId: projectRoom.id,
+        projectId: 'project-e2e',
+        keyId: 'key-e2e',
+        participantId: 'participant-plain',
+        name: 'Plain',
+        role: 'participant',
+      }),
+    });
+    await expect(existing).resolves.toEqual(
+      expect.arrayContaining([
+        {
+          userId: 'participant-corr',
+          username: 'Corr',
+          externalId: 'user-42',
+          metadata,
+        },
+      ]),
+    );
+    await expect(peerJoined).resolves.toEqual({
+      userId: 'participant-plain',
+      username: 'Plain',
+    });
+  });
+
   it('denies host powers to a verified non-owner with a forged ownership claim', async () => {
     const member = connectSocket({
       origin: appOrigin,

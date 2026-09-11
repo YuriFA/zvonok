@@ -53,6 +53,8 @@ export class PlatformService {
       participantId: randomUUID(),
       name: dto.name ?? 'Participant',
       role: dto.role ?? 'participant',
+      ...(dto.externalId !== undefined && { externalId: dto.externalId }),
+      ...(dto.metadata !== undefined && { metadata: dto.metadata }),
     };
 
     return {

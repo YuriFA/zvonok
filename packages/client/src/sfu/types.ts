@@ -101,6 +101,9 @@ export interface SfuJoinPayload {
 export interface SfuParticipantIdentity {
   id: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: unknown;
 }
 
 
@@ -300,6 +303,9 @@ export interface SfuGuestJoinRequestPayload {
 export interface SfuParticipantInfo {
   userId: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: unknown;
   producers: Map<string, { kind: "audio" | "video"; paused?: boolean; source?: SfuMediaSource }>;
 }
 
@@ -307,12 +313,18 @@ export interface SfuParticipantInfo {
 export interface SfuParticipantJoinedPayload {
   userId: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: unknown;
 }
 
 // Payload for sfu:existing-peers event (peers already in room when you join)
 export interface SfuExistingParticipantsPayload {
   userId: string;
   username: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: unknown;
 }
 
 // SFU connection state

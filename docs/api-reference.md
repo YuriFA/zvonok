@@ -71,14 +71,26 @@ the slug. Idempotent per project: an already-ended room still answers `204`.
 `POST /v1/rooms/:id/tokens` (60 req/min)
 
 ```json
-{ "name": "Alice", "role": "host" }
+{
+  "name": "Alice",
+  "role": "host",
+  "externalId": "user-42",
+  "metadata": { "tenant": "acme", "seat": 4 }
+}
 ```
 
-Both fields optional. `role` is the token's permission statement -
+All fields optional. `role` is the token's permission statement -
 `host`, `participant` (default), or `viewer` - resolved server-side to
 capabilities at join time (`host`: send + moderate + record/broadcast,
 `participant`: send audio/video/screen, `viewer`: no send). Unknown roles
-answer `400`. The join acknowledgement delivers the effective capability
+answer `400`. `externalId` (1-64 chars) and `metadata` (a JSON object
+serialized to at most 2048 bytes) are consumer correlation fields: the
+server carries them verbatim through the token into peer events
+(`sfu:joined`, `sfu:peer-joined`, `sfu:existing-peers`), the SDK's
+participant info, and the `participant.joined` / `participant.left`
+webhooks - never reads them for authorization. Oversized or non-object
+`metadata`, or an out-of-range `externalId`, answers `400` with no token.
+The join acknowledgement delivers the effective capability
 list to the client, so UIs gate on `useOwnCapabilities()` instead of
 decoding the token. Returns `{ "token": "<jwt>", "expiresAt": "..." }` -
 valid for `ROOM_TOKEN_TTL_MINUTES` (default 60). Pass it to
@@ -135,8 +147,6 @@ valid for 30 minutes - re-login or SSO when it expires.
 - `POST /developers/projects/:id/keys` - returns the full key exactly once
 - `GET /developers/projects/:id/keys` - metadata only (`id`, `prefix`,
   `createdAt`, `revokedAt`)
-- `DELETE /developers/keys/:id` - revoke; already-revoked keys answer `204`
-  again
 
 ### Webhooks
 
@@ -150,7 +160,26 @@ Deliveries are POSTs signed with
 deliveries retry with backoff. Events: `room.started`, `participant.joined`,
 `participant.left`, `room.ended`, `egress.started`, `egress.stopped`,
 `egress.failed`, `egress.recording_ready` (carries `recordingUrl` and
-`recordingSizeBytes` when a recording finalizes).
+`recordingSizeBytes` when a recording finalizes). Participant events carry
+`participant: { id, displayName }`, plus the token-minted `externalId` and
+`metadata` verbatim when the join used a token that had them:
+
+```json
+{
+  "type": "participant.joined",
+  "timestamp": "2026-09-11T10:00:00.000Z",
+  "data": {
+    "roomId": "room-id",
+    "roomSlug": "room-slug",
+    "participant": {
+      "id": "participant-id",
+      "displayName": "Alice",
+      "externalId": "user-42",
+      "metadata": { "tenant": "acme", "seat": 4 }
+    }
+  }
+}
+```
 
 Foreign projects answer `404` on every route, like `/v1`.
 

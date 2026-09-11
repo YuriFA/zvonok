@@ -19,6 +19,9 @@ export type WebhookEventType =
 export interface WebhookParticipant {
   id: string;
   displayName: string;
+  /** Token-carried consumer correlation fields; absent on non-token paths. */
+  externalId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /**
