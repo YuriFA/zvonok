@@ -9,7 +9,7 @@ import { configureApp } from '../src/bootstrap';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import { ApiKeyHelper } from '../src/developer/api-key.helper';
 import { WorkerManager } from '../src/sfu/worker-manager';
-import { SfuService } from '../src/sfu/sfu.service';
+import { RoomPresenceService } from '../src/sfu/room-presence.service';
 import { EGRESS_RECORDINGS_DIR } from '../src/egress/egress.config';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -431,9 +431,9 @@ describe('Developer platform (e2e)', () => {
   });
 
   it('recovers blips through the grace window and keeps kicks terminal', async () => {
-    const sfuService = app.get(SfuService);
-    const previousGrace = sfuService.rejoinGraceMs;
-    sfuService.rejoinGraceMs = 400;
+    const presenceService = app.get(RoomPresenceService);
+    const previousGrace = presenceService.rejoinGraceMs;
+    presenceService.rejoinGraceMs = 400;
 
     const sleep = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
@@ -519,7 +519,7 @@ describe('Developer platform (e2e)', () => {
         expect.objectContaining({ code: 'KICKED_FROM_ROOM' }),
       );
     } finally {
-      sfuService.rejoinGraceMs = previousGrace;
+      presenceService.rejoinGraceMs = previousGrace;
     }
   });
 

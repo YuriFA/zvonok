@@ -13,7 +13,7 @@ import type { RoomTokenClaims } from './room-token.helper';
 import { PlatformService } from './platform.service';
 import { MintRoomTokenDto } from './dto/platform.dto';
 import { RoomService } from 'src/room/room.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 import { ApiKeyGuard } from './guards/api-key.guard';
 import { PrismaService } from 'src/prisma/prisma.service';
 import type { ExecutionContext } from '@nestjs/common';
@@ -130,7 +130,7 @@ describe('PlatformService', () => {
     findProjectRoom: jest.Mock;
     softDeleteRoom: jest.Mock;
   };
-  let sfuService: { endRoom: jest.Mock };
+  let presence: { endRoom: jest.Mock };
   let egressService: {
     start: jest.Mock;
     listForRoom: jest.Mock;
@@ -146,7 +146,7 @@ describe('PlatformService', () => {
       findProjectRoom: jest.fn(),
       softDeleteRoom: jest.fn(),
     };
-    sfuService = { endRoom: jest.fn() };
+    presence = { endRoom: jest.fn() };
     egressService = {
       start: jest.fn(),
       listForRoom: jest.fn(),
@@ -160,7 +160,7 @@ describe('PlatformService', () => {
 
     service = new PlatformService(
       roomService as unknown as RoomService,
-      sfuService as unknown as SfuService,
+      presence as unknown as RoomPresence,
       roomTokenHelper as unknown as RoomTokenHelper,
       egressService as never,
     );
@@ -198,7 +198,7 @@ describe('PlatformService', () => {
     await service.endRoom('project-1', 'room-1');
 
     expect(roomService.softDeleteRoom).toHaveBeenCalledWith('room-1');
-    expect(sfuService.endRoom).toHaveBeenCalledWith('room-1');
+    expect(presence.endRoom).toHaveBeenCalledWith('room-1');
   });
 
   it('mints a token for an active room with defaults', async () => {

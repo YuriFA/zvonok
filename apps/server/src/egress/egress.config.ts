@@ -1,7 +1,5 @@
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { PlainTransportOptions } from 'mediasoup/types';
-import { config as mediasoupConfig } from '../sfu/config/mediasoup.config';
 
 /**
  * Binary used to run egress pipelines. Must be ffmpeg >= 5 (tee muxer with
@@ -40,12 +38,6 @@ export const EGRESS_RECORDINGS_DIR =
  */
 export const EGRESS_ALLOW_PRIVATE_TARGETS =
   process.env.EGRESS_ALLOW_PRIVATE_TARGETS === 'true';
-
-export const egressPlainTransportOptions = {
-  listenIp: mediasoupConfig.webRtcTransport.listenIps[0],
-  rtcpMux: true,
-  comedia: false,
-} satisfies PlainTransportOptions;
 
 /** A session must produce its first output heartbeat within this budget. */
 export const EGRESS_START_TIMEOUT_MS = 30_000;

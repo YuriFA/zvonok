@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import * as Y from 'yjs';
-import { SfuService } from 'src/sfu/sfu.service';
+import { ROOM_PRESENCE } from 'src/sfu/room-presence.port';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 
 import {
   WHITEBOARD_UPDATE_MAX_BYTES,
@@ -27,7 +28,7 @@ export class WhiteboardService {
   private readonly logger = new Logger(WhiteboardService.name);
   private readonly boards = new Map<string, BoardState>();
 
-  constructor(private readonly sfu: SfuService) {}
+  constructor(@Inject(ROOM_PRESENCE) private readonly presence: RoomPresence) {}
 
   /** The room document and mode; a board that never drew starts blank. */
   getBoard(roomId: string): { doc: Y.Doc; mode: WhiteboardDrawMode } {
@@ -75,7 +76,7 @@ export class WhiteboardService {
     const state: BoardState = {
       doc: new Y.Doc(),
       mode: 'owner',
-      unsubscribeRoomClosed: this.sfu.onRoomClosed(roomId, () => {
+      unsubscribeRoomClosed: this.presence.onRoomClosed(roomId, () => {
         this.dropBoard(roomId);
       }),
     };

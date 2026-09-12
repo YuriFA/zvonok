@@ -1,23 +1,13 @@
-import type { Consumer, PlainTransport, RtpParameters } from 'mediasoup/types';
+import type { RtpParameters } from 'mediasoup/types';
+import type {
+  RoomTapDescriptor,
+  RoomTapHandle,
+} from 'src/sfu/room-media-source.port';
 
-/** Media kind of a tapped producer. */
-export type EgressTapKind = 'audio' | 'video';
-
-/** Producer origin, mirroring `SfuMediaSource` appData. */
-export type EgressTapSource = 'camera' | 'screen';
-
-/** Minimal description of a room producer available for tapping. */
-export interface EgressTapDescriptor {
-  producerId: string;
-  kind: EgressTapKind;
-  source: EgressTapSource;
-}
-
-/** An established server-side tap: consumer + the transport feeding FFmpeg. */
+/** An established server-side tap: the port handle feeding FFmpeg. */
 export interface EgressTap {
-  descriptor: EgressTapDescriptor;
-  transport: PlainTransport;
-  consumer: Consumer;
+  descriptor: RoomTapDescriptor;
+  handle: RoomTapHandle;
   /** Local UDP port FFmpeg listens on for this tap's RTP. */
   port: number;
 }
@@ -32,7 +22,7 @@ export interface EgressOutputs {
 
 /** Input file contract handed to the FFmpeg args composer. */
 export interface EgressPipelineInput {
-  descriptor: EgressTapDescriptor;
+  descriptor: RoomTapDescriptor;
   rtpParameters: RtpParameters;
   /** Absolute path of the SDP file describing this input. */
   sdpPath: string;

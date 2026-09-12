@@ -18,17 +18,15 @@ import {
   EGRESS_MEDIA_PORT_MAX,
   EGRESS_MEDIA_PORT_MIN,
   EGRESS_HLS_DIR,
-  egressPlainTransportOptions,
 } from '../src/egress/egress.config';
+import { config as mediasoupConfig } from '../src/sfu/config/mediasoup.config';
 import {
   composeEgressArgs,
   generateSdp,
 } from '../src/egress/ffmpeg/args-composer';
 import { FFmpegProcess } from '../src/egress/ffmpeg/ffmpeg-process';
-import type {
-  EgressPipelineInput,
-  EgressTapSource,
-} from '../src/egress/egress.types';
+import type { EgressPipelineInput } from '../src/egress/egress.types';
+import type { RoomTapSource } from '../src/sfu/room-media-source.port';
 
 const execFileAsync = promisify(execFile);
 
@@ -73,7 +71,7 @@ function parseSdp(sdp: string): SdpInfo {
 interface IngestedStream {
   producerId: string;
   kind: 'audio' | 'video';
-  source: EgressTapSource;
+  source: RoomTapSource;
 }
 
 (hasFfmpeg ? describe : describe.skip)('Egress real media pipeline', () => {
@@ -103,7 +101,7 @@ interface IngestedStream {
 
   async function ingest(
     kind: 'audio' | 'video',
-    source: EgressTapSource,
+    source: RoomTapSource,
     ffmpegFilters: string[],
   ): Promise<IngestedStream> {
     const router = workerManager.getRouter(room);
@@ -181,9 +179,11 @@ interface IngestedStream {
     const transports: Array<{ close(): void }> = [];
     let index = 0;
     for (const stream of streams) {
-      const transport = await router.createPlainTransport(
-        egressPlainTransportOptions,
-      );
+      const transport = await router.createPlainTransport({
+        listenIp: mediasoupConfig.webRtcTransport.listenIps[0],
+        rtcpMux: true,
+        comedia: false,
+      });
       transports.push(transport);
       const consumer = await transport.consume({
         producerId: stream.producerId,

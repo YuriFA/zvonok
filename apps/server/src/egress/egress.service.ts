@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,7 +13,11 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import { ROOM_PRESENCE, type RoomPresence } from 'src/sfu/room-presence.port';
+import {
+  ROOM_MEDIA_SOURCE,
+  type RoomMediaSource,
+} from 'src/sfu/room-media-source.port';
 import { WebhookDispatcher } from 'src/webhooks/webhook-dispatcher.service';
 import { composeEgressArgs, generateSdp } from './ffmpeg/args-composer';
 import { FFmpegProcess } from './ffmpeg/ffmpeg-process';
@@ -99,8 +104,9 @@ export class EgressService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sfu: SfuService,
     private readonly webhooks: WebhookDispatcher,
+    @Inject(ROOM_MEDIA_SOURCE) private readonly mediaSource: RoomMediaSource,
+    @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
   ) {}
 
   /**
@@ -174,11 +180,11 @@ export class EgressService implements OnModuleInit {
     };
     this.sessions.set(row.id, session);
     this.notifyStatus(session, 'starting');
-    session.unsubscribeProducerAdded = this.sfu.onRoomProducerAdded(
+    session.unsubscribeProducerAdded = this.mediaSource.onProducerAdded(
       roomId,
       () => this.scheduleMembershipRestart(session),
     );
-    session.unsubscribeRoomClosed = this.sfu.onRoomClosed(roomId, () => {
+    session.unsubscribeRoomClosed = this.presence.onRoomClosed(roomId, () => {
       void this.finalize(session, 'room-ended');
     });
 
@@ -283,37 +289,39 @@ export class EgressService implements OnModuleInit {
     this.closeRuntime(session);
     clearTimeout(session.startTimer);
 
-    const descriptors = this.sfu.listRoomProducers(session.roomId);
+    const descriptors = this.mediaSource.listTaps(session.roomId);
     session.taps = [];
     const inputs: EgressPipelineInput[] = [];
     let index = 0;
     for (const descriptor of descriptors) {
-      const transport = await this.sfu.createEgressTransport(session.roomId);
-      const { consumer, rtpParameters } = await this.sfu.createEgressConsumer(
-        session.roomId,
-        transport,
-        descriptor.producerId,
-      );
       const port = this.allocatePort();
-      // Point the plain transport at FFmpeg's UDP listener before any
-      // consumer resumes, so RTP flows from the first packet.
-      await transport.connect({ ip: '127.0.0.1', port });
-      const tap: EgressTap = {
-        descriptor,
-        transport,
-        consumer,
-        port,
-      };
-      tap.consumer.on('producerclose', () => {
+      // Point the tap at FFmpeg's UDP listener before any consumer resumes,
+      // so RTP flows from the first packet.
+      const handle = await this.mediaSource.openTap(
+        session.roomId,
+        descriptor.producerId,
+        { ip: '127.0.0.1', port },
+      );
+      handle.onProducerClosed(() => {
         this.scheduleMembershipRestart(session);
       });
-      session.taps.push(tap);
+      session.taps.push({ descriptor, handle, port });
       const sdpPath = join(session.sdpDir, `${index}.sdp`);
       await writeFile(
         sdpPath,
-        generateSdp({ descriptor, rtpParameters, sdpPath, port }),
+        generateSdp({
+          descriptor,
+          rtpParameters: handle.rtpParameters,
+          sdpPath,
+          port,
+        }),
       );
-      inputs.push({ descriptor, rtpParameters, sdpPath, port });
+      inputs.push({
+        descriptor,
+        rtpParameters: handle.rtpParameters,
+        sdpPath,
+        port,
+      });
       index += 1;
     }
 
@@ -432,6 +440,7 @@ export class EgressService implements OnModuleInit {
     session.status = 'stopping';
     clearTimeout(session.restartTimer);
     clearTimeout(session.startTimer);
+    this.releaseLifecycleSubscriptions(session);
     await this.closeRuntime(session);
     this.sessions.delete(session.id);
 
@@ -468,6 +477,7 @@ export class EgressService implements OnModuleInit {
     clearTimeout(session.restartTimer);
     clearTimeout(session.startTimer);
     // Raw recording parts stay on disk so a failed session keeps its material.
+    this.releaseLifecycleSubscriptions(session);
     void this.closeRuntime(session);
     this.sessions.delete(session.id);
 
@@ -491,7 +501,7 @@ export class EgressService implements OnModuleInit {
     session: ActiveSession,
     status: 'starting' | 'live' | 'ended' | 'failed',
   ): void {
-    this.sfu.broadcastToRoom(session.roomId, 'egress:status', {
+    this.presence.broadcastToRoom(session.roomId, 'egress:status', {
       sessionId: session.id,
       outputs: {
         record: session.outputs.record,
@@ -502,16 +512,12 @@ export class EgressService implements OnModuleInit {
   }
 
   /**
-   * Kill the pipeline process and close every tap transport/consumer.
+   * Kill the pipeline process and close every tap handle.
    * Resolves once the pipeline process has fully exited, so its sinks are
    * safely closed for whoever awaits (finalization); fire-and-forget callers
    * ignore the promise.
    */
   private closeRuntime(session: ActiveSession): Promise<void> {
-    session.unsubscribeProducerAdded?.();
-    session.unsubscribeProducerAdded = undefined;
-    session.unsubscribeRoomClosed?.();
-    session.unsubscribeRoomClosed = undefined;
     let stopped: Promise<void> = Promise.resolve();
     if (session.process) {
       const process = session.process;
@@ -520,19 +526,26 @@ export class EgressService implements OnModuleInit {
     }
     for (const tap of session.taps) {
       try {
-        tap.consumer.close();
+        tap.handle.close();
       } catch {
         // already closed by its transport or the dead pipeline path
-      }
-      try {
-        tap.transport.close();
-      } catch {
-        // ditto
       }
       this.portsInUse.delete(tap.port);
     }
     session.taps = [];
     return stopped;
+  }
+
+  /**
+   * Release the session's port subscriptions. Terminal only: rebuilding the
+   * pipeline (closeRuntime) must keep them - membership changes and room
+   * teardown have to survive every rebuild.
+   */
+  private releaseLifecycleSubscriptions(session: ActiveSession): void {
+    session.unsubscribeProducerAdded?.();
+    session.unsubscribeProducerAdded = undefined;
+    session.unsubscribeRoomClosed?.();
+    session.unsubscribeRoomClosed = undefined;
   }
 
   /**

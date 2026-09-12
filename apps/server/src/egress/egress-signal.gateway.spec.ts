@@ -8,8 +8,8 @@ import type { CapabilityId } from '../sfu/capabilities';
 
 describe('EgressSignalGateway', () => {
   let gateway: EgressSignalGateway;
-  let sfu: {
-    describeSocket: jest.Mock;
+  let presence: {
+    contextOf: jest.Mock;
   };
   let egress: { start: jest.Mock; stop: jest.Mock };
   let prisma: {
@@ -40,8 +40,8 @@ describe('EgressSignalGateway', () => {
   }
 
   beforeEach(() => {
-    sfu = {
-      describeSocket: jest.fn().mockReturnValue({
+    presence = {
+      contextOf: jest.fn().mockReturnValue({
         roomId: 'room-1',
         userId: 'host-1',
         capabilities: HOST_CAPABILITIES,
@@ -63,7 +63,7 @@ describe('EgressSignalGateway', () => {
       },
     };
     gateway = new EgressSignalGateway(
-      sfu as never,
+      presence as never,
       egress as never,
       prisma as never,
     );
@@ -93,7 +93,7 @@ describe('EgressSignalGateway', () => {
     });
 
     it('denies record without start-recording', async () => {
-      sfu.describeSocket.mockReturnValue({
+      presence.contextOf.mockReturnValue({
         roomId: 'room-1',
         userId: 'user-1',
         capabilities: PARTICIPANT_CAPABILITIES,
@@ -110,7 +110,7 @@ describe('EgressSignalGateway', () => {
     });
 
     it('denies hls without start-broadcast', async () => {
-      sfu.describeSocket.mockReturnValue({
+      presence.contextOf.mockReturnValue({
         roomId: 'room-1',
         userId: 'user-1',
         capabilities: ['start-recording'],
@@ -137,7 +137,7 @@ describe('EgressSignalGateway', () => {
     });
 
     it('denies requests from sockets without a room', async () => {
-      sfu.describeSocket.mockReturnValue(null);
+      presence.contextOf.mockReturnValue(null);
 
       const ack = await gateway.handleStart(socket(), { record: true });
 
@@ -195,7 +195,7 @@ describe('EgressSignalGateway', () => {
     });
 
     it('denies stop without any egress capability', async () => {
-      sfu.describeSocket.mockReturnValue({
+      presence.contextOf.mockReturnValue({
         roomId: 'room-1',
         userId: 'user-1',
         capabilities: PARTICIPANT_CAPABILITIES,

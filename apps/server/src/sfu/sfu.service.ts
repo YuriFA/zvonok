@@ -1,664 +1,166 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { OnModuleDestroy } from '@nestjs/common';
-import type { Socket } from 'socket.io';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { WorkerManager } from './worker-manager';
-import { capabilitiesForRole, type CapabilityId } from './capabilities';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import type {
-  Peer,
-  SfuJoinPayload,
-  SfuTransportDirection,
-  SfuTransportConnectPayload,
-  SfuProducePayload,
-  SfuConsumePayload,
-  SfuExistingPeerPayload,
-  SfuMediaSource,
-  SfuJoinErrorCode,
-  SfuHostActionAck,
+  Consumer,
+  PlainTransportOptions,
+  Producer,
+  WebRtcTransport,
+} from 'mediasoup/types';
+import type { Socket } from 'socket.io';
+import { WorkerManager } from './worker-manager';
+import type {
   SfuBroadcastAck,
   SfuBroadcastMessage,
   SfuBroadcastPayload,
+  SfuConsumePayload,
+  SfuHostActionAck,
+  SfuJoinPayload,
+  SfuMediaSource,
   SfuProduceAppData,
+  SfuProducePayload,
+  SfuTransportConnectPayload,
+  SfuTransportDirection,
 } from './interfaces/sfu.interface';
-import type {
-  Consumer,
-  PlainTransport,
-  Producer,
-  RtpParameters,
-  WebRtcTransport,
-} from 'mediasoup/types';
+import type { CapabilityId } from './capabilities';
 import { config, getIceServers } from './config/mediasoup.config';
-import { RoomTokenHelper } from '../platform/room-token.helper';
-import { resolveRoomSocketIdentity } from '../auth/helpers/room-socket-auth.helper';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { WebhookDispatcher } from '../webhooks/webhook-dispatcher.service';
-import type { WebhookLeaveReason } from '../webhooks/webhook-dispatcher.service';
-import { egressPlainTransportOptions } from '../egress/egress.config';
 import type {
-  EgressTapDescriptor,
-  EgressTapSource,
-} from '../egress/egress.types';
+  RoomMediaSource,
+  RoomTapDescriptor,
+  RoomTapHandle,
+  RoomTapSource,
+  RoomTapTarget,
+} from './room-media-source.port';
+import { ROOM_PRESENCE } from './room-presence.port';
+import type { PeerContext, RoomPresence } from './room-presence.port';
 
 /** Serialized data-channel payload cap, measured on the wire. */
 const BROADCAST_PAYLOAD_MAX_BYTES = 8192;
 
+/**
+ * PlainTransport options for media taps: RTP over UDP to a consumer-side
+ * listener (egress FFmpeg binds 127.0.0.1). Stays here, not in egress
+ * config - plain transports are an SFU-side mediasoup detail.
+ */
+const tapPlainTransportOptions = {
+  listenIp: config.webRtcTransport.listenIps[0],
+  rtcpMux: true,
+  comedia: false,
+} satisfies PlainTransportOptions;
+
+/** Media attachments of one joined socket. Identity lives in presence. */
+interface MediaPeer {
+  sendTransport?: WebRtcTransport;
+  recvTransport?: WebRtcTransport;
+  producers: Map<string, Producer>;
+  consumers: Map<string, Consumer>;
+}
+
+/**
+ * Media lifecycle over the Room Presence seam: transports, producers,
+ * consumers, screen-share lock and the RoomMediaSource tap port. Membership,
+ * admission and room lifetime live behind {@link ROOM_PRESENCE}; this module
+ * learns about departures through onPeerDetach and room death through
+ * onRoomClosed.
+ */
 @Injectable()
-export class SfuService implements OnModuleDestroy {
+export class SfuService implements OnModuleDestroy, RoomMediaSource {
   private readonly logger = new Logger(SfuService.name);
-  private peers: Map<string, Peer> = new Map();
-  private rooms: Map<string, Set<string>> = new Map();
-  private roomOwners: Map<string, string> = new Map();
-  private roomScreenShare: Map<string, string> = new Map();
-  private roomLocks: Map<string, boolean> = new Map();
-  private slugToRoomId: Map<string, string> = new Map();
-  private egressTapHandlers: Map<
+  private readonly media = new Map<string, MediaPeer>();
+  private readonly roomScreenShare: Map<string, string> = new Map();
+  private readonly tapHandlers: Map<
     string,
-    Set<(descriptor: EgressTapDescriptor) => void>
+    Set<(descriptor: RoomTapDescriptor) => void>
   > = new Map();
-  private roomClosedHandlers: Map<string, Set<() => void>> = new Map();
-
-  /**
-   * Disconnect grace: sockets that drop without an explicit leave hold
-   * their seat and identity for {@link rejoinGraceMs} so a network blip
-   * restores silently. Expiry runs the normal disconnect leave flow.
-   * Keyed `${roomId}:${userId}`.
-   */
-  private readonly heldSeats = new Map<
-    string,
-    {
-      roomId: string;
-      socketId: string;
-      participant: {
-        id: string;
-        displayName: string;
-        externalId?: string;
-        metadata?: Record<string, unknown>;
-      };
-      timer: ReturnType<typeof setTimeout>;
-    }
-  >();
-  /** Kicked participants are unrestorable for the room's lifetime. */
-  private readonly kickedUsers = new Map<string, Set<string>>();
-  /**
-   * Grace window before a dropped peer's leave flow runs. Production
-   * default 30s; mutable so tests can shrink it.
-   */
-  rejoinGraceMs = 30_000;
-
-  registerSlug(slug: string, roomId: string): void {
-    this.slugToRoomId.set(slug, roomId);
-  }
-
-  getOwnerSocketId(roomSlug: string): string | null {
-    const roomId = this.slugToRoomId.get(roomSlug);
-    if (!roomId) return null;
-    const ownerId = this.roomOwners.get(roomId);
-    if (!ownerId) return null;
-    for (const peer of this.getRoomPeers(roomId)) {
-      if (peer.userId === ownerId) return peer.id;
-    }
-    return null;
-  }
-
-  /**
-   * Room context of a connected socket for cross-module signalling guards
-   * (egress control): room id, verified user id, and effective capabilities.
-   */
-  describeSocket(
-    socketId: string,
-  ): { roomId: string; userId: string; capabilities: CapabilityId[] } | null {
-    const peer = this.getPeer(socketId);
-    const roomId = this.getRoomIdBySocketId(socketId);
-    if (!peer || !roomId) return null;
-    return {
-      roomId,
-      userId: peer.userId,
-      capabilities: peer.capabilities,
-    };
-  }
-
-  /** Broadcast an event to every connected participant of a room. */
-  broadcastToRoom(roomId: string, event: string, payload: unknown): void {
-    for (const peer of this.getRoomPeers(roomId)) {
-      peer.socket.emit(event, payload);
-    }
-  }
-
-  hasPeerInSlug(roomSlug: string, userId: string): boolean {
-    const roomId = this.slugToRoomId.get(roomSlug);
-    if (!roomId) return false;
-    return this.getRoomPeers(roomId).some((peer) => peer.userId === userId);
-  }
+  /** Rooms with a live router-close subscription on presence. */
+  private readonly routerRooms = new Set<string>();
 
   constructor(
     private readonly workerManager: WorkerManager,
-    private readonly roomTokenHelper: RoomTokenHelper,
-    private readonly prisma: PrismaService,
-    private readonly webhooks: WebhookDispatcher,
-    private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
+    @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
   ) {}
 
-  async onModuleDestroy(): Promise<void> {
+  onModuleDestroy(): void {
     this.logger.log('Closing SFU Service...');
-    for (const [, peers] of this.rooms) {
-      for (const peerId of peers) {
-        const peer = this.peers.get(peerId);
-        if (!peer) continue;
-        peer.sendTransport?.close();
-        peer.recvTransport?.close();
-      }
+    for (const media of this.media.values()) {
+      media.sendTransport?.close();
+      media.recvTransport?.close();
     }
-    this.peers.clear();
-    this.rooms.clear();
-    this.roomOwners.clear();
-    this.roomLocks.clear();
-    this.egressTapHandlers.clear();
-    this.roomClosedHandlers.clear();
-    for (const seat of this.heldSeats.values()) clearTimeout(seat.timer);
-    this.heldSeats.clear();
-    this.kickedUsers.clear();
-    this.slugToRoomId.clear();
+    this.media.clear();
+    this.roomScreenShare.clear();
+    this.tapHandlers.clear();
     this.logger.log('SFU Service closed');
   }
 
-  private getPeer(socketId: string): Peer | undefined {
-    return this.peers.get(socketId);
-  }
-
-  private getRoomIdBySocketId(socketId: string): string | undefined {
-    for (const [roomId, peers] of this.rooms) {
-      if (peers.has(socketId)) return roomId;
-    }
-    return undefined;
-  }
-
-  private getRoomId(socket: Socket): string | undefined {
-    return this.getRoomIdBySocketId(socket.id);
-  }
-
-  private getRoomPeers(roomId: string): Peer[] {
-    const roomPeerIds = this.rooms.get(roomId);
-    if (!roomPeerIds) return [];
-    return Array.from(roomPeerIds)
-      .map((id) => this.peers.get(id))
-      .filter((p): p is Peer => p !== undefined);
-  }
-
-  private emitTransportCreated(
-    socket: Socket,
-    direction: SfuTransportDirection,
-    transport: WebRtcTransport,
-  ): void {
-    socket.emit('sfu:transport-created', {
-      direction,
-      transportId: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidates: transport.iceCandidates,
-      dtlsParameters: transport.dtlsParameters,
-      iceServers: getIceServers(),
-    });
-  }
-
-  private emitNewProducer(
-    target: Socket,
-    producer: Producer,
-    peer: Peer,
-  ): void {
-    target.emit('sfu:new-producer', {
-      producerId: producer.id,
-      userId: peer.userId,
-      username: peer.username,
-      kind: producer.kind,
-      paused: producer.paused,
-      appData: producer.appData as Record<string, unknown> | undefined,
-    });
-  }
-
-  private notifyPeerLeft(
-    roomId: string,
-    userId: string,
-    excludedSocketId: string,
-  ): void {
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      if (roomPeer.id !== excludedSocketId) {
-        roomPeer.socket.emit('sfu:peer-left', { userId });
-      }
-    }
-  }
-
-  private getTransport(
-    peer: Peer,
-    transportId: string,
-  ): WebRtcTransport | undefined {
-    if (peer.sendTransport?.id === transportId) {
-      return peer.sendTransport;
-    }
-
-    if (peer.recvTransport?.id === transportId) {
-      return peer.recvTransport;
-    }
-
-    return undefined;
-  }
-
-  private getConsumer(peer: Peer, consumerId: string): Consumer | undefined {
-    return peer.consumers.get(consumerId);
-  }
-
-  private closeProducerForPeer(
-    socketId: string,
-    producerId: string,
-  ): { roomId: string; peer: Peer; producer: Producer } | null {
-    const peer = this.getPeer(socketId);
-    const roomId = this.getRoomIdBySocketId(socketId);
-    if (!peer || !roomId) return null;
-
-    const producer = peer.producers.get(producerId);
-    if (!producer) return null;
-
-    const source = (producer.appData as Record<string, unknown> | undefined)
-      ?.source as SfuMediaSource | undefined;
-
-    producer.close();
-    peer.producers.delete(producerId);
-
-    if (source === 'screen') {
-      const currentSharer = this.roomScreenShare.get(roomId);
-      if (currentSharer === socketId) {
-        this.roomScreenShare.delete(roomId);
-        for (const roomPeer of this.getRoomPeers(roomId)) {
-          if (roomPeer.id !== socketId) {
-            // Close the consumer that was consuming this screen-share producer
-            // and notify the client so it can clean up its state immediately.
-            for (const [consumerId, consumer] of roomPeer.consumers) {
-              if (consumer.producerId === producerId) {
-                consumer.close();
-                roomPeer.consumers.delete(consumerId);
-                roomPeer.socket.emit('sfu:consumer-closed', { consumerId });
-                break;
-              }
-            }
-            roomPeer.socket.emit('sfu:screen-share-stopped', {
-              userId: peer.userId,
-            });
-          }
-        }
-      }
-    }
-
-    return { roomId, peer, producer };
-  }
-
-  /**
-   * Tears a peer's media state down (producers, screen-share lock,
-   * transports, room membership) without presence notifications, webhooks,
-   * or room cleanup - the shared step of both the immediate leave flow and
-   * the disconnect grace hold.
-   */
-  private detachPeer(socketId: string, roomId: string, peer: Peer): void {
-    // Close all producers through the shared path so screen-share lock is
-    // released and peers are notified consistently.
-    for (const producerId of Array.from(peer.producers.keys())) {
-      this.closeProducerForPeer(socketId, producerId);
-    }
-
-    // Fallback: if the screen-share lock is still held (e.g. producers map was
-    // not populated), release it directly so the room state stays consistent.
-    const currentSharer = this.roomScreenShare.get(roomId);
-    if (currentSharer === socketId) {
-      this.roomScreenShare.delete(roomId);
-      for (const roomPeer of this.getRoomPeers(roomId)) {
-        if (roomPeer.id !== socketId) {
-          roomPeer.socket.emit('sfu:screen-share-stopped', {
-            userId: peer.userId,
-          });
-        }
-      }
-    }
-
-    this.rooms.get(roomId)?.delete(socketId);
-    peer.sendTransport?.close();
-    peer.recvTransport?.close();
-    this.peers.delete(socketId);
-  }
-
-  /** Runs the room-empty cleanup unless a grace seat still holds it alive. */
-  private async cleanupRoomIfEmpty(roomId: string): Promise<void> {
-    if ((this.rooms.get(roomId)?.size ?? 0) > 0) return;
-    if (this.roomHasHeldSeat(roomId)) return;
-    // Stop egress taps while the room is still resolvable.
-    this.notifyRoomClosed(roomId);
-    await this.workerManager.closeRouter(roomId);
-    this.rooms.delete(roomId);
-    this.roomOwners.delete(roomId);
-    this.roomLocks.delete(roomId);
-    // The room's lifetime ends here, so kicked-users terminality ends with it.
-    this.kickedUsers.delete(roomId);
-    for (const [slug, rid] of this.slugToRoomId) {
-      if (rid === roomId) this.slugToRoomId.delete(slug);
-    }
-  }
-
-  private roomHasHeldSeat(roomId: string): boolean {
-    for (const seat of this.heldSeats.values()) {
-      if (seat.roomId === roomId) return true;
-    }
-    return false;
-  }
-
-  private async removePeer(
-    socketId: string,
-    reason?: WebhookLeaveReason,
-  ): Promise<{ roomId: string; userId: string } | null> {
-    const peer = this.getPeer(socketId);
-    const roomId = this.getRoomIdBySocketId(socketId);
-
-    if (!peer || !roomId) {
-      return null;
-    }
-
-    this.detachPeer(socketId, roomId, peer);
-    this.notifyPeerLeft(roomId, peer.userId, socketId);
-    if (reason) {
-      this.webhooks.participantLeft(
-        roomId,
-        this.findRoomSlug(roomId),
-        {
-          id: peer.userId,
-          displayName: peer.username,
-          externalId: peer.externalId,
-          metadata: peer.metadata,
-        },
-        reason,
-      );
-    }
-
-    await this.cleanupRoomIfEmpty(roomId);
-
-    return {
-      roomId,
-      userId: peer.userId,
-    };
-  }
-
-  private findRoomSlug(roomId: string): string | undefined {
-    for (const [slug, rid] of this.slugToRoomId) {
-      if (rid === roomId) return slug;
-    }
-    return undefined;
-  }
-
   async joinRoom(socket: Socket, payload: SfuJoinPayload): Promise<void> {
-    // A locked room refuses every new join before any peer state is created.
-    if (this.roomLocks.get(payload.roomId)) {
-      this.emitJoinError(socket, 'ROOM_LOCKED', 'Room is locked by the host');
-      return;
-    }
-    const { roomId, roomSlug } = payload;
-    const peerId = socket.id;
-
-    const peer = payload.token
-      ? await this.resolveTokenPeer(socket, payload)
-      : await this.resolveHandshakePeer(socket, payload);
-    if (!peer) {
+    const outcome = await this.presence.join(socket, payload);
+    if (!outcome) {
       return;
     }
 
-    // A kicked participant is unrestorable for the room's lifetime: the
-    // rejoin is refused with the kick denial regardless of the grace window.
-    if (this.kickedUsers.get(roomId)?.has(peer.userId)) {
-      this.emitJoinError(
-        socket,
-        'KICKED_FROM_ROOM',
-        'Removed from the room by the host',
-      );
-      return;
+    this.media.set(socket.id, { producers: new Map(), consumers: new Map() });
+    // Media detaches when presence announces the departure or holds the
+    // disconnect seat - whichever comes first for this socket.
+    this.presence.onPeerDetach(socket.id, () => this.detachMedia(socket.id));
+
+    // The router dies with the room: presence notifies room-closed while the
+    // room is still resolvable, so member media can be released with it.
+    if (!this.routerRooms.has(outcome.roomId)) {
+      this.routerRooms.add(outcome.roomId);
+      const roomId = outcome.roomId;
+      this.presence.onRoomClosed(roomId, () => this.closeRoomMedia(roomId));
     }
 
-    // A same-id rejoin inside the grace window restores the held seat
-    // silently: the room saw no departure, so it gets no arrival either.
-    const restoredSeat = this.heldSeats.get(`${roomId}:${peer.userId}`);
-    if (restoredSeat) {
-      clearTimeout(restoredSeat.timer);
-      this.heldSeats.delete(`${roomId}:${peer.userId}`);
-    }
-
-    this.peers.set(peerId, peer);
-
-    if (!this.rooms.has(roomId)) {
-      this.rooms.set(roomId, new Set());
-    }
-    const roomPeers = this.rooms.get(roomId);
-    if (!roomPeers) {
-      this.logger.error(`Failed to initialize room ${roomId}`);
-      return;
-    }
-
-    // A grace seat (the rejoiner's own or anyone else's) means the room never
-    // emptied, so room.started must not fire again.
-    const firstPeer = roomPeers.size === 0 && !this.roomHasHeldSeat(roomId);
-    roomPeers.add(peerId);
-    if (peer.ownsRoom) {
-      this.roomOwners.set(roomId, peer.userId);
-    }
-    if (roomSlug) {
-      this.slugToRoomId.set(roomSlug, roomId);
-    }
-    this.logger.log(`Peer ${peerId} joined SFU room ${roomId}`);
-
-    // Notify existing peers about the new peer - never for a silent restore
-    if (!restoredSeat) {
-      for (const roomPeer of this.getRoomPeers(roomId)) {
-        if (roomPeer.id !== socket.id) {
-          roomPeer.socket.emit('sfu:peer-joined', {
-            userId: peer.userId,
-            username: peer.username,
-            externalId: peer.externalId,
-            metadata: peer.metadata,
-          });
-        }
-      }
-    }
-
-    // Notify new peer about existing peers (even those without producers)
-    const existingPeers: SfuExistingPeerPayload[] = this.getRoomPeers(roomId)
-      .filter((p) => p.id !== socket.id)
-      .map((p) => ({
-        userId: p.userId,
-        username: p.username,
-        externalId: p.externalId,
-        metadata: p.metadata,
-      }));
-
-    if (existingPeers.length > 0) {
-      socket.emit('sfu:existing-peers', existingPeers);
-    }
-
-    await this.workerManager.createRouter(roomId);
-    const routerRtpCapabilities = this.workerManager.getRtpCapabilities(roomId);
+    await this.workerManager.createRouter(outcome.roomId);
+    const routerRtpCapabilities = this.workerManager.getRtpCapabilities(
+      outcome.roomId,
+    );
     socket.emit('sfu:joined', {
       routerRtpCapabilities,
       participant: {
-        id: peer.userId,
-        username: peer.username,
-        externalId: peer.externalId,
-        metadata: peer.metadata,
+        id: outcome.userId,
+        username: outcome.username,
+        externalId: outcome.externalId,
+        metadata: outcome.metadata,
       },
-      capabilities: peer.capabilities,
+      capabilities: outcome.capabilities,
     });
+  }
 
-    // Webhook emission is fire-and-forget and must never delay or break the
-    // join path; ordering (room.started before participant.joined) is kept by
-    // the dispatcher's per-project FIFO queue.
-    if (firstPeer) {
-      this.webhooks.roomStarted(roomId, roomSlug);
+  /**
+   * Room teardown on presence's room-closed notification. Member media goes
+   * synchronously; the router closes on a microtask so the other room-closed
+   * subscribers (egress taps, whiteboard) stop while media is still
+   * resolvable - the ordering the room-empty flow always guaranteed.
+   */
+  private closeRoomMedia(roomId: string): void {
+    for (const socketId of this.presence.listPeerSockets(roomId)) {
+      const media = this.media.get(socketId);
+      media?.sendTransport?.close();
+      media?.recvTransport?.close();
+      this.media.delete(socketId);
     }
-    if (!restoredSeat) {
-      this.webhooks.participantJoined(roomId, roomSlug, {
-        id: peer.userId,
-        displayName: peer.username,
-        externalId: peer.externalId,
-        metadata: peer.metadata,
-      });
-    }
+    this.roomScreenShare.delete(roomId);
+    this.routerRooms.delete(roomId);
+    void Promise.resolve().then(() => this.workerManager.closeRouter(roomId));
   }
 
   async leaveRoom(socket: Socket): Promise<void> {
-    const removedPeer = await this.removePeer(socket.id, 'leave');
-    if (removedPeer) {
-      this.logger.log(`Peer ${socket.id} left SFU room ${removedPeer.roomId}`);
+    const roomId = this.presence.contextOf(socket.id)?.roomId;
+    await this.presence.leave(socket.id, 'leave');
+    if (roomId) {
+      this.logger.log(`Peer ${socket.id} left SFU room ${roomId}`);
     }
-  }
-
-  /**
-   * Resolves a join that presents a room token: verifies signature, expiry,
-   * room match and minting-key state, then builds the peer solely from the
-   * verified claims. Returns null (after emitting a coded join error) on any
-   * failure.
-   */
-  private async resolveTokenPeer(
-    socket: Socket,
-    payload: SfuJoinPayload,
-  ): Promise<Peer | null> {
-    const result = this.roomTokenHelper.verify(payload.token as string);
-
-    if (!result.ok) {
-      this.emitJoinError(socket, result.code, 'Room token is not valid');
-      return null;
-    }
-
-    const claims = result.claims;
-    if (claims.roomId !== payload.roomId) {
-      this.emitJoinError(
-        socket,
-        'ROOM_TOKEN_ROOM_MISMATCH',
-        'Room token was minted for a different room',
-      );
-      return null;
-    }
-
-    const key = await this.prisma.apiKey.findUnique({
-      where: { id: claims.keyId },
-      select: { revokedAt: true },
-    });
-    if (!key || key.revokedAt) {
-      this.emitJoinError(socket, 'ROOM_TOKEN_INVALID', 'API key is not active');
-      return null;
-    }
-    return {
-      id: socket.id,
-      userId: claims.participantId,
-      username: claims.name,
-      externalId: claims.externalId,
-      metadata: claims.metadata,
-      socket,
-      producers: new Map(),
-      consumers: new Map(),
-      capabilities: capabilitiesForRole(claims.role),
-    };
-  }
-
-  /**
-   * Resolves a join without a room token: derives the participant identity
-   * from verified handshake credentials - a registered-user access JWT or an
-   * approved-guest JWT - and grounds ownership in the room row. Client
-   * payload identity fields are never trusted. Returns null (after emitting
-   * a coded join error) when no credential verifies.
-   */
-  private async resolveHandshakePeer(
-    socket: Socket,
-    payload: SfuJoinPayload,
-  ): Promise<Peer | null> {
-    // Cookie identity is honored only from the app UI origin; the
-    // room-token path stays origin-free for third-party SDK embeds.
-    const clientUrl =
-      this.config.get<string>('CLIENT_URL') || 'http://localhost:5173';
-    const identity = resolveRoomSocketIdentity(
-      socket,
-      this.jwtService,
-      this.config,
-      { allowedOrigins: [clientUrl] },
-    );
-    if (!identity) {
-      this.emitJoinError(
-        socket,
-        'SFU_JOIN_UNAUTHORIZED',
-        'Join requires an authenticated session or a room token',
-      );
-      return null;
-    }
-
-    const room = await this.prisma.room.findUnique({
-      where: { id: payload.roomId },
-      select: { slug: true, ownerId: true },
-    });
-    if (!room) {
-      this.emitJoinError(socket, 'SFU_JOIN_FORBIDDEN', 'Room not found');
-      return null;
-    }
-
-    if (identity.type === 'guest') {
-      if (identity.roomSlug !== room.slug) {
-        this.emitJoinError(
-          socket,
-          'SFU_JOIN_FORBIDDEN',
-          'Guest token was issued for a different room',
-        );
-        return null;
-      }
-      this.logger.log(
-        `Guest peer ${identity.guestId} joining room ${payload.roomId}`,
-      );
-      return {
-        id: socket.id,
-        userId: identity.guestId,
-        username: identity.displayName,
-        socket,
-        producers: new Map(),
-        consumers: new Map(),
-        capabilities: capabilitiesForRole('participant'),
-      };
-    }
-    const user = await this.prisma.user.findUnique({
-      where: { id: identity.userId },
-      select: { username: true },
-    });
-    if (!user) {
-      this.emitJoinError(socket, 'SFU_JOIN_UNAUTHORIZED', 'Account not found');
-      return null;
-    }
-    this.logger.log(
-      `User peer ${identity.userId} joining room ${payload.roomId}`,
-    );
-    return {
-      id: socket.id,
-      userId: identity.userId,
-      username: user.username,
-      socket,
-      producers: new Map(),
-      consumers: new Map(),
-      ownsRoom: room.ownerId === identity.userId,
-      capabilities: capabilitiesForRole(
-        room.ownerId === identity.userId ? 'host' : 'participant',
-      ),
-    };
-  }
-
-  private emitJoinError(
-    socket: Socket,
-    code: SfuJoinErrorCode,
-    message: string,
-  ): void {
-    this.logger.warn(`SFU join rejected (${code}): ${message}`);
-    socket.emit('sfu:join-error', { code, message });
   }
 
   async createSendTransport(socket: Socket): Promise<void> {
-    const peer = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-    const router = roomId ? this.workerManager.getRouter(roomId) : undefined;
+    const peer = this.media.get(socket.id);
+    const ctx = this.presence.contextOf(socket.id);
+    const router = ctx ? this.workerManager.getRouter(ctx.roomId) : undefined;
 
     if (!peer || !router) {
       this.logger.error(
@@ -679,11 +181,11 @@ export class SfuService implements OnModuleDestroy {
   }
 
   async createRecvTransport(socket: Socket): Promise<void> {
-    const peer = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-    const router = roomId ? this.workerManager.getRouter(roomId) : undefined;
+    const peer = this.media.get(socket.id);
+    const ctx = this.presence.contextOf(socket.id);
+    const router = ctx ? this.workerManager.getRouter(ctx.roomId) : undefined;
 
-    if (!peer || !router) {
+    if (!peer || !router || !ctx) {
       this.logger.error(
         !peer ? `Peer ${socket.id} not found` : 'No router found',
       );
@@ -700,17 +202,15 @@ export class SfuService implements OnModuleDestroy {
 
     this.emitTransportCreated(socket, 'recv', transport);
 
-    if (!roomId) {
-      return;
-    }
-
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      if (roomPeer.id === socket.id) {
-        continue;
-      }
-
+    // Announce every existing producer so the fresh recv transport can
+    // consume the room's current media immediately.
+    for (const socketId of this.presence.listPeerSockets(ctx.roomId)) {
+      if (socketId === socket.id) continue;
+      const roomPeer = this.media.get(socketId);
+      const peerCtx = this.presence.contextOf(socketId);
+      if (!roomPeer || !peerCtx) continue;
       for (const producer of roomPeer.producers.values()) {
-        this.emitNewProducer(socket, producer, roomPeer);
+        this.emitNewProducer(socket, producer, peerCtx);
       }
     }
   }
@@ -719,7 +219,7 @@ export class SfuService implements OnModuleDestroy {
     socket: Socket,
     payload: SfuTransportConnectPayload,
   ): Promise<void> {
-    const peer = this.getPeer(socket.id);
+    const peer = this.media.get(socket.id);
     if (!peer) {
       this.logger.error(`Peer ${socket.id} not found`);
       return;
@@ -741,20 +241,20 @@ export class SfuService implements OnModuleDestroy {
     socket: Socket,
     payload: SfuProducePayload,
   ): Promise<void> {
-    const peer = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
+    const peer = this.media.get(socket.id);
+    const ctx = this.presence.contextOf(socket.id);
 
     const source: SfuMediaSource =
       (payload.appData?.source as SfuMediaSource) ?? 'camera';
 
-    if (peer) {
+    if (ctx) {
       const required: CapabilityId =
         source === 'screen'
           ? 'send-screenshare'
           : payload.kind === 'audio'
             ? 'send-audio'
             : 'send-video';
-      if (!peer.capabilities.includes(required)) {
+      if (!ctx.capabilities.includes(required)) {
         socket.emit('sfu:produce-error', {
           requestId: payload.requestId,
           code: 'PUBLISH_NOT_ALLOWED',
@@ -763,7 +263,7 @@ export class SfuService implements OnModuleDestroy {
         return;
       }
     }
-    if (!peer?.sendTransport || !roomId) {
+    if (!peer?.sendTransport || !ctx) {
       socket.emit('sfu:produce-error', {
         requestId: payload.requestId,
         code: 'SEND_TRANSPORT_NOT_READY',
@@ -783,7 +283,7 @@ export class SfuService implements OnModuleDestroy {
     }
 
     if (source === 'screen') {
-      const existingSharer = this.roomScreenShare.get(roomId);
+      const existingSharer = this.roomScreenShare.get(ctx.roomId);
       if (existingSharer && existingSharer !== socket.id) {
         socket.emit('sfu:produce-error', {
           requestId,
@@ -813,89 +313,109 @@ export class SfuService implements OnModuleDestroy {
     peer.producers.set(producer.id, producer);
 
     if (source === 'screen') {
-      this.roomScreenShare.set(roomId, socket.id);
-      for (const roomPeer of this.getRoomPeers(roomId)) {
-        if (roomPeer.id !== socket.id) {
-          roomPeer.socket.emit('sfu:screen-share-started', {
-            userId: peer.userId,
-          });
-        }
-      }
+      this.roomScreenShare.set(ctx.roomId, socket.id);
+      this.presence.broadcastToRoom(
+        ctx.roomId,
+        'sfu:screen-share-started',
+        { userId: ctx.userId },
+        { excludeSocketId: socket.id },
+      );
     }
 
     socket.emit('sfu:producer-created', {
       requestId,
       producerId: producer.id,
-      userId: peer.userId,
+      userId: ctx.userId,
       kind,
       appData: { source },
     });
 
     this.notifyPeersToConsume(socket, producer);
 
-    this.notifyEgressTapHandlers(roomId, producer);
+    this.notifyTapHandlers(ctx.roomId, producer);
   }
 
   closeProducer(socketId: string, producerId: string): void {
     this.closeProducerForPeer(socketId, producerId);
   }
 
-  listRoomProducers(roomId: string): EgressTapDescriptor[] {
-    return this.getRoomPeers(roomId).flatMap((peer) =>
-      Array.from(peer.producers.values(), (producer) => ({
-        producerId: producer.id,
-        kind: producer.kind,
-        source: this.producerTapSource(producer),
-      })),
+  /** {@inheritdoc RoomMediaSource.listTaps} */
+  listTaps(roomId: string): RoomTapDescriptor[] {
+    return this.presence.listPeerSockets(roomId).flatMap((socketId) =>
+      Array.from(
+        this.media.get(socketId)?.producers.values() ?? [],
+        (producer) => ({
+          producerId: producer.id,
+          kind: producer.kind,
+          source: this.producerTapSource(producer),
+        }),
+      ),
     );
   }
 
-  async createEgressTransport(roomId: string): Promise<PlainTransport> {
-    const router = this.workerManager.getRouter(roomId);
-    if (!router) {
-      throw new NotFoundException(`Room ${roomId} not found`);
-    }
-    return router.createPlainTransport(egressPlainTransportOptions);
-  }
-
-  async createEgressConsumer(
+  /**
+   * {@inheritdoc RoomMediaSource.openTap}
+   *
+   * Creates the plain transport, points it at the consumer's listener, and
+   * consumes the producer unpaused. On any failure the transport is closed
+   * again - the adapter owns the whole lifecycle, never a half-open tap.
+   */
+  async openTap(
     roomId: string,
-    transport: PlainTransport,
     producerId: string,
-  ): Promise<{ consumer: Consumer; rtpParameters: RtpParameters }> {
+    target: RoomTapTarget,
+  ): Promise<RoomTapHandle> {
     const router = this.workerManager.getRouter(roomId);
     if (!router) {
       throw new NotFoundException(`Room ${roomId} not found`);
     }
-    const consumer = await transport.consume({
-      producerId,
-      rtpCapabilities: router.rtpCapabilities,
-      paused: false,
-      appData: { egress: true },
-    });
-    return { consumer, rtpParameters: consumer.rtpParameters };
-  }
-
-  onRoomProducerAdded(
-    roomId: string,
-    handler: (descriptor: EgressTapDescriptor) => void,
-  ): () => void {
-    let handlers = this.egressTapHandlers.get(roomId);
-    if (!handlers) {
-      handlers = new Set();
-      this.egressTapHandlers.set(roomId, handlers);
+    const transport = await router.createPlainTransport(
+      tapPlainTransportOptions,
+    );
+    try {
+      await transport.connect({ ip: target.ip, port: target.port });
+      const consumer = await transport.consume({
+        producerId,
+        rtpCapabilities: router.rtpCapabilities,
+        paused: false,
+        appData: { tap: true },
+      });
+      return {
+        rtpParameters: consumer.rtpParameters,
+        onProducerClosed(cb) {
+          consumer.on('producerclose', cb);
+          return () => {
+            consumer.off('producerclose', cb);
+          };
+        },
+        close() {
+          try {
+            consumer.close();
+          } catch {
+            // already closed by its transport or the dead pipeline path
+          }
+          try {
+            transport.close();
+          } catch {
+            // ditto
+          }
+        },
+      };
+    } catch (error) {
+      transport.close();
+      throw error;
     }
-    handlers.add(handler);
-    return () => {
-      handlers.delete(handler);
-    };
   }
 
-  onRoomClosed(roomId: string, handler: () => void): () => void {
-    let handlers = this.roomClosedHandlers.get(roomId);
+  /** {@inheritdoc RoomMediaSource.onProducerAdded} */
+  onProducerAdded(
+    roomId: string,
+    handler: (descriptor: RoomTapDescriptor) => void,
+  ): () => void {
+    let handlers = this.tapHandlers.get(roomId);
     if (!handlers) {
       handlers = new Set();
-      this.roomClosedHandlers.set(roomId, handlers);
+      this.tapHandlers.set(roomId, handlers);
     }
     handlers.add(handler);
     return () => {
@@ -907,9 +427,9 @@ export class SfuService implements OnModuleDestroy {
     socket: Socket,
     payload: SfuConsumePayload,
   ): Promise<void> {
-    const peer = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-    const router = roomId ? this.workerManager.getRouter(roomId) : undefined;
+    const peer = this.media.get(socket.id);
+    const ctx = this.presence.contextOf(socket.id);
+    const router = ctx ? this.workerManager.getRouter(ctx.roomId) : undefined;
 
     if (!peer?.recvTransport || !router) {
       this.logger.error('Missing peer transport or router');
@@ -919,8 +439,8 @@ export class SfuService implements OnModuleDestroy {
     const { producerId, rtpCapabilities } = payload;
 
     let targetProducer: Producer | undefined;
-    for (const [, p] of this.peers) {
-      const prod = p.producers.get(producerId);
+    for (const media of this.media.values()) {
+      const prod = media.producers.get(producerId);
       if (prod) {
         targetProducer = prod;
         break;
@@ -953,7 +473,7 @@ export class SfuService implements OnModuleDestroy {
   }
 
   async resumeConsumer(socket: Socket, consumerId: string): Promise<void> {
-    const peer = this.getPeer(socket.id);
+    const peer = this.media.get(socket.id);
     if (!peer) {
       this.logger.error(`Peer ${socket.id} not found`);
       return;
@@ -972,111 +492,34 @@ export class SfuService implements OnModuleDestroy {
   }
 
   async pauseProducer(socket: Socket, producerId: string): Promise<void> {
-    const peer = this.getPeer(socket.id);
+    const peer = this.media.get(socket.id);
+    const ctx = this.presence.contextOf(socket.id);
     const producer = peer?.producers.get(producerId);
-    if (!producer || !peer) {
+    if (!producer || !peer || !ctx) {
       this.logger.error(`Producer ${producerId} not found`);
       return;
     }
     await producer.pause();
-    this.notifyProducerStateChanged(socket, producer, peer, true);
+    this.notifyProducerStateChanged(socket, producer, ctx, true);
   }
 
   async resumeProducer(socket: Socket, producerId: string): Promise<void> {
-    const peer = this.getPeer(socket.id);
+    const peer = this.media.get(socket.id);
+    const ctx = this.presence.contextOf(socket.id);
     const producer = peer?.producers.get(producerId);
-    if (!producer || !peer) {
+    if (!producer || !peer || !ctx) {
       this.logger.error(`Producer ${producerId} not found`);
       return;
     }
     await producer.resume();
-    this.notifyProducerStateChanged(socket, producer, peer, false);
+    this.notifyProducerStateChanged(socket, producer, ctx, false);
   }
 
   async kickPeer(
     socket: Socket,
     targetUserId: string,
   ): Promise<SfuHostActionAck> {
-    const requester = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-
-    if (!requester || !roomId) {
-      this.logger.warn(`Kick request from unknown peer ${socket.id}`);
-      return {
-        ok: false,
-        code: 'NOT_IN_ROOM',
-        message: 'Join the room before using host controls',
-      };
-    }
-
-    if (!requester.capabilities.includes('remove-participants')) {
-      this.logger.warn(
-        `Unauthorized kick request from ${requester.userId} in room ${roomId}`,
-      );
-      return {
-        ok: false,
-        code: 'MISSING_CAPABILITY',
-        message: 'Missing remove-participants capability',
-      };
-    }
-
-    const targetPeer = this.getRoomPeers(roomId).find(
-      (peer) => peer.userId === targetUserId,
-    );
-    if (!targetPeer || targetPeer.id === socket.id) {
-      return {
-        ok: false,
-        code: 'TARGET_NOT_FOUND',
-        message: `Participant ${targetUserId} is not in the room`,
-      };
-    }
-
-    const kicked = this.kickedUsers.get(roomId) ?? new Set<string>();
-    kicked.add(targetPeer.userId);
-    this.kickedUsers.set(roomId, kicked);
-
-    targetPeer.socket.emit('sfu:kicked', { roomId });
-    // The acknowledgement lands only after teardown completes, so a resolved
-    // kick promise is a usable ordering guarantee for consumer UIs.
-    await this.removePeer(targetPeer.id, 'kick');
-    targetPeer.socket.disconnect();
-    return { ok: true };
-  }
-
-  /**
-   * Guards a host-control action: the requester must hold a peer state in a
-   * room and carry the capability the action enforces. Returns the
-   * acknowledgement for denial, or null to proceed.
-   */
-  private denyHostAction(
-    socket: Socket,
-    capability: CapabilityId,
-    action: string,
-  ): SfuHostActionAck | null {
-    const requester = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
-
-    if (!requester || !roomId) {
-      this.logger.warn(`${action} request from unknown peer ${socket.id}`);
-      return {
-        ok: false,
-        code: 'NOT_IN_ROOM',
-        message: 'Join the room before using host controls',
-      };
-    }
-
-    if (!requester.capabilities.includes(capability)) {
-      this.logger.warn(
-        `Unauthorized ${action} request from ${requester.userId} in room ${roomId}`,
-      );
-      return {
-        ok: false,
-        code: 'MISSING_CAPABILITY',
-        message: `Missing ${capability} capability`,
-      };
-    }
-
-    return null;
+    return this.presence.kick(socket.id, targetUserId);
   }
 
   async mutePeer(
@@ -1085,12 +528,13 @@ export class SfuService implements OnModuleDestroy {
   ): Promise<SfuHostActionAck> {
     const denial = this.denyHostAction(socket, 'mute-users', 'mute');
     if (denial) return denial;
-    const roomId = this.getRoomId(socket) as string;
+    const ctx = this.presence.contextOf(socket.id)!;
 
-    const targetPeer = this.getRoomPeers(roomId).find(
-      (peer) => peer.userId === targetUserId,
+    const targetSocketId = this.presence.peerSocketInRoom(
+      ctx.roomId,
+      targetUserId,
     );
-    if (!targetPeer || targetPeer.id === socket.id) {
+    if (!targetSocketId || targetSocketId === socket.id) {
       return {
         ok: false,
         code: 'TARGET_NOT_FOUND',
@@ -1098,41 +542,30 @@ export class SfuService implements OnModuleDestroy {
       };
     }
 
-    await this.muteRoomPeer(roomId, targetPeer);
+    await this.muteRoomPeer(ctx.roomId, targetSocketId, targetUserId);
     return { ok: true };
   }
 
   async muteAll(socket: Socket): Promise<SfuHostActionAck> {
     const denial = this.denyHostAction(socket, 'mute-users', 'mute-all');
     if (denial) return denial;
-    const roomId = this.getRoomId(socket) as string;
+    const ctx = this.presence.contextOf(socket.id)!;
 
     // Snapshot of the current publishers: peers that start publishing after
     // mute-all stay unmuted, and the requesting host is never muted.
-    for (const peer of this.getRoomPeers(roomId)) {
-      if (peer.id === socket.id || peer.producers.size === 0) {
-        continue;
-      }
-      await this.muteRoomPeer(roomId, peer);
+    for (const socketId of this.presence.listPeerSockets(ctx.roomId)) {
+      if (socketId === socket.id) continue;
+      const target = this.media.get(socketId);
+      if (!target || target.producers.size === 0) continue;
+      const targetUserId = this.presence.contextOf(socketId)?.userId;
+      if (!targetUserId) continue;
+      await this.muteRoomPeer(ctx.roomId, socketId, targetUserId);
     }
     return { ok: true };
   }
 
   async lockRoom(socket: Socket, locked: boolean): Promise<SfuHostActionAck> {
-    const denial = this.denyHostAction(socket, 'lock-room', 'lock');
-    if (denial) return denial;
-    const roomId = this.getRoomId(socket) as string;
-
-    const nextLocked = Boolean(locked);
-    if ((this.roomLocks.get(roomId) ?? false) === nextLocked) {
-      // Idempotent: re-locking a locked room (or the reverse) is a success.
-      return { ok: true };
-    }
-    this.roomLocks.set(roomId, nextLocked);
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      roomPeer.socket.emit('sfu:room-locked', { locked: nextLocked });
-    }
-    return { ok: true };
+    return this.presence.lockRoom(socket.id, locked);
   }
 
   /**
@@ -1142,10 +575,9 @@ export class SfuService implements OnModuleDestroy {
    * persisted and the sender never receives their own message back.
    */
   broadcast(socket: Socket, payload: SfuBroadcastPayload): SfuBroadcastAck {
-    const requester = this.getPeer(socket.id);
-    const roomId = this.getRoomId(socket);
+    const ctx = this.presence.contextOf(socket.id);
 
-    if (!requester || !roomId) {
+    if (!ctx) {
       this.logger.warn(`Broadcast request from unknown peer ${socket.id}`);
       return {
         ok: false,
@@ -1154,9 +586,9 @@ export class SfuService implements OnModuleDestroy {
       };
     }
 
-    if (!requester.capabilities.includes('send-data-message')) {
+    if (!ctx.capabilities.includes('send-data-message')) {
       this.logger.warn(
-        `Unauthorized broadcast request from ${requester.userId} in room ${roomId}`,
+        `Unauthorized broadcast request from ${ctx.userId} in room ${ctx.roomId}`,
       );
       return {
         ok: false,
@@ -1189,95 +621,25 @@ export class SfuService implements OnModuleDestroy {
     }
 
     const message: SfuBroadcastMessage = {
-      senderId: requester.userId,
+      senderId: ctx.userId,
       topic: payload.topic,
       payload: payload.payload,
       timestamp: new Date().toISOString(),
     };
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      if (roomPeer.id === socket.id) continue;
-      roomPeer.socket.emit('sfu:broadcast', message);
-    }
+    this.presence.broadcastToRoom(ctx.roomId, 'sfu:broadcast', message, {
+      excludeSocketId: socket.id,
+    });
     return { ok: true };
   }
 
   /**
-   * Pause every producer owned by the target peer server-side and announce
-   * the mute to the whole room, including the target, so it can surface its
-   * muted-by-host state.
-   */
-  private async muteRoomPeer(roomId: string, target: Peer): Promise<void> {
-    for (const producer of Array.from(target.producers.values())) {
-      if (!producer.paused) {
-        await producer.pause();
-      }
-    }
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      roomPeer.socket.emit('sfu:peer-muted', { userId: target.userId });
-    }
-  }
-
-  /**
-   * Socket dropped without an explicit leave: hold the peer's seat and
-   * identity for the grace window, tearing down media state only. A same-id
-   * rejoin inside the window restores silently; expiry runs the normal
-   * disconnect leave flow.
+   * Socket dropped without an explicit leave: presence holds the peer's seat
+   * and identity for the grace window and detaches media through
+   * {@link onPeerDetach}. A same-id rejoin inside the window restores
+   * silently; expiry runs the normal disconnect leave flow.
    */
   async closePeer(socket: Socket): Promise<void> {
-    const peer = this.getPeer(socket.id);
-    const roomId = this.getRoomIdBySocketId(socket.id);
-    if (!peer || !roomId) {
-      return;
-    }
-
-    const key = `${roomId}:${peer.userId}`;
-    const previous = this.heldSeats.get(key);
-    if (previous) {
-      clearTimeout(previous.timer);
-    }
-    const timer = setTimeout(() => {
-      void this.expireHeldSeat(key);
-    }, this.rejoinGraceMs);
-    this.heldSeats.set(key, {
-      roomId,
-      socketId: socket.id,
-      participant: {
-        id: peer.userId,
-        displayName: peer.username,
-        externalId: peer.externalId,
-        metadata: peer.metadata,
-      },
-      timer,
-    });
-
-    this.detachPeer(socket.id, roomId, peer);
-    this.logger.log(
-      `Peer ${socket.id} disconnected from room ${roomId}; seat held for ${this.rejoinGraceMs}ms`,
-    );
-  }
-
-  /** Deferred disconnect leave flow: runs when the grace window lapses. */
-  private async expireHeldSeat(key: string): Promise<void> {
-    const seat = this.heldSeats.get(key);
-    if (!seat) {
-      return;
-    }
-    this.heldSeats.delete(key);
-
-    // The room may have ended (e.g. DELETE /v1) while the seat was held:
-    // its lifetime already ran the leave flow for everyone.
-    if (!this.rooms.has(seat.roomId)) {
-      return;
-    }
-
-    this.notifyPeerLeft(seat.roomId, seat.participant.id, seat.socketId);
-    this.webhooks.participantLeft(
-      seat.roomId,
-      this.findRoomSlug(seat.roomId),
-      seat.participant,
-      'disconnect',
-    );
-    await this.cleanupRoomIfEmpty(seat.roomId);
+    this.presence.holdSeat(socket.id);
   }
 
   /**
@@ -1289,7 +651,7 @@ export class SfuService implements OnModuleDestroy {
     consumerId: string,
     spatialLayer: number,
   ): Promise<boolean> {
-    const peer = this.getPeer(socket.id);
+    const peer = this.media.get(socket.id);
     if (!peer) {
       this.logger.warn(`setPreferredLayers: peer ${socket.id} not found`);
       return false;
@@ -1308,118 +670,259 @@ export class SfuService implements OnModuleDestroy {
   }
 
   /**
-   * End a room: notify all peers with `sfu:room-ended`, clean up their
-   * transports, and tear down the mediasoup Router.
+   * End a room: presence announces `sfu:room-ended`, runs the departure flow
+   * for every member, and notifies room-closed - the media layer tears the
+   * mediasoup router down on that notification.
    */
   async endRoom(roomId: string): Promise<void> {
-    // A /v1 DELETE teardown must clear a lock even when the room has no SFU
-    // peers left, so a recreated room can be joined again.
-    this.roomLocks.delete(roomId);
-    // The room's lifetime ends: grace seats lapse immediately and kicked
-    // users stop being terminal (a recreated room is a fresh lifetime).
-    for (const [key, seat] of Array.from(this.heldSeats)) {
-      if (seat.roomId === roomId) {
-        clearTimeout(seat.timer);
-        this.heldSeats.delete(key);
+    return this.presence.endRoom(roomId);
+  }
+
+  /** Guards a host-control action through presence context. */
+  private denyHostAction(
+    socket: Socket,
+    capability: CapabilityId,
+    action: string,
+  ): SfuHostActionAck | null {
+    const ctx = this.presence.contextOf(socket.id);
+
+    if (!ctx) {
+      this.logger.warn(`${action} request from unknown peer ${socket.id}`);
+      return {
+        ok: false,
+        code: 'NOT_IN_ROOM',
+        message: 'Join the room before using host controls',
+      };
+    }
+
+    if (!ctx.capabilities.includes(capability)) {
+      this.logger.warn(
+        `Unauthorized ${action} request from ${ctx.userId} in room ${ctx.roomId}`,
+      );
+      return {
+        ok: false,
+        code: 'MISSING_CAPABILITY',
+        message: `Missing ${capability} capability`,
+      };
+    }
+
+    return null;
+  }
+
+  private emitTransportCreated(
+    socket: Socket,
+    direction: SfuTransportDirection,
+    transport: WebRtcTransport,
+  ): void {
+    socket.emit('sfu:transport-created', {
+      direction,
+      transportId: transport.id,
+      iceParameters: transport.iceParameters,
+      iceCandidates: transport.iceCandidates,
+      dtlsParameters: transport.dtlsParameters,
+      iceServers: getIceServers(),
+    });
+  }
+
+  private emitNewProducer(
+    target: Socket,
+    producer: Producer,
+    ctx: PeerContext,
+  ): void {
+    target.emit('sfu:new-producer', this.newProducerPayload(producer, ctx));
+  }
+
+  private getTransport(
+    peer: MediaPeer,
+    transportId: string,
+  ): WebRtcTransport | undefined {
+    if (peer.sendTransport?.id === transportId) {
+      return peer.sendTransport;
+    }
+
+    if (peer.recvTransport?.id === transportId) {
+      return peer.recvTransport;
+    }
+
+    return undefined;
+  }
+
+  private getConsumer(
+    peer: MediaPeer,
+    consumerId: string,
+  ): Consumer | undefined {
+    return peer.consumers.get(consumerId);
+  }
+
+  private closeProducerForPeer(
+    socketId: string,
+    producerId: string,
+  ): { roomId: string; ctx: PeerContext; producer: Producer } | null {
+    const peer = this.media.get(socketId);
+    const ctx = this.presence.contextOf(socketId);
+    if (!peer || !ctx) return null;
+
+    const producer = peer.producers.get(producerId);
+    if (!producer) return null;
+
+    const source = (producer.appData as Record<string, unknown> | undefined)
+      ?.source as SfuMediaSource | undefined;
+
+    producer.close();
+    peer.producers.delete(producerId);
+
+    if (source === 'screen') {
+      const currentSharer = this.roomScreenShare.get(ctx.roomId);
+      if (currentSharer === socketId) {
+        this.roomScreenShare.delete(ctx.roomId);
+        for (const otherId of this.presence.listPeerSockets(ctx.roomId)) {
+          if (otherId === socketId) continue;
+          const other = this.media.get(otherId);
+          if (!other) continue;
+          // Close the consumer that was consuming this screen-share producer
+          // and notify the client so it can clean up its state immediately.
+          for (const [consumerId, consumer] of other.consumers) {
+            if (consumer.producerId === producerId) {
+              consumer.close();
+              other.consumers.delete(consumerId);
+              this.presence.emitToPeer(otherId, 'sfu:consumer-closed', {
+                consumerId,
+              });
+              break;
+            }
+          }
+          this.presence.emitToPeer(otherId, 'sfu:screen-share-stopped', {
+            userId: ctx.userId,
+          });
+        }
       }
     }
-    this.kickedUsers.delete(roomId);
-    // Fire room-closed handlers up front so egress pipelines stop before any
-    // teardown; removePeer's empty branch is a no-op afterwards.
-    this.notifyRoomClosed(roomId);
-    const roomSlug = this.findRoomSlug(roomId);
-    const roomPeerIds = this.rooms.get(roomId);
-    if (!roomPeerIds || roomPeerIds.size === 0) {
-      this.logger.log(`No SFU peers in room ${roomId}, nothing to clean up`);
-      this.webhooks.roomEnded(roomId, roomSlug);
+
+    return { roomId: ctx.roomId, ctx, producer };
+  }
+
+  /**
+   * Tears a socket's media state down (producers, screen-share lock,
+   * transports) when presence announces the departure or holds the
+   * disconnect seat. Identity and membership never pass through here.
+   */
+  private detachMedia(socketId: string): void {
+    const peer = this.media.get(socketId);
+    const roomId = this.presence.contextOf(socketId)?.roomId;
+    if (!peer || !roomId) {
+      this.media.delete(socketId);
       return;
     }
 
-    // Notify every peer that the room has ended before tearing peers down.
-    for (const peerId of Array.from(roomPeerIds)) {
-      const peer = this.peers.get(peerId);
-      if (peer) {
-        peer.socket.emit('sfu:room-ended', { roomId });
+    // Close all producers through the shared path so screen-share lock is
+    // released and peers are notified consistently.
+    for (const producerId of Array.from(peer.producers.keys())) {
+      this.closeProducerForPeer(socketId, producerId);
+    }
+
+    // Fallback: if the screen-share lock is still held (e.g. producers map was
+    // not populated), release it directly so the room state stays consistent.
+    const ctx = this.presence.contextOf(socketId);
+    const currentSharer = this.roomScreenShare.get(roomId);
+    if (ctx && currentSharer === socketId) {
+      this.roomScreenShare.delete(roomId);
+      this.presence.broadcastToRoom(
+        roomId,
+        'sfu:screen-share-stopped',
+        { userId: ctx.userId },
+        { excludeSocketId: socketId },
+      );
+    }
+
+    peer.sendTransport?.close();
+    peer.recvTransport?.close();
+    this.media.delete(socketId);
+  }
+
+  /**
+   * Pause every producer owned by the target socket server-side and announce
+   * the mute to the whole room, including the target, so it can surface its
+   * muted-by-host state.
+   */
+  private async muteRoomPeer(
+    roomId: string,
+    targetSocketId: string,
+    targetUserId: string,
+  ): Promise<void> {
+    const target = this.media.get(targetSocketId);
+    for (const producer of Array.from(target?.producers.values() ?? [])) {
+      if (!producer.paused) {
+        await producer.pause();
       }
     }
-
-    // Tear each peer down through the shared removePeer funnel so producers,
-    // transports and screen-share state stay consistent with departures, and
-    // webhook participant.left(room-end) events keep their emission order.
-    for (const peerId of Array.from(roomPeerIds)) {
-      await this.removePeer(peerId, 'room-end');
-    }
-
-    this.roomScreenShare.delete(roomId);
-    this.webhooks.roomEnded(roomId, roomSlug);
-    this.logger.log(`Room ${roomId} ended - all peers notified and cleaned up`);
+    this.presence.broadcastToRoom(roomId, 'sfu:peer-muted', {
+      userId: targetUserId,
+    });
   }
 
   private notifyProducerStateChanged(
     socket: Socket,
     producer: Producer,
-    peer: Peer,
+    ctx: PeerContext,
     paused: boolean,
   ): void {
-    const roomId = this.getRoomId(socket);
-    if (!roomId) return;
-
     const source = (producer.appData as Record<string, unknown> | undefined)
       ?.source as SfuMediaSource | undefined;
 
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      if (roomPeer.id !== socket.id) {
-        roomPeer.socket.emit('sfu:producer-state-changed', {
-          producerId: producer.id,
-          kind: producer.kind,
-          userId: peer.userId,
-          paused,
-          source,
-        });
-      }
-    }
+    this.presence.broadcastToRoom(
+      ctx.roomId,
+      'sfu:producer-state-changed',
+      {
+        producerId: producer.id,
+        kind: producer.kind,
+        userId: ctx.userId,
+        paused,
+        source,
+      },
+      { excludeSocketId: socket.id },
+    );
   }
 
   private notifyPeersToConsume(socket: Socket, producer: Producer): void {
-    const roomId = this.getRoomId(socket);
-    const peer = this.getPeer(socket.id);
-    if (!roomId || !peer) return;
+    const ctx = this.presence.contextOf(socket.id);
+    if (!ctx) return;
 
-    for (const roomPeer of this.getRoomPeers(roomId)) {
-      if (roomPeer.id !== socket.id && roomPeer.recvTransport) {
-        this.emitNewProducer(roomPeer.socket, producer, peer);
-      }
+    const payload = this.newProducerPayload(producer, ctx);
+    for (const socketId of this.presence.listPeerSockets(ctx.roomId)) {
+      if (socketId === socket.id) continue;
+      // Only peers whose recv transport exists can consume right now.
+      if (!this.media.get(socketId)?.recvTransport) continue;
+      this.presence.emitToPeer(socketId, 'sfu:new-producer', payload);
     }
   }
 
-  private producerTapSource(producer: Producer): EgressTapSource {
+  private newProducerPayload(producer: Producer, ctx: PeerContext) {
+    return {
+      producerId: producer.id,
+      userId: ctx.userId,
+      username: ctx.username,
+      kind: producer.kind,
+      paused: producer.paused,
+      appData: producer.appData as Record<string, unknown> | undefined,
+    };
+  }
+
+  private producerTapSource(producer: Producer): RoomTapSource {
     const appData = producer.appData as SfuProduceAppData | undefined;
     return appData?.source ?? 'camera';
   }
 
-  private notifyEgressTapHandlers(roomId: string, producer: Producer): void {
-    const handlers = this.egressTapHandlers.get(roomId);
+  private notifyTapHandlers(roomId: string, producer: Producer): void {
+    const handlers = this.tapHandlers.get(roomId);
     if (!handlers) return;
 
-    const descriptor: EgressTapDescriptor = {
+    const descriptor: RoomTapDescriptor = {
       producerId: producer.id,
       kind: producer.kind,
       source: this.producerTapSource(producer),
     };
     for (const handler of handlers) {
       handler(descriptor);
-    }
-  }
-
-  private notifyRoomClosed(roomId: string): void {
-    const handlers = this.roomClosedHandlers.get(roomId);
-    if (!handlers) return;
-
-    // Clear before firing: endRoom funnels through removePeer, so the
-    // natural-empty branch must not notify a second time.
-    this.roomClosedHandlers.delete(roomId);
-    for (const handler of handlers) {
-      handler();
     }
   }
 }

@@ -1,9 +1,6 @@
 jest.mock('src/prisma/prisma.service', () => ({
   PrismaService: jest.fn(),
 }));
-jest.mock('src/sfu/sfu.service', () => ({
-  SfuService: jest.fn(),
-}));
 jest.mock('src/webhooks/webhook-dispatcher.service', () => ({
   WebhookDispatcher: jest.fn(),
 }));
@@ -30,7 +27,13 @@ import { stat } from 'node:fs/promises';
 import { EgressService } from './egress.service';
 import { composeEgressArgs } from './ffmpeg/args-composer';
 import { FFmpegProcess } from './ffmpeg/ffmpeg-process';
-import type { EgressTapDescriptor } from './egress.types';
+import type {
+  RoomMediaSource,
+  RoomTapDescriptor,
+  RoomTapHandle,
+  RoomTapTarget,
+} from 'src/sfu/room-media-source.port';
+import type { RtpParameters } from 'mediasoup/types';
 
 interface FakeProcess {
   handlers: Map<string, Array<(...args: unknown[]) => void>>;
@@ -60,6 +63,89 @@ const flush = () => {
   return promise;
 };
 
+/**
+ * Second adapter for the RoomMediaSource port: in-memory, event-driven,
+ * no mediasoup. Records opens and lets tests fire port events directly.
+ */
+class InMemoryRoomMediaSource implements RoomMediaSource {
+  descriptors: RoomTapDescriptor[] = [
+    { producerId: 'p1', kind: 'audio', source: 'camera' },
+  ];
+  opened: Array<{
+    roomId: string;
+    producerId: string;
+    target: RoomTapTarget;
+    handle: RoomTapHandle;
+    fireProducerClosed(): void;
+  }> = [];
+  private producerAddedHandlers = new Map<
+    string,
+    Set<(descriptor: RoomTapDescriptor) => void>
+  >();
+  private roomClosedHandlers = new Map<string, Set<() => void>>();
+
+  listTaps(): RoomTapDescriptor[] {
+    return this.descriptors;
+  }
+
+  async openTap(
+    roomId: string,
+    producerId: string,
+    target: RoomTapTarget,
+  ): Promise<RoomTapHandle> {
+    const closeCbs = new Set<() => void>();
+    const handle: RoomTapHandle = {
+      rtpParameters: { codecs: [] } as unknown as RtpParameters,
+      onProducerClosed(cb) {
+        closeCbs.add(cb);
+        return () => {
+          closeCbs.delete(cb);
+        };
+      },
+      close() {
+        closeCbs.clear();
+      },
+    };
+    this.opened.push({
+      roomId,
+      producerId,
+      target,
+      handle,
+      fireProducerClosed: () => {
+        for (const cb of [...closeCbs]) cb();
+      },
+    });
+    return handle;
+  }
+
+  onProducerAdded(
+    roomId: string,
+    handler: (descriptor: RoomTapDescriptor) => void,
+  ): () => void {
+    let handlers = this.producerAddedHandlers.get(roomId);
+    if (!handlers) {
+      handlers = new Set();
+      this.producerAddedHandlers.set(roomId, handlers);
+    }
+    handlers.add(handler);
+    return () => {
+      handlers.delete(handler);
+    };
+  }
+
+  emitProducerAdded(roomId: string, descriptor: RoomTapDescriptor): void {
+    for (const handler of [...(this.producerAddedHandlers.get(roomId) ?? [])]) {
+      handler(descriptor);
+    }
+  }
+
+  emitRoomClosed(roomId: string): void {
+    for (const handler of [...(this.roomClosedHandlers.get(roomId) ?? [])]) {
+      handler();
+    }
+  }
+}
+
 describe('EgressService', () => {
   let service: EgressService;
   let prisma: {
@@ -74,14 +160,12 @@ describe('EgressService', () => {
       updateMany: jest.Mock;
     };
   };
-  let sfu: {
-    listRoomProducers: jest.Mock;
-    createEgressTransport: jest.Mock;
-    createEgressConsumer: jest.Mock;
-    onRoomProducerAdded: jest.Mock;
-    onRoomClosed: jest.Mock;
+  let presence: {
     broadcastToRoom: jest.Mock;
+    onRoomClosed: jest.Mock;
   };
+  const presenceRoomClosed = new Map<string, Set<() => void>>();
+  let mediaSource: InMemoryRoomMediaSource;
   let webhooks: {
     egressStarted: jest.Mock;
     egressStopped: jest.Mock;
@@ -150,26 +234,22 @@ describe('EgressService', () => {
     prisma.egress.update.mockImplementation(async ({ data }) =>
       makeRow(data as Record<string, unknown>),
     );
-    sfu = {
-      listRoomProducers: jest.fn(() => [
-        { producerId: 'p1', kind: 'audio', source: 'camera' },
-      ]),
-      createEgressTransport: jest.fn().mockResolvedValue({
-        connect: jest.fn().mockResolvedValue(undefined),
-        close: jest.fn(),
-      }),
-      createEgressConsumer: jest.fn().mockResolvedValue({
-        consumer: {
-          rtpParameters: { codecs: [] },
-          on: jest.fn(),
-          close: jest.fn(),
-        },
-        rtpParameters: { codecs: [] },
-      }),
-      onRoomProducerAdded: jest.fn().mockReturnValue(jest.fn()),
-      onRoomClosed: jest.fn().mockReturnValue(jest.fn()),
+    presence = {
       broadcastToRoom: jest.fn(),
+      onRoomClosed: jest.fn((roomId: string, handler: () => void) => {
+        let handlers = presenceRoomClosed.get(roomId);
+        if (!handlers) {
+          handlers = new Set();
+          presenceRoomClosed.set(roomId, handlers);
+        }
+        handlers.add(handler);
+        return () => {
+          handlers.delete(handler);
+        };
+      }),
     };
+    presenceRoomClosed.clear();
+    mediaSource = new InMemoryRoomMediaSource();
     webhooks = {
       egressStarted: jest.fn(),
       egressStopped: jest.fn(),
@@ -183,8 +263,9 @@ describe('EgressService', () => {
     });
     service = new EgressService(
       prisma as never,
-      sfu as never,
       webhooks as never,
+      mediaSource,
+      presence as never,
     );
   });
 
@@ -270,7 +351,10 @@ describe('EgressService', () => {
     });
     expect(view.status).toBe('starting');
     expect(FFmpegProcess.spawn).toHaveBeenCalledTimes(1);
-    expect(sfu.createEgressTransport).toHaveBeenCalledWith('room-1');
+    expect(mediaSource.opened).toHaveLength(1);
+    expect(mediaSource.opened[0].roomId).toBe('room-1');
+    expect(mediaSource.opened[0].producerId).toBe('p1');
+    expect(mediaSource.opened[0].target.ip).toBe('127.0.0.1');
 
     spawned[0].emit('progress', 'out_time_ms=1');
     await flush();
@@ -293,7 +377,7 @@ describe('EgressService', () => {
       hls: true,
       record: false,
     });
-    expect(sfu.broadcastToRoom).toHaveBeenCalledWith(
+    expect(presence.broadcastToRoom).toHaveBeenCalledWith(
       'room-1',
       'egress:status',
       {
@@ -312,7 +396,7 @@ describe('EgressService', () => {
 
     await service.stop('project-1', view.id);
     await flush();
-    expect(sfu.broadcastToRoom).toHaveBeenCalledWith(
+    expect(presence.broadcastToRoom).toHaveBeenCalledWith(
       'room-1',
       'egress:status',
       {
@@ -383,13 +467,29 @@ describe('EgressService', () => {
       hls: true,
       record: false,
     });
-    const handler = sfu.onRoomProducerAdded.mock.calls[0][1] as (
-      descriptor: EgressTapDescriptor,
-    ) => void;
     spawned[0].emit('progress', 'out_time_ms=1');
     await flush();
     const spawnsBefore = (FFmpegProcess.spawn as jest.Mock).mock.calls.length;
-    handler({ producerId: 'p2', kind: 'video', source: 'screen' });
+    mediaSource.emitProducerAdded('room-1', {
+      producerId: 'p2',
+      kind: 'video',
+      source: 'screen',
+    });
+    await jest.advanceTimersToNextTimerAsync();
+    await flush();
+    expect(FFmpegProcess.spawn).toHaveBeenCalledTimes(spawnsBefore + 1);
+  });
+
+  it('rebuilds the pipeline when a tapped producer closes, debounced', async () => {
+    await service.start('project-1', 'room-1', {
+      rtmpEndpoints: [],
+      hls: true,
+      record: false,
+    });
+    spawned[0].emit('progress', 'out_time_ms=1');
+    await flush();
+    const spawnsBefore = (FFmpegProcess.spawn as jest.Mock).mock.calls.length;
+    mediaSource.opened[0].fireProducerClosed();
     await jest.advanceTimersToNextTimerAsync();
     await flush();
     expect(FFmpegProcess.spawn).toHaveBeenCalledTimes(spawnsBefore + 1);
@@ -436,8 +536,9 @@ describe('EgressService', () => {
       hls: true,
       record: false,
     });
-    const roomClosed = sfu.onRoomClosed.mock.calls[0][1] as () => void;
-    roomClosed();
+    for (const handler of presenceRoomClosed.get('room-1') ?? []) {
+      handler();
+    }
     await flush();
     expect(prisma.egress.update).toHaveBeenCalledWith(
       expect.objectContaining({

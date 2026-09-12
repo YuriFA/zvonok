@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { RoomService } from 'src/room/room.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import { ROOM_PRESENCE } from 'src/sfu/room-presence.port';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 import { EgressService } from 'src/egress/egress.service';
 import { RoomTokenHelper } from './room-token.helper';
 import type { Page } from './pagination.helper';
@@ -17,11 +18,10 @@ import type { EgressSessionView } from 'src/egress/egress.types';
 export class PlatformService {
   constructor(
     private readonly roomService: RoomService,
-    private readonly sfuService: SfuService,
+    @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
     private readonly roomTokenHelper: RoomTokenHelper,
     private readonly egressService: EgressService,
   ) {}
-
   createRoom(projectId: string, dto: CreatePlatformRoomDto) {
     return this.roomService.createProjectRoom(projectId, dto);
   }
@@ -33,7 +33,7 @@ export class PlatformService {
   async endRoom(projectId: string, roomId: string) {
     const room = await this.roomService.findProjectRoom(roomId, projectId);
     await this.roomService.softDeleteRoom(room.id);
-    await this.sfuService.endRoom(room.id);
+    await this.presence.endRoom(room.id);
   }
 
   async mintRoomToken(

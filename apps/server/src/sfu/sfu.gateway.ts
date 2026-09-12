@@ -7,10 +7,12 @@ import {
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Server, Socket, Namespace } from 'socket.io';
 import { SfuService } from './sfu.service';
+import { ROOM_PRESENCE } from './room-presence.port';
+import type { RoomPresence } from './room-presence.port';
 import type {
   SfuJoinPayload,
   SfuTransportConnectPayload,
@@ -49,9 +51,10 @@ export class SfuGateway
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly sfuService: SfuService) {
-    this.sfuService = sfuService;
-  }
+  constructor(
+    private readonly sfuService: SfuService,
+    @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
+  ) {}
 
   afterInit(): void {
     this.logger.log('SFU Gateway initialized');
@@ -224,7 +227,7 @@ export class SfuGateway
   }
 
   getOwnerSocketId(roomSlug: string): string | null {
-    return this.sfuService.getOwnerSocketId(roomSlug);
+    return this.presence.ownerSocketId(roomSlug);
   }
 
   emitToSocket(socketId: string, event: string, payload: unknown): void {

@@ -18,7 +18,9 @@ import {
   RoomSocketIdentity,
 } from 'src/auth/helpers/room-socket-auth.helper';
 import { RoomService } from 'src/room/room.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import { Inject } from '@nestjs/common';
+import { ROOM_PRESENCE } from 'src/sfu/room-presence.port';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 import { WhiteboardService } from './whiteboard.service';
 import type {
   WhiteboardJoinPayload,
@@ -49,7 +51,7 @@ export class WhiteboardGateway implements OnGatewayConnection {
   constructor(
     private readonly whiteboardService: WhiteboardService,
     private readonly roomService: RoomService,
-    private readonly sfu: SfuService,
+    @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -97,7 +99,7 @@ export class WhiteboardGateway implements OnGatewayConnection {
 
     if (
       identity.type === 'user' &&
-      !this.sfu.hasPeerInSlug(payload.roomSlug, identity.userId)
+      !this.presence.hasPeerInSlug(payload.roomSlug, identity.userId)
     ) {
       client.emit('whiteboard:error', {
         event: 'whiteboard:join',

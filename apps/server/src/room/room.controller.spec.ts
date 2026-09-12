@@ -8,7 +8,7 @@ import { PATH_METADATA } from '@nestjs/common/constants';
 import { RoomController } from './room.controller';
 import { RoomService } from './room.service';
 import { GuestService } from './guest.service';
-import { SfuService } from '../sfu/sfu.service';
+import { ROOM_PRESENCE } from '../sfu/room-presence.port';
 
 describe('RoomController history endpoints', () => {
   let controller: RoomController;
@@ -29,7 +29,7 @@ describe('RoomController history endpoints', () => {
       providers: [
         { provide: RoomService, useValue: roomService },
         { provide: GuestService, useValue: {} },
-        { provide: SfuService, useValue: {} },
+        { provide: ROOM_PRESENCE, useValue: { endRoom: jest.fn() } },
         { provide: JwtService, useValue: { verifyAsync: jest.fn() } },
       ],
     }).compile();

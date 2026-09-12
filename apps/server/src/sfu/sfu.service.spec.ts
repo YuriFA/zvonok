@@ -17,6 +17,8 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { TestingModule } from '@nestjs/testing';
 import { SfuService } from './sfu.service';
+import { RoomPresenceService } from './room-presence.service';
+import { ROOM_PRESENCE } from './room-presence.port';
 import { capabilitiesForRole, type ParticipantRole } from './capabilities';
 import type { Producer } from 'mediasoup/types';
 import { WorkerManager } from './worker-manager';
@@ -28,8 +30,103 @@ import type {
   RoomTokenVerifyResult,
 } from '../platform/room-token.helper';
 import { WebhookDispatcher } from '../webhooks/webhook-dispatcher.service';
-import { egressPlainTransportOptions } from '../egress/egress.config';
-import type { EgressTapDescriptor } from '../egress/egress.types';
+import { config as mediasoupConfig } from './config/mediasoup.config';
+import type { RoomTapDescriptor } from './room-media-source.port';
+
+let presence: RoomPresenceService;
+
+type PresenceHarness = {
+  records: Map<string, Record<string, unknown>>;
+  rooms: Map<string, Set<string>>;
+  roomOwners: Map<string, string>;
+  roomLocks: Map<string, boolean>;
+  roomClosedHandlers: Map<string, Set<() => void>>;
+  peerDetachHandlers: Map<string, Set<() => void>>;
+};
+
+/**
+ * The tests seed the historical single-map shape (`peers`, `rooms`,
+ * `roomOwners` on the service). After the presence split that state lives in
+ * RoomPresenceService (identity, membership) and SfuService.media
+ * (transports, producers, consumers); attach split views under the old names
+ * so the white-box seeds keep working unchanged.
+ */
+function attachSplitState(
+  service: SfuService,
+  presence: RoomPresenceService,
+): void {
+  const presenceState = presence as unknown as PresenceHarness;
+  const mediaState = service as unknown as {
+    media: Map<string, Record<string, unknown>>;
+    detachMedia: (socketId: string) => void;
+    closeRoomMedia: (roomId: string) => void;
+    routerRooms: Set<string>;
+  };
+  const peersView = {
+    set(socketId: string, peer: Record<string, unknown>) {
+      const roomId = (peer.roomId as string) ?? 'room-1';
+      presenceState.records.set(socketId, {
+        socketId,
+        roomId,
+        userId: peer.userId,
+        username: peer.username,
+        externalId: peer.externalId,
+        metadata: peer.metadata,
+        capabilities: (peer.capabilities as string[]) ?? [],
+        ownsRoom: peer.ownsRoom as boolean | undefined,
+        socket: peer.socket,
+      });
+      let members = presenceState.rooms.get(roomId);
+      if (!members) {
+        members = new Set();
+        presenceState.rooms.set(roomId, members);
+      }
+      members.add(socketId);
+      mediaState.media.set(socketId, {
+        sendTransport: peer.sendTransport,
+        recvTransport: peer.recvTransport,
+        producers: peer.producers ?? new Map(),
+        consumers: peer.consumers ?? new Map(),
+      });
+      // Mirror joinRoom's wiring so seeded peers detach and their rooms
+      // tear down like real ones.
+      presenceState.peerDetachHandlers.set(
+        socketId,
+        new Set([() => mediaState.detachMedia(socketId)]),
+      );
+      if (!mediaState.routerRooms.has(roomId)) {
+        mediaState.routerRooms.add(roomId);
+        if (!presenceState.roomClosedHandlers.has(roomId)) {
+          presenceState.roomClosedHandlers.set(roomId, new Set());
+        }
+        presenceState.roomClosedHandlers
+          .get(roomId)!
+          .add(() => mediaState.closeRoomMedia(roomId));
+      }
+      return peersView;
+    },
+    get(socketId: string) {
+      const media = mediaState.media.get(socketId);
+      const identity = presenceState.records.get(socketId);
+      if (!identity) return media;
+      return { ...media, ...identity };
+    },
+    values() {
+      return Array.from(presenceState.records.keys(), (socketId) =>
+        peersView.get(socketId),
+      )[Symbol.iterator]();
+    },
+    has(socketId: string) {
+      return presenceState.records.has(socketId);
+    },
+  };
+  Object.assign(service, {
+    peers: peersView,
+    rooms: presenceState.rooms,
+    roomOwners: presenceState.roomOwners,
+    roomLocks: presenceState.roomLocks,
+  });
+}
 
 type SfuServiceState = {
   peers: Map<string, unknown>;
@@ -95,6 +192,7 @@ beforeEach(async () => {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       SfuService,
+      RoomPresenceService,
       {
         provide: WorkerManager,
         useValue: {
@@ -109,11 +207,14 @@ beforeEach(async () => {
       { provide: WebhookDispatcher, useValue: webhooks },
       { provide: JwtService, useValue: jwtService },
       { provide: ConfigService, useValue: config },
+      { provide: ROOM_PRESENCE, useExisting: RoomPresenceService },
     ],
   }).compile();
 
   service = module.get<SfuService>(SfuService);
   workerManager = module.get(WorkerManager);
+  presence = module.get(RoomPresenceService);
+  attachSplitState(service, presence);
   (socket.emit as jest.Mock).mockReset();
   socket.handshake.auth = { token: 'access-jwt' };
 });
@@ -125,7 +226,6 @@ it('joins a room and emits RTP capabilities', async () => {
   await service.joinRoom(socket, {
     roomId: 'room-1',
   });
-
   expect(workerManager.createRouter).toHaveBeenCalledWith('room-1');
   expect(socket.emit).toHaveBeenCalledWith('sfu:joined', {
     routerRtpCapabilities,
@@ -1746,8 +1846,8 @@ describe('webhook emissions', () => {
 
   it('emits participant.left with reason disconnect on grace expiry', async () => {
     seedPeer(socket, 'user-1', 'room-1');
-    const previousGrace = service.rejoinGraceMs;
-    service.rejoinGraceMs = 10;
+    const previousGrace = presence.rejoinGraceMs;
+    presence.rejoinGraceMs = 10;
 
     await service.closePeer(socket);
     expect(webhooks.participantLeft).not.toHaveBeenCalled();
@@ -1759,7 +1859,7 @@ describe('webhook emissions', () => {
       { id: 'user-1', displayName: 'user-1' },
       'disconnect',
     );
-    service.rejoinGraceMs = previousGrace;
+    presence.rejoinGraceMs = previousGrace;
   });
 
   it('emits participant.left(room-end) for every peer, then room.ended', async () => {
@@ -1857,11 +1957,11 @@ describe('rejoin grace', () => {
   }
 
   beforeEach(() => {
-    service.rejoinGraceMs = 10;
+    presence.rejoinGraceMs = 10;
   });
 
   afterEach(() => {
-    service.rejoinGraceMs = 30_000;
+    presence.rejoinGraceMs = 30_000;
   });
 
   it('restores a same-id rejoin silently: no events, no webhooks', async () => {
@@ -2042,7 +2142,7 @@ describe('egress taps', () => {
     } as unknown as Peer);
   };
 
-  it('lists room producers across peers with sources, defaulting audio to camera', () => {
+  it('lists room taps across peers with sources, defaulting audio to camera', () => {
     addPeerWithProducers('socket-1', [
       { id: 'producer-video', kind: 'video', appData: { source: 'camera' } },
       { id: 'producer-screen', kind: 'video', appData: { source: 'screen' } },
@@ -2052,73 +2152,148 @@ describe('egress taps', () => {
     ]);
     serviceState().rooms.set('room-1', new Set(['socket-1', 'socket-2']));
 
-    expect(service.listRoomProducers('room-1')).toEqual([
+    expect(service.listTaps('room-1')).toEqual([
       { producerId: 'producer-video', kind: 'video', source: 'camera' },
       { producerId: 'producer-screen', kind: 'video', source: 'screen' },
       { producerId: 'producer-audio', kind: 'audio', source: 'camera' },
     ]);
   });
 
-  it('lists no producers for an unknown room', () => {
-    expect(service.listRoomProducers('room-404')).toEqual([]);
+  it('lists no taps for an unknown room', () => {
+    expect(service.listTaps('room-404')).toEqual([]);
   });
 
-  it('creates an egress plain transport with the shared options', async () => {
-    const createPlainTransport = jest.fn().mockResolvedValue({ id: 'plain-1' });
+  it('opens a tap with the shared plain transport options and target', async () => {
+    const connect = jest.fn().mockResolvedValue(undefined);
+    const closeTransport = jest.fn();
+    const createPlainTransport = jest.fn().mockResolvedValue({
+      connect,
+      close: closeTransport,
+      consume: jest.fn().mockResolvedValue({
+        rtpParameters: {},
+        on: jest.fn(),
+        off: jest.fn(),
+        close: jest.fn(),
+      }),
+    });
     workerManager.getRouter.mockImplementation(
       () => ({ createPlainTransport }) as unknown as Router<AppData>,
     );
 
-    const transport = await service.createEgressTransport('room-1');
+    await service.openTap('room-1', 'producer-video', {
+      ip: '127.0.0.1',
+      port: 42000,
+    });
 
-    expect(transport).toEqual({ id: 'plain-1' });
     expect(createPlainTransport).toHaveBeenCalledTimes(1);
-    expect(createPlainTransport.mock.calls[0][0]).toBe(
-      egressPlainTransportOptions,
-    );
+    expect(createPlainTransport.mock.calls[0][0]).toEqual({
+      listenIp: mediasoupConfig.webRtcTransport.listenIps[0],
+      rtcpMux: true,
+      comedia: false,
+    });
+    expect(connect).toHaveBeenCalledWith({ ip: '127.0.0.1', port: 42000 });
   });
 
-  it('rejects egress transport creation for an unknown room', async () => {
+  it('rejects tap creation for an unknown room', async () => {
     workerManager.getRouter.mockReturnValue(
       undefined as unknown as Router<AppData>,
     );
 
-    await expect(service.createEgressTransport('room-404')).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.openTap('room-404', 'producer-video', {
+        ip: '127.0.0.1',
+        port: 42000,
+      }),
+    ).rejects.toThrow(NotFoundException);
   });
 
-  it('creates an unpaused egress consumer and returns its RTP parameters', async () => {
+  it('opens an unpaused consumer, wires producer-close, and closes both on close', async () => {
     const routerRtpCapabilities = { codecs: [] } as unknown as RtpCapabilities;
     const rtpParameters = { mid: '0' } as unknown as RtpParameters;
-    const consume = jest
-      .fn()
-      .mockResolvedValue({ id: 'consumer-1', rtpParameters });
+    const consumerCbs = new Map<string, Set<() => void>>();
+    const fire = (event: string) => {
+      for (const cb of [...(consumerCbs.get(event) ?? [])]) cb();
+    };
+    const consumer = {
+      id: 'consumer-1',
+      rtpParameters,
+      on: jest.fn((event: string, cb: () => void) => {
+        let set = consumerCbs.get(event);
+        if (!set) {
+          set = new Set();
+          consumerCbs.set(event, set);
+        }
+        set.add(cb);
+      }),
+      off: jest.fn((event: string, cb: () => void) => {
+        consumerCbs.get(event)?.delete(cb);
+      }),
+      close: jest.fn(),
+    };
+    const consume = jest.fn().mockResolvedValue(consumer);
+    const closeTransport = jest.fn();
+    const transport = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      consume,
+      close: closeTransport,
+    } as unknown as PlainTransport;
     workerManager.getRouter.mockReturnValue({
       rtpCapabilities: routerRtpCapabilities,
+      createPlainTransport: jest.fn().mockResolvedValue(transport),
     } as unknown as Router<AppData>);
-    const transport = { consume } as unknown as PlainTransport;
 
-    const result = await service.createEgressConsumer(
-      'room-1',
-      transport,
-      'producer-video',
-    );
+    const handle = await service.openTap('room-1', 'producer-video', {
+      ip: '127.0.0.1',
+      port: 42000,
+    });
 
     expect(consume).toHaveBeenCalledWith({
       producerId: 'producer-video',
       rtpCapabilities: routerRtpCapabilities,
       paused: false,
-      appData: { egress: true },
+      appData: { tap: true },
     });
     expect(consume.mock.calls[0][0].rtpCapabilities).toBe(
       routerRtpCapabilities,
     );
-    expect(result.consumer).toEqual({ id: 'consumer-1', rtpParameters });
-    expect(result.rtpParameters).toBe(rtpParameters);
+    expect(handle.rtpParameters).toBe(rtpParameters);
+
+    const producerClosed = jest.fn();
+    const unsubscribe = handle.onProducerClosed(producerClosed);
+    fire('producerclose');
+    expect(producerClosed).toHaveBeenCalledTimes(1);
+    unsubscribe();
+    fire('producerclose');
+    expect(producerClosed).toHaveBeenCalledTimes(1);
+
+    handle.close();
+    expect(consumer.close).toHaveBeenCalledTimes(1);
+    expect(closeTransport).toHaveBeenCalledTimes(1);
   });
 
-  it('notifies egress handlers per room and honors unsubscribe', async () => {
+  it('closes the transport when consuming the producer fails', async () => {
+    const consume = jest.fn().mockRejectedValue(new Error('no producer'));
+    const closeTransport = jest.fn();
+    const transport = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      consume,
+      close: closeTransport,
+    } as unknown as PlainTransport;
+    workerManager.getRouter.mockReturnValue({
+      rtpCapabilities: { codecs: [] },
+      createPlainTransport: jest.fn().mockResolvedValue(transport),
+    } as unknown as Router<AppData>);
+
+    await expect(
+      service.openTap('room-1', 'producer-video', {
+        ip: '127.0.0.1',
+        port: 42000,
+      }),
+    ).rejects.toThrow('no producer');
+    expect(closeTransport).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies tap handlers per room and honors unsubscribe', async () => {
     const produce = jest.fn().mockResolvedValue({
       id: 'producer-live',
       kind: 'video',
@@ -2139,12 +2314,12 @@ describe('egress taps', () => {
     state.rooms.set('room-1', new Set([socket.id]));
     state.rooms.set('room-2', new Set(['socket-other']));
 
-    const room1Events: EgressTapDescriptor[] = [];
-    const room2Events: EgressTapDescriptor[] = [];
-    const unsubscribe = service.onRoomProducerAdded('room-1', (descriptor) =>
+    const room1Events: RoomTapDescriptor[] = [];
+    const room2Events: RoomTapDescriptor[] = [];
+    const unsubscribe = service.onProducerAdded('room-1', (descriptor) =>
       room1Events.push(descriptor),
     );
-    service.onRoomProducerAdded('room-2', (descriptor) =>
+    service.onProducerAdded('room-2', (descriptor) =>
       room2Events.push(descriptor),
     );
 
@@ -2189,7 +2364,7 @@ describe('egress taps', () => {
     addBarePeer('socket-1');
     serviceState().rooms.set('room-1', new Set(['socket-1']));
     const closed = jest.fn();
-    service.onRoomClosed('room-1', closed);
+    presence.onRoomClosed('room-1', closed);
 
     await service.endRoom('room-1');
 
@@ -2203,9 +2378,9 @@ describe('egress taps', () => {
     addBarePeer('socket-1');
     serviceState().rooms.set('room-1', new Set(['socket-1']));
     const closed = jest.fn();
-    service.onRoomClosed('room-1', closed);
-    const previousGrace = service.rejoinGraceMs;
-    service.rejoinGraceMs = 10;
+    presence.onRoomClosed('room-1', closed);
+    const previousGrace = presence.rejoinGraceMs;
+    presence.rejoinGraceMs = 10;
 
     await service.closePeer(createSocket('socket-1'));
     expect(closed).not.toHaveBeenCalled();
@@ -2215,14 +2390,14 @@ describe('egress taps', () => {
     expect(closed.mock.invocationCallOrder[0]).toBeLessThan(
       workerManager.closeRouter.mock.invocationCallOrder[0],
     );
-    service.rejoinGraceMs = previousGrace;
+    presence.rejoinGraceMs = previousGrace;
   });
 
   it('honors room-closed unsubscribe and fires only for the closed room', async () => {
     const room1Closed = jest.fn();
     const room2Closed = jest.fn();
-    const unsubscribe = service.onRoomClosed('room-1', room1Closed);
-    service.onRoomClosed('room-2', room2Closed);
+    const unsubscribe = presence.onRoomClosed('room-1', room1Closed);
+    presence.onRoomClosed('room-2', room2Closed);
     unsubscribe();
 
     await service.endRoom('room-1');

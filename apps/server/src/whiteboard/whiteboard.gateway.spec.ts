@@ -8,7 +8,7 @@ import { Server } from 'socket.io';
 import { WhiteboardGateway } from './whiteboard.gateway';
 import { WhiteboardService } from './whiteboard.service';
 import { RoomService } from 'src/room/room.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { RoomSocketIdentity } from 'src/auth/helpers/room-socket-auth.helper';
@@ -111,7 +111,7 @@ describe('WhiteboardGateway', () => {
     gateway = new WhiteboardGateway(
       whiteboard as unknown as WhiteboardService,
       roomService as unknown as RoomService,
-      sfu as unknown as SfuService,
+      sfu as unknown as RoomPresence,
       jwtService as unknown as JwtService,
       { get: jest.fn() } as unknown as ConfigService,
     );

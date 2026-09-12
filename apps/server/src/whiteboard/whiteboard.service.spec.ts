@@ -5,7 +5,7 @@ jest.mock('src/prisma/prisma.service', () => ({
 import * as Y from 'yjs';
 
 import { WhiteboardService } from './whiteboard.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 
 function elementUpdate(id: string): Uint8Array {
   const doc = new Y.Doc();
@@ -17,17 +17,17 @@ describe('WhiteboardService', () => {
   let service: WhiteboardService;
   let roomClosedHandler: () => void;
   let unsubscribe: jest.Mock;
-  const sfu = {
+  const presence = {
     onRoomClosed: jest.fn((_roomId: string, handler: () => void) => {
       roomClosedHandler = handler;
       return unsubscribe;
     }),
-  } as unknown as SfuService;
+  } as unknown as RoomPresence;
 
   beforeEach(() => {
     jest.clearAllMocks();
     unsubscribe = jest.fn();
-    service = new WhiteboardService(sfu);
+    service = new WhiteboardService(presence);
   });
 
   describe('getBoard', () => {
@@ -35,7 +35,7 @@ describe('WhiteboardService', () => {
       const board = service.getBoard('room-1');
       expect(board.mode).toBe('owner');
       expect(board.doc.getMap('elements').size).toBe(0);
-      expect(sfu.onRoomClosed).not.toHaveBeenCalled();
+      expect(presence.onRoomClosed).not.toHaveBeenCalled();
     });
   });
 
@@ -46,7 +46,7 @@ describe('WhiteboardService', () => {
       expect(
         service.getBoard('room-1').doc.getMap('elements').get('el:1'),
       ).toEqual({ id: 'el:1' });
-      expect(sfu.onRoomClosed).toHaveBeenCalledWith(
+      expect(presence.onRoomClosed).toHaveBeenCalledWith(
         'room-1',
         expect.any(Function),
       );
@@ -62,7 +62,7 @@ describe('WhiteboardService', () => {
     it('rejects oversized updates without creating a board', () => {
       const oversized = new Uint8Array(512 * 1024 + 1);
       expect(service.applyUpdate('room-1', oversized)).toBe('too-large');
-      expect(sfu.onRoomClosed).not.toHaveBeenCalled();
+      expect(presence.onRoomClosed).not.toHaveBeenCalled();
       expect(service.getBoard('room-1').doc.getMap('elements').size).toBe(0);
     });
 

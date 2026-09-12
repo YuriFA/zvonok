@@ -7,13 +7,15 @@ import {
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Socket } from 'socket.io';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { SfuService } from 'src/sfu/sfu.service';
+import { ROOM_PRESENCE } from 'src/sfu/room-presence.port';
+import type { RoomPresence } from 'src/sfu/room-presence.port';
 import { EgressService } from './egress.service';
 import type { EgressActionAck, EgressActionErrorCode } from './egress.types';
 
@@ -36,7 +38,7 @@ export class EgressSignalGateway {
   private readonly logger = new Logger(EgressSignalGateway.name);
 
   constructor(
-    private readonly sfu: SfuService,
+    @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
     private readonly egress: EgressService,
     private readonly prisma: PrismaService,
   ) {}
@@ -46,7 +48,7 @@ export class EgressSignalGateway {
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { record?: unknown; hls?: unknown },
   ): Promise<EgressActionAck> {
-    const peer = this.sfu.describeSocket(client.id);
+    const peer = this.presence.contextOf(client.id);
     if (!peer) {
       return deny('NOT_IN_ROOM', 'Join the room before controlling egress');
     }
@@ -108,7 +110,7 @@ export class EgressSignalGateway {
   async handleStop(
     @ConnectedSocket() client: Socket,
   ): Promise<EgressActionAck> {
-    const peer = this.sfu.describeSocket(client.id);
+    const peer = this.presence.contextOf(client.id);
     if (!peer) {
       return deny('NOT_IN_ROOM', 'Join the room before controlling egress');
     }
