@@ -5,6 +5,7 @@
  */
 
 export { ZvonokProvider, type ZvonokProviderProps } from "./zvonok-context.js";
+export { useZvonokSession, type ZvonokSession } from "./zvonok-context.js";
 export {
   useZvonokConnection,
   type UseZvonokConnectionOptions,
@@ -19,6 +20,20 @@ export {
   useAudioLevels,
   type AudioActivitySnapshot,
 } from "./use-audio-activity.js";
+export {
+  useRemoteAudio,
+  type UseRemoteAudioOptions,
+  type UseRemoteAudioResult,
+} from "./use-remote-audio.js";
+export {
+  useScreenShare,
+  type UseScreenShareResult,
+} from "./use-screen-share.js";
+export {
+  useGuestJoinRequests,
+  type GuestJoinRequest,
+  type UseGuestJoinRequestsResult,
+} from "./use-guest-join-requests.js";
 export {
   useHostControls,
   type UseHostControlsResult,

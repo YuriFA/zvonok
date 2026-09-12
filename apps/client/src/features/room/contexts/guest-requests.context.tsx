@@ -1,11 +1,10 @@
-import { sfuManager } from "@zvonok/client/sfu/manager";
-import type { SfuGuestJoinRequestPayload } from "@zvonok/client/sfu/types";
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { useGuestJoinRequests } from "@zvonok/react";
+import { createContext, useCallback, useContext } from "react";
 
 import { roomApi } from "../services/room-api";
 
 interface GuestRequestsContextValue {
-  pendingRequests: SfuGuestJoinRequestPayload[];
+  pendingRequests: { requestId: string; displayName: string }[];
   approveRequest: (requestId: string) => Promise<void>;
   denyRequest: (requestId: string) => Promise<void>;
 }
@@ -17,18 +16,13 @@ interface GuestRequestsProviderProps {
   children: React.ReactNode;
 }
 
+/**
+ * Owner-side guest flow: the request queue comes from the SDK's
+ * useGuestJoinRequests hook; approval and denial stay app-side (owner
+ * cookie session via the room REST API).
+ */
 export function GuestRequestsProvider({ roomSlug, children }: GuestRequestsProviderProps) {
-  const [pendingRequests, setPendingRequests] = useState<SfuGuestJoinRequestPayload[]>([]);
-
-  useEffect(() => {
-    return sfuManager.onGuestJoinRequest((payload) => {
-      setPendingRequests((prev) => [...prev, payload]);
-    });
-  }, []);
-
-  const removeRequest = useCallback((requestId: string) => {
-    setPendingRequests((prev) => prev.filter((r) => r.requestId !== requestId));
-  }, []);
+  const { pendingRequests, removeRequest } = useGuestJoinRequests();
 
   const approveRequest = useCallback(
     async (requestId: string) => {

@@ -5,7 +5,7 @@
  * useHostControls wraps this factory for React consumers.
  */
 
-import type { ISfuManager } from "@zvonok/client/sfu/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { SfuHostActionError } from "@zvonok/client/sfu/types";
 
 import { ZvonokHostError } from "./errors.js";
@@ -33,8 +33,8 @@ function toZvonokHostError(error: unknown): ZvonokHostError {
  * actions that reject with DISCONNECTED, so callers can bind before a
  * session exists.
  */
-export function createHostControls(manager: ISfuManager | null): HostControls {
-  const requireManager = (): ISfuManager => {
+export function createHostControls(manager: SfuManager | null): HostControls {
+  const requireManager = (): SfuManager => {
     if (!manager) {
       throw new ZvonokHostError(
         "DISCONNECTED",
@@ -44,7 +44,7 @@ export function createHostControls(manager: ISfuManager | null): HostControls {
     return manager;
   };
 
-  const run = (action: (manager: ISfuManager) => Promise<void>): Promise<void> =>
+  const run = (action: (manager: SfuManager) => Promise<void>): Promise<void> =>
     action(requireManager()).catch((error: unknown) => {
       throw toZvonokHostError(error);
     });

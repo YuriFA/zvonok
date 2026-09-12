@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import type { Participant } from "@/components/room/participants-list";
-import type { RemotePeerMedia } from "@/hooks/use-mediasoup";
+import type { RemotePeerMedia } from "@/features/room/hooks/use-room-sfu";
 
 export interface UseRoomParticipantsOptions {
   userId: string | undefined;

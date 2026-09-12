@@ -1,7 +1,7 @@
 import { CaptureState, isActive } from "@zvonok/client/media/capture-state";
 import { useCallback, useEffect, useState } from "react";
 
-import { useVideoCaptureState, useAudioCaptureState } from "../contexts/media-manager.context";
+import { useZvonokSession } from "@zvonok/react";
 
 export interface UseMediaControlsReturn {
   isVideoEnabled: boolean;
@@ -15,8 +15,9 @@ export interface UseMediaControlsReturn {
 }
 
 export function useMediaControls(): UseMediaControlsReturn {
-  const videoStateReader = useVideoCaptureState();
-  const audioStateReader = useAudioCaptureState();
+  const mediaManager = useZvonokSession().mediaManager;
+  const videoStateReader = mediaManager.videoCapture;
+  const audioStateReader = mediaManager.audioCapture;
 
   const [isVideoEnabled, setIsVideoEnabled] = useState(() => isActive(videoStateReader.getState()));
   const [isAudioEnabled, setIsAudioEnabled] = useState(() => isActive(audioStateReader.getState()));

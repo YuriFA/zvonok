@@ -4,8 +4,7 @@
  */
 
 import type { Socket } from "socket.io-client";
-import { SfuConnection } from "@zvonok/client/sfu/connection";
-import { SfuManager } from "@zvonok/client/sfu/manager";
+import { createSfuManager, type SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createDeferred } from "./deferred.js";
@@ -17,10 +16,16 @@ const CONNECTION_TIMEOUT_MS = 10_000;
 const JOIN_TIMEOUT_MS = 10_000;
 
 export interface UseZvonokConnectionOptions {
-  /** Room slug to join. */
-  roomSlug: string;
-  /** Room token minted by the server; the server derives identity from it. */
-  token: string;
+  /** Room slug to join. Provide the slug, the room id, or both. */
+  roomSlug?: string;
+  /** Room id to join, for consumers that know the id before the slug. */
+  roomId?: string;
+  /**
+   * Room token minted by the server; the server derives identity from it.
+   * Omit it to join on the browser session the server verifies at the
+   * handshake (cookie-identity deployments).
+   */
+  token?: string;
   /**
    * Supplies a fresh room token when a rejoin is denied for expiry. Called
    * at most once per rejoin; the initial join never calls it.
@@ -33,13 +38,15 @@ export interface UseZvonokConnectionResult {
   error: Error | null;
   join(): Promise<void>;
   leave(): void;
-  /** Live SfuManager instance; null until the first join. Escape hatch for advanced consumers. */
-  manager: SfuManager | null;
   /** True when the room is locked by the host. */
   isRoomLocked: boolean;
   /** True after the server removed this peer from the room. */
   wasKicked: boolean;
-  produceTrack(track: MediaStreamTrack): Promise<boolean>;
+  /** True after the server ended the room; the connection was released. */
+  roomEnded: boolean;
+  /** Live SfuManager instance; null until the first join. Escape hatch for advanced consumers. */
+  manager: SfuManager | null;
+  produceTrack(track: MediaStreamTrack, options?: { isMobile?: boolean }): Promise<boolean>;
   pauseProducer(kind: "audio" | "video"): void;
   resumeProducer(kind: "audio" | "video"): void;
   closeProducer(kind: "audio" | "video"): void;
@@ -126,7 +133,12 @@ function createJoinAckWaiter(
   };
 }
 
-export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvonokConnectionOptions): UseZvonokConnectionResult {
+export function useZvonokConnection({
+  roomId,
+  roomSlug,
+  token,
+  tokenProvider,
+}: UseZvonokConnectionOptions): UseZvonokConnectionResult {
   const session = useZvonokSession();
   const managerRef = useRef<SfuManager | null>(null);
   const joinPromiseRef = useRef<Promise<void> | null>(null);
@@ -137,7 +149,7 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
     if (managerRef.current) {
       return managerRef.current;
     }
-    const manager = new SfuManager(new SfuConnection(session.serverUrl));
+    const manager = createSfuManager({ serverUrl: session.serverUrl });
     managerRef.current = manager;
     session.update({ manager });
     return manager;
@@ -161,9 +173,17 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
     if (joinPromiseRef.current) {
       return joinPromiseRef.current;
     }
+    if (!roomId && !roomSlug) {
+      return Promise.reject(
+        new ZvonokJoinError(
+          "INVALID_JOIN_PAYLOAD",
+          "Provide a room id or a room slug to join",
+        ),
+      );
+    }
     const attempt = (async () => {
       const manager = ensureManager();
-      session.update({ status: "connecting", error: null });
+      session.update({ status: "connecting", error: null, roomEnded: false });
       manager.connect();
 
       const socket = manager.getSocket();
@@ -185,7 +205,11 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
         JOIN_TIMEOUT_MS,
         () => {
           void manager.joinRoom(
-            { roomId: roomSlug, roomSlug, token },
+            {
+              ...(roomId ? { roomId } : {}),
+              ...(roomSlug ? { roomSlug } : {}),
+              ...(token ? { token } : {}),
+            },
             { tokenProvider },
           );
         },
@@ -204,7 +228,8 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
       joinPromiseRef.current = null;
     });
     return joinPromiseRef.current;
-  }, [ensureManager, roomSlug, session, token, tokenProvider]);
+  }, [ensureManager, roomId, roomSlug, session, token, tokenProvider]);
+
 
   // Automatic recovery: mirror the manager's reconnecting/connected cycle
   // into the session status. A recovery failure surfaces typed as an error.
@@ -254,6 +279,23 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
     };
   }, [session.manager, session]);
 
+  // A server-ended room is terminal: surface the state and release the
+  // connection (which also stops automatic recovery).
+  useEffect(() => {
+    const manager = session.manager;
+    if (!manager) {
+      return;
+    }
+    const offRoomEnded = manager.onRoomEnded(() => {
+      session.update({ roomEnded: true });
+      leaveRef.current();
+    });
+    return () => {
+      offRoomEnded();
+    };
+  }, [session.manager, session]);
+
+
   // Disconnect when the owning component unmounts.
   const leaveRef = useRef(leave);
   useEffect(() => {
@@ -275,12 +317,13 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
   }, []);
 
   const produceTrack = useCallback(
-    async (track: MediaStreamTrack): Promise<boolean> => {
-      const producer = await requireManager().produce(track);
+    async (track: MediaStreamTrack, options?: { isMobile?: boolean }): Promise<boolean> => {
+      const producer = await requireManager().produce(track, options);
       return producer !== null;
     },
     [requireManager],
   );
+
 
   const pauseProducer = useCallback(
     (kind: "audio" | "video"): void => {
@@ -333,6 +376,7 @@ export function useZvonokConnection({ roomSlug, token, tokenProvider }: UseZvono
     manager: session.manager,
     isRoomLocked: session.locked,
     wasKicked,
+    roomEnded: session.roomEnded,
     produceTrack,
     pauseProducer,
     resumeProducer,

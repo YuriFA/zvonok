@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { RemotePeerMedia } from "@/hooks/use-mediasoup";
+import type { RemotePeerMedia } from "@/features/room/hooks/use-room-sfu";
 
 import { CallAudioMixer } from "../lib/call-audio-mixer";
 import { CallRecordingCompositor, type RecordingSource } from "../lib/call-recording-compositor";

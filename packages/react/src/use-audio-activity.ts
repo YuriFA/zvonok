@@ -6,7 +6,7 @@
 
 import { ActiveSpeakerDetector } from "@zvonok/client/audio/active-speaker-detector";
 import { AudioLevelSampler } from "@zvonok/client/audio/audio-level-sampler";
-import type { ISfuManager } from "@zvonok/client/sfu/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { useZvonokSession } from "./zvonok-context.js";
@@ -48,7 +48,7 @@ interface RemoteNodes {
  * Purely observational: no signalling, no media playout.
  */
 export class AudioActivityEngine {
-  private readonly manager: ISfuManager;
+  private readonly manager: SfuManager;
   private readonly sampler: NonNullable<AudioActivityEngineOptions["sampler"]>;
   private readonly detector = new ActiveSpeakerDetector();
   private readonly intervalMs: number;
@@ -63,7 +63,7 @@ export class AudioActivityEngine {
   private snapshot: AudioActivitySnapshot = EMPTY_AUDIO_ACTIVITY;
   private refCount = 0;
 
-  constructor(manager: ISfuManager, options: AudioActivityEngineOptions = {}) {
+  constructor(manager: SfuManager, options: AudioActivityEngineOptions = {}) {
     this.manager = manager;
     this.sampler = options.sampler ?? new AudioLevelSampler();
     this.intervalMs = options.intervalMs ?? TICK_MS;
@@ -197,9 +197,9 @@ export class AudioActivityEngine {
 }
 
 /** One engine per manager, shared by every hook consumer in the tree. */
-const engines = new WeakMap<ISfuManager, AudioActivityEngine>();
+const engines = new WeakMap<SfuManager, AudioActivityEngine>();
 
-function engineFor(manager: ISfuManager): AudioActivityEngine {
+function engineFor(manager: SfuManager): AudioActivityEngine {
   let engine = engines.get(manager);
   if (!engine) {
     engine = new AudioActivityEngine(manager);

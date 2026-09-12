@@ -1,3 +1,4 @@
+import type { UseZvonokConnectionResult } from "@zvonok/react";
 import { useNavigate } from "react-router";
 
 import { useAuth } from "@/features/auth/contexts/auth.context";
@@ -15,19 +16,21 @@ interface Props {
   room: Room;
   displayName: string;
   currentUserId: string | undefined;
+  connection: UseZvonokConnectionResult;
 }
 
-export const RoomView = ({ room, displayName, currentUserId }: Props) => {
+export const RoomView = ({ room, displayName, currentUserId, connection }: Props) => {
   const navigate = useNavigate();
   const endRoom = useEndRoom({
     onSuccess: () => navigate("/"),
   });
   const { user } = useAuth();
   const isOwner = user?.id === room.ownerId;
-  const session = useRoomSession({ room, userId: user?.id, displayName });
+  const session = useRoomSession({ userId: user?.id, displayName, connection });
+
 
   return (
-    <PeerQualityProvider enabled={session.sfuState.connectionState === "connected"}>
+    <PeerQualityProvider enabled={session.connectionState === "connected"}>
       <RoomAudioContextProvider session={session}>
         <div className="flex h-dscreen flex-col" data-testid="room-view">
           <ActiveRoomHeader

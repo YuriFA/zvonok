@@ -40,64 +40,95 @@ vi.mock("@/features/room/services/room-api", () => ({
   },
 }));
 
-vi.mock("@zvonok/client/media/manager-factory", () => ({
-  createMediaManager: () => ({
-    start: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn(),
-    getVideoState: () => CaptureState.ACTIVE,
-    getAudioState: () => CaptureState.ACTIVE,
-    getDeviceService: () => ({
-      getUserMedia: vi.fn(),
-      enumerateDevices: vi.fn(),
-      queryPermission: vi.fn(),
-    }),
-    videoCapture: {
-      getState: () => CaptureState.ACTIVE,
-      getTrack: () => ({ kind: "video" }) as MediaStreamTrack,
-      onStateChange: vi.fn(() => () => {}),
-      start: vi.fn(),
-      stop: vi.fn(),
-      switchDevice: vi.fn(),
-      toggle: vi.fn(),
-    },
-    audioCapture: {
-      getState: () => CaptureState.ACTIVE,
-      getTrack: () => ({ kind: "audio" }) as MediaStreamTrack,
-      onStateChange: vi.fn(() => () => {}),
-      start: vi.fn(),
-      stop: vi.fn(),
-      switchDevice: vi.fn(),
-      toggle: vi.fn(),
-    },
-  }),
-}));
+const mockJoin = vi.hoisted(() => vi.fn(async () => {}));
 
-vi.mock("@/features/media/contexts/media-manager.context", () => ({
-  useVideoCaptureState: () => ({
+const mockSfuManagerValue = {
+  getProducerByKind: () => undefined,
+  replaceTrack: vi.fn(async () => true),
+  onQualityStats: () => () => {},
+  onParticipantLeft: () => () => {},
+  onStateChange: () => () => {},
+  startStatsCollection: vi.fn(),
+  stopStatsCollection: vi.fn(),
+};
+
+const mockConnection = {
+  status: "joined",
+  error: null,
+  join: mockJoin,
+  leave: vi.fn(),
+  manager: mockSfuManagerValue,
+  isRoomLocked: false,
+  wasKicked: false,
+  roomEnded: false,
+  produceTrack: vi.fn(async () => true),
+  pauseProducer: vi.fn(),
+  resumeProducer: vi.fn(),
+  closeProducer: vi.fn(),
+  replaceTrack: vi.fn(async () => true),
+  hasProducer: () => false,
+};
+
+const mockMediaManager = {
+  start: vi.fn().mockResolvedValue(undefined),
+  stop: vi.fn(),
+  videoCapture: {
     getState: () => CaptureState.ACTIVE,
+    getTrack: () => null,
+    getStream: () => null,
     onStateChange: vi.fn(() => () => {}),
-  }),
-  useAudioCaptureState: () => ({
+    start: vi.fn(),
+    stop: vi.fn(),
+    switchDevice: vi.fn(),
+    toggle: vi.fn(),
+  },
+  audioCapture: {
     getState: () => CaptureState.ACTIVE,
+    getTrack: () => null,
+    getStream: () => null,
     onStateChange: vi.fn(() => () => {}),
-  }),
-  useVideoCaptureControl: () => ({ toggle: vi.fn(), switchDevice: vi.fn() }),
-  useAudioCaptureControl: () => ({ toggle: vi.fn(), switchDevice: vi.fn() }),
-  useCaptureTrackProvider: () => ({ getTrack: () => null, onStateChange: vi.fn(() => () => {}) }),
-  useDeviceService: () => ({
+    start: vi.fn(),
+    stop: vi.fn(),
+    switchDevice: vi.fn(),
+    toggle: vi.fn(),
+  },
+  getDeviceService: () => ({
     getUserMedia: vi.fn(),
-    enumerateDevices: vi.fn(),
+    enumerateDevices: vi.fn().mockResolvedValue([]),
     queryPermission: vi.fn(),
   }),
-  useMediaManagerDirect: () => ({
-    start: vi.fn().mockResolvedValue(undefined),
-    stop: vi.fn(),
-    getVideoState: () => CaptureState.ACTIVE,
-    getAudioState: () => CaptureState.ACTIVE,
-    videoCapture: { getState: () => CaptureState.ACTIVE },
-    audioCapture: { getState: () => CaptureState.ACTIVE },
+};
+
+vi.mock("@zvonok/react", () => ({
+  ZvonokProvider: ({ children }: { children: React.ReactNode }) => children,
+  useZvonokSession: () => ({
+    manager: mockSfuManagerValue,
+    mediaManager: mockMediaManager,
+    status: "joined",
+    error: null,
+    locked: false,
+    roomEnded: false,
+    update: vi.fn(),
   }),
-  MediaManagerProvider: ({ children }: { children: React.ReactNode }) => children,
+  useZvonokConnection: () => mockConnection,
+  useParticipants: () => ({ participants: [] }),
+  useOwnCapabilities: () => [],
+  useEgressState: () => ({ isRecording: false }),
+  useEgressControls: () => ({ start: vi.fn(async () => {}), stop: vi.fn(async () => {}) }),
+  useScreenShare: () => ({
+    sharing: false,
+    screenStream: null,
+    blocked: false,
+    start: vi.fn(async () => {}),
+    stop: vi.fn(),
+  }),
+  useGuestJoinRequests: () => ({ pendingRequests: [], removeRequest: vi.fn() }),
+  createHostControls: () => ({
+    muteAll: vi.fn(async () => {}),
+    lockRoom: vi.fn(async () => {}),
+    mutePeer: vi.fn(async () => {}),
+  }),
+  EMPTY_ROOM_STATE: { participants: [], locked: false, mutedByHost: false },
 }));
 
 vi.mock("@/features/media/contexts/media-stream.context", () => ({
@@ -107,31 +138,6 @@ vi.mock("@/features/media/contexts/media-stream.context", () => ({
     stop: vi.fn(),
   }),
   MediaStreamProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-const mockOnRoomEnded = vi.hoisted(() => vi.fn(() => () => {}));
-
-vi.mock("@zvonok/client/sfu/manager", () => ({
-  sfuManager: {
-    onRoomEnded: mockOnRoomEnded,
-    onGuestJoinRequest: vi.fn(() => () => {}),
-    getSocket: () => null,
-  },
-}));
-
-const mockSfuManagerValue = {
-  getProducerByKind: () => undefined,
-  replaceTrack: vi.fn(),
-  onQualityStats: () => () => {},
-  onParticipantLeft: () => () => {},
-  onStateChange: () => () => {},
-  startStatsCollection: vi.fn(),
-  stopStatsCollection: vi.fn(),
-};
-
-vi.mock("@/features/sfu/contexts/sfu-manager.context", () => ({
-  useSfuManager: () => mockSfuManagerValue,
-  SfuManagerProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock("@/features/room/hooks/use-room-session", () => ({
@@ -146,15 +152,13 @@ vi.mock("@/components/local-video", () => ({
 
 vi.mock("@/features/room/contexts/room-audio.context", () => ({
   useRoomAudioContext: () => ({
-    mixer: null,
-    audioElement: null,
-    store: {
-      getLevel: () => 0,
-      getActiveSpeakerId: () => null,
-      subscribeLevel: () => () => {},
-      subscribeGlobal: () => () => {},
-    },
+    setSink: vi.fn(async () => true),
+    setVolume: vi.fn(),
+    levels: {},
+    activeSpeakerId: null,
   }),
+  useAudioLevel: () => 0,
+  useActiveSpeakerId: () => null,
   RoomAudioContextProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
@@ -254,31 +258,28 @@ describe("RoomPage", () => {
       },
       toggleVideo: mockToggleVideo,
       toggleAudio: mockToggleAudio,
-      sfuState: {
-        connectionState: "connected",
-        isDeviceLoaded: true,
-        sendTransportConnected: true,
-        recvTransportConnected: true,
-        audioProducerId: "audio-producer",
-        videoProducerId: "video-producer",
-        capabilities: [
-          "send-audio",
-          "send-video",
-          "send-screenshare",
-          "mute-users",
-          "remove-participants",
-          "lock-room",
-          "start-recording",
-          "start-broadcast",
-        ],
-      },
+      connectionState: "connected",
+      capabilities: [
+        "send-audio",
+        "send-video",
+        "send-screenshare",
+        "mute-users",
+        "remove-participants",
+        "lock-room",
+        "start-recording",
+        "start-broadcast",
+      ],
       remotePeers: [
         {
           userId: "user-2",
           username: "bob",
-          stream: { id: "remote-stream" } as MediaStream,
-          isVideoEnabled: true,
+          cameraStream: { id: "cam-remote" } as unknown as MediaStream,
+          screenStream: null,
+          audioStream: { id: "mic-remote" } as unknown as MediaStream,
+          isCameraEnabled: true,
+          isScreenSharing: false,
           isAudioEnabled: true,
+          mutedByHost: false,
         },
       ],
       wasKicked: false,

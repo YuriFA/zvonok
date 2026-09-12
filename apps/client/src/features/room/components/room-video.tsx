@@ -2,7 +2,6 @@ import { Mic, MicOff } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { usePeerQualityContext } from "../contexts/peer-quality.context";
-import { useRoomAudioContext } from "../contexts/room-audio.context";
 import { RoomVideoAudioOverlay } from "./room-video-audio-overlay";
 import { RoomVideoQualityBadge } from "./room-video-quality-badge";
 import { RoomVideoSpeakerTile } from "./room-video-speaker-tile";
@@ -24,7 +23,6 @@ export function RoomVideo({
   style,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { store: audioStore } = useRoomAudioContext();
   const { store: qualityStore } = usePeerQualityContext();
 
   useEffect(() => {
@@ -34,7 +32,7 @@ export function RoomVideo({
   }, [stream]);
 
   return (
-    <RoomVideoSpeakerTile audioStore={audioStore} userId={userId} style={style}>
+    <RoomVideoSpeakerTile userId={userId} style={style}>
       <div className="relative size-full overflow-hidden rounded-lg bg-muted">
         <video
           ref={videoRef}
@@ -45,7 +43,7 @@ export function RoomVideo({
         />
 
         {!isVideoEnabled && (
-          <RoomVideoAudioOverlay audioStore={audioStore} userId={userId} username={username} />
+          <RoomVideoAudioOverlay userId={userId} username={username} />
         )}
 
         {username && (

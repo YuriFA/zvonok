@@ -1,9 +1,73 @@
 import { act, render } from "@testing-library/react";
-import { createMockSfuManager } from "@zvonok/client/sfu/__mocks__/manager";
 import type { PeerQualityStats, QualityLevel, SfuParticipantInfo } from "@zvonok/client/sfu/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect, useRef } from "react";
 
-import { SfuManagerProvider } from "@/features/sfu/contexts/sfu-manager.context";
+import { ZvonokProvider } from "@zvonok/react";
+import { useZvonokSession } from "@zvonok/react";
+
+/**
+ * Socket-level fake of the parts of SfuManager the auto-quality engine
+ * consumes: stats subscription, layer switching, participant registry.
+ */
+function createFakeSfuManager() {
+  const participants = new Map<string, SfuParticipantInfo>();
+  const qualityListeners = new Set<(stats: Map<string, PeerQualityStats>) => void>();
+  const participantLeftListeners = new Set<(userId: string) => void>();
+  return {
+    startStatsCollection: vi.fn(),
+    stopStatsCollection: vi.fn(),
+    onParticipantLeft: vi.fn((listener: (userId: string) => void) => {
+      participantLeftListeners.add(listener);
+      return () => participantLeftListeners.delete(listener);
+    }),
+    onQualityStats: vi.fn((listener: (stats: Map<string, PeerQualityStats>) => void) => {
+      qualityListeners.add(listener);
+      return () => qualityListeners.delete(listener);
+    }),
+    emitQualityStats: (stats: Map<string, PeerQualityStats>) => {
+      qualityListeners.forEach((listener) => listener(stats));
+    },
+    setPreferredLayers: vi.fn(),
+    // The real manager resolves a user's video consumer; the fake hands
+    // back the user's current producer id so assertions read naturally.
+    getVideoConsumerIdForUserId: vi.fn((userId: string) => {
+      const peer = participants.get(userId);
+      return peer ? peer.producers.keys().next().value : undefined;
+    }),
+    getParticipant: (userId: string) => participants.get(userId),
+    simulateParticipantJoined: (peer: SfuParticipantInfo) => {
+      participants.set(peer.userId, peer);
+    },
+    simulateParticipantLeft: (userId: string) => {
+      participants.delete(userId);
+      participantLeftListeners.forEach((listener) => listener(userId));
+    },
+  };
+}
+
+/** Test helper: pushes a manager into the provider session. */
+function SessionManagerProvider({ manager, children }: { manager: unknown; children: React.ReactNode }) {
+  return (
+    <ZvonokProvider serverUrl="https://sfu.test">
+      <SessionSetter manager={manager} />
+      {children}
+    </ZvonokProvider>
+  );
+}
+
+function SessionSetter({ manager }: { manager: unknown }) {
+  const session = useZvonokSession();
+  // Update exactly once: every update recreates the session object, so a
+  // session-dependent effect here would loop forever.
+  const doneRef = useRef(false);
+  useEffect(() => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    session.update({ manager: manager as never, status: "joined" });
+  }, []);
+  return null;
+}
 
 import { PeerQualityProvider } from "../peer-quality.context";
 
@@ -53,18 +117,18 @@ describe("PeerQualityProvider", () => {
   });
 
   it("uses the latest consumer id when the consumer is replaced during debounce", () => {
-    const manager = createMockSfuManager();
+    const manager = createFakeSfuManager();
     const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
     vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
 
     manager.simulateParticipantJoined(createPeer("user-2", "producer-old"));
 
     render(
-      <SfuManagerProvider manager={manager}>
+      <SessionManagerProvider manager={manager}>
         <PeerQualityProvider>
           <div />
         </PeerQualityProvider>
-      </SfuManagerProvider>,
+      </SessionManagerProvider>,
     );
 
     act(() => {
@@ -86,18 +150,18 @@ describe("PeerQualityProvider", () => {
   });
 
   it("clears stale layer state when a peer leaves and rejoins with the same user id", () => {
-    const manager = createMockSfuManager();
+    const manager = createFakeSfuManager();
     const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
     vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
 
     manager.simulateParticipantJoined(createPeer("user-2", "producer-old"));
 
     render(
-      <SfuManagerProvider manager={manager}>
+      <SessionManagerProvider manager={manager}>
         <PeerQualityProvider>
           <div />
         </PeerQualityProvider>
-      </SfuManagerProvider>,
+      </SessionManagerProvider>,
     );
 
     act(() => {

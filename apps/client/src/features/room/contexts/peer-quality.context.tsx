@@ -1,8 +1,9 @@
 import { qualityToSpatialLayer } from "@zvonok/client/sfu/quality-score";
 import type { SimulcastSpatialLayer } from "@zvonok/client/sfu/types";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { useZvonokSession } from "@zvonok/react";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 
-import { useSfuManager } from "@/features/sfu/contexts/sfu-manager.context";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 
 import { PeerQualityStore } from "./peer-quality.store";
@@ -23,7 +24,7 @@ interface Props {
 
 export function PeerQualityProvider({ enabled = true, children }: Props) {
   const storeRef = useRef<PeerQualityStore>(new PeerQualityStore());
-  const sfuManager = useSfuManager();
+  const sfuManager = useZvonokSession().manager as SfuManager | null;
   const isMobile = useIsMobile();
 
   /**
@@ -34,7 +35,7 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
   const lastEmittedLayer = useRef<Map<string, SimulcastSpatialLayer>>(new Map());
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !sfuManager) {
       storeRef.current.reset();
       return;
     }

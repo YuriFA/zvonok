@@ -6,7 +6,7 @@ import { LocalVideo } from "@/components/local-video";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-import { useVideoCaptureControl, useAudioCaptureControl } from "../contexts/media-manager.context";
+import { useZvonokSession } from "@zvonok/react";
 import { useMediaStreamContext } from "../contexts/media-stream.context";
 import { useDeviceSwitching } from "../hooks/use-device-switching";
 import { useMediaControls } from "../hooks/use-media-controls";
@@ -29,8 +29,9 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
   const { videoStream, videoState, audioState } = useMediaStreamContext();
   const mediaControls = useMediaControls();
 
-  const videoControl = useVideoCaptureControl();
-  const audioControl = useAudioCaptureControl();
+  const mediaManager = useZvonokSession().mediaManager;
+  const videoControl = mediaManager.videoCapture;
+  const audioControl = mediaManager.audioCapture;
 
   const {
     videoDevices,

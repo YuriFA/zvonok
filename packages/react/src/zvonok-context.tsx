@@ -17,6 +17,8 @@ export interface ZvonokSessionState {
   error: Error | null;
   /** Latest sfu:room-locked value; false until the server reports a lock. */
   locked: boolean;
+  /** True after the server ended the room; terminal for the session. */
+  roomEnded: boolean;
 }
 
 export interface ZvonokSession extends ZvonokSessionState {
@@ -39,6 +41,7 @@ export function ZvonokProvider({ serverUrl, children }: ZvonokProviderProps) {
     status: "disconnected",
     error: null,
     locked: false,
+    roomEnded: false,
   });
   const [mediaManager] = useState(() => createMediaManager());
 

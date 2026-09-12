@@ -1,12 +1,7 @@
 import { isActive } from "@zvonok/client/media/capture-state";
 import { useCallback, useRef } from "react";
 
-import {
-  useVideoCaptureControl,
-  useAudioCaptureControl,
-  useVideoCaptureState,
-  useAudioCaptureState,
-} from "@/features/media/contexts/media-manager.context";
+import { useZvonokSession } from "@zvonok/react";
 
 export interface UseDeviceSwitchingReturn {
   switchVideoDevice: (deviceId: string) => Promise<boolean>;
@@ -14,10 +9,11 @@ export interface UseDeviceSwitchingReturn {
 }
 
 export function useDeviceSwitching(): UseDeviceSwitchingReturn {
-  const videoController = useVideoCaptureControl();
-  const audioController = useAudioCaptureControl();
-  const videoStateReader = useVideoCaptureState();
-  const audioStateReader = useAudioCaptureState();
+  const mediaManager = useZvonokSession().mediaManager;
+  const videoController = mediaManager.videoCapture;
+  const audioController = mediaManager.audioCapture;
+  const videoStateReader = mediaManager.videoCapture;
+  const audioStateReader = mediaManager.audioCapture;
   const isSwitchingRef = useRef(false);
 
   const switchVideoDevice = useCallback(

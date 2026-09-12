@@ -8,28 +8,36 @@ import { createMockSfuManager, tokenFor } from "./doubles.js";
 const sfuHarness = vi.hoisted(() => ({
   instances: [] as ReturnType<typeof createMockSfuManager>[],
 }));
-vi.mock("@zvonok/client/sfu/manager", () => ({
-  SfuManager: vi.fn(function () {
-    const mock = createMockSfuManager();
-    sfuHarness.instances.push(mock);
-    return mock.manager;
-  }),
-}));
-vi.mock("@zvonok/client/sfu/connection", () => ({
-  SfuConnection: vi.fn(function () {
-    return {};
-  }),
-}));
+vi.mock("@zvonok/client/sfu/manager", () => {
+  const SfuManagerModule = {
+    SfuManager: vi.fn(function () {
+      const mock = createMockSfuManager();
+      sfuHarness.instances.push(mock);
+      return mock.manager;
+    }),
+  };
+  return {
+    SfuManager: SfuManagerModule.SfuManager,
+    createSfuManager: vi.fn(() => new SfuManagerModule.SfuManager()),
+  };
+});
 
-const TOKEN = tokenFor({ participantId: "participant-9", projectId: "p1", roomId: "room-1" });
+const TOKEN = tokenFor({
+  participantId: "participant-9",
+  projectId: "p1",
+  roomId: "room-1",
+});
 
 function Provider({ children }: { children: React.ReactNode }) {
-  return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
+  return (
+    <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
+  );
 }
 
 function renderConnection(tokenProvider?: () => Promise<string>) {
   return renderHook(
-    () => useZvonokConnection({ roomSlug: "room-1", token: TOKEN, tokenProvider }),
+    () =>
+      useZvonokConnection({ roomSlug: "room-1", token: TOKEN, tokenProvider }),
     { wrapper: Provider },
   );
 }
@@ -38,7 +46,9 @@ function lastSfu() {
   return sfuHarness.instances.at(-1) as ReturnType<typeof createMockSfuManager>;
 }
 
-async function joinFully(result: ReturnType<typeof renderConnection>["result"]) {
+async function joinFully(
+  result: ReturnType<typeof renderConnection>["result"],
+) {
   let promise: Promise<void> = Promise.resolve();
   act(() => {
     promise = result.current.join();

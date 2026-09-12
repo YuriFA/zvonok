@@ -19,7 +19,6 @@ import type { Socket } from "socket.io-client";
 
 import { SfuConnection } from "./connection.js";
 import { SfuEventRouter, type SfuEventHandlers } from "./event-router.js";
-import type { ISfuManager } from "./interfaces.js";
 import { SfuStatsCollector } from "./stats-collector.js";
 import type {
   SfuState,
@@ -84,10 +83,19 @@ const SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
 ];
 
 /**
- * Facade for SFU management.
- * Implements ISfuManager by composing focused modules.
+ * The SFU connection facade: one deep module owning connection, room
+ * membership, host controls, egress control, the data channel, producer
+ * lifecycle, the participant registry, stats, and state notification.
+ * Transport management (device, send/recv transports) is internal and
+ * deliberately not part of the public surface.
+ *
+ * Construct via {@link createSfuManager}; composition is not a consumer
+ * concern. The room member is named a participant uniformly across the
+ * public surface. Identity is always server-derived: platform consumers
+ * pass a room token, app-embedded consumers rely on the verified browser
+ * session; join refusals surface as coded SfuJoinError values.
  */
-export class SfuManager implements ISfuManager {
+export class SfuManager {
   private connection: SfuConnection;
   private statsCollector: SfuStatsCollector;
 
@@ -126,10 +134,6 @@ export class SfuManager implements ISfuManager {
   // State and callbacks
   private state: SfuState = {
     connectionState: "disconnected",
-    isDeviceLoaded: false,
-    isSendTransportCreated: false,
-    sendTransportConnected: false,
-    recvTransportConnected: false,
     audioProducerId: null,
     videoProducerId: null,
     screenProducerId: null,
@@ -904,15 +908,9 @@ export class SfuManager implements ISfuManager {
 
   private handleDisconnected(): void {
     console.log("[SFU] Disconnected");
-    // Reset device-level flags before closeAll() so the intermediate state
-    // notification from closeAll() never has isSendTransportCreated=true while
-    // the send transport is already null (which would trigger spurious produce
-    // attempts in consumers of onStateChange).
     const recovering = this.sessionEstablished && this.lastJoinPayload !== null;
     this.updateState({
       connectionState: recovering ? "reconnecting" : "connecting",
-      isDeviceLoaded: false,
-      isSendTransportCreated: false,
     });
     if (recovering) {
       this.retainLocalProduces();
@@ -1010,7 +1008,6 @@ export class SfuManager implements ISfuManager {
 
     if (payload.direction === "send") {
       this.sendTransport = this.device.createSendTransport(transportOptions);
-      this.updateState({ isSendTransportCreated: true });
 
       this.sendTransport.on(
         "connect",
@@ -1147,9 +1144,7 @@ export class SfuManager implements ISfuManager {
   private handleTransportConnected(payload: { transportId: string }): void {
     console.log("[SFU] Transport connected:", payload.transportId);
     if (this.sendTransport?.id === payload.transportId) {
-      this.updateState({ sendTransportConnected: true });
     } else if (this.recvTransport?.id === payload.transportId) {
-      this.updateState({ recvTransportConnected: true });
     }
   }
 
@@ -1484,7 +1479,6 @@ export class SfuManager implements ISfuManager {
     try {
       this.device = new Device();
       await this.device.load({ routerRtpCapabilities });
-      this.updateState({ isDeviceLoaded: true });
       console.log("[SFU] Device loaded");
 
       // Create transports after device is loaded
@@ -1571,8 +1565,6 @@ export class SfuManager implements ISfuManager {
     this.recvTransport = null;
     this.peers.clear();
     this.updateState({
-      sendTransportConnected: false,
-      recvTransportConnected: false,
       audioProducerId: null,
       videoProducerId: null,
       screenProducerId: null,
@@ -1605,10 +1597,6 @@ export class SfuManager implements ISfuManager {
     this.pendingNewProducers = [];
     this.state = {
       connectionState: "disconnected",
-      isDeviceLoaded: false,
-      isSendTransportCreated: false,
-      sendTransportConnected: false,
-      recvTransportConnected: false,
       audioProducerId: null,
       videoProducerId: null,
       screenProducerId: null,
@@ -1648,6 +1636,28 @@ export function readRoomIdFromToken(token: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Options for {@link createSfuManager}. */
+export interface SfuManagerOptions {
+  /** Base URL of the Zvonok SFU server, e.g. "https://sfu.example.com". */
+  serverUrl?: string;
+  /**
+   * Connection override for tests and custom transports. Omit it to get
+   * the standard socket.io connection with cookie credentials.
+   */
+  connection?: SfuConnection;
+}
+
+/**
+ * Builds a ready-to-use SfuManager, composing its own connection.
+ * The identity is never passed here: the server derives it from the room
+ * token in the join payload or from the verified browser session.
+ */
+export function createSfuManager(options: SfuManagerOptions = {}): SfuManager {
+  return new SfuManager(
+    options.connection ?? new SfuConnection(options.serverUrl),
+  );
 }
 
 /** Singleton instance for backward compatibility */

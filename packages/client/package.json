@@ -12,53 +12,21 @@
       "types": "./src/audio/audio-level-sampler.ts",
       "default": "./src/audio/audio-level-sampler.ts"
     },
-    "./audio/audio-utils": {
-      "types": "./src/audio/audio-utils.ts",
-      "default": "./src/audio/audio-utils.ts"
-    },
     "./audio/remote-audio-mixer": {
       "types": "./src/audio/remote-audio-mixer.ts",
       "default": "./src/audio/remote-audio-mixer.ts"
-    },
-    "./config/media": {
-      "types": "./src/config/media.ts",
-      "default": "./src/config/media.ts"
-    },
-    "./media/capture": {
-      "types": "./src/media/capture.ts",
-      "default": "./src/media/capture.ts"
     },
     "./media/capture-state": {
       "types": "./src/media/capture-state.ts",
       "default": "./src/media/capture-state.ts"
     },
-    "./media/device-service": {
-      "types": "./src/media/device-service.ts",
-      "default": "./src/media/device-service.ts"
-    },
-    "./media/error-classifier": {
-      "types": "./src/media/error-classifier.ts",
-      "default": "./src/media/error-classifier.ts"
-    },
     "./media/interfaces": {
       "types": "./src/media/interfaces.ts",
       "default": "./src/media/interfaces.ts"
     },
-    "./media/manager": {
-      "types": "./src/media/manager.ts",
-      "default": "./src/media/manager.ts"
-    },
     "./media/manager-factory": {
       "types": "./src/media/manager-factory.ts",
       "default": "./src/media/manager-factory.ts"
-    },
-    "./media/types": {
-      "types": "./src/media/types.ts",
-      "default": "./src/media/types.ts"
-    },
-    "./screen-share/__mocks__/service": {
-      "types": "./src/screen-share/__mocks__/service.ts",
-      "default": "./src/screen-share/__mocks__/service.ts"
     },
     "./screen-share/service": {
       "types": "./src/screen-share/service.ts",
@@ -68,22 +36,6 @@
       "types": "./src/screen-share/types.ts",
       "default": "./src/screen-share/types.ts"
     },
-    "./sfu/__mocks__/manager": {
-      "types": "./src/sfu/__mocks__/manager.ts",
-      "default": "./src/sfu/__mocks__/manager.ts"
-    },
-    "./sfu/connection": {
-      "types": "./src/sfu/connection.ts",
-      "default": "./src/sfu/connection.ts"
-    },
-    "./sfu/event-router": {
-      "types": "./src/sfu/event-router.ts",
-      "default": "./src/sfu/event-router.ts"
-    },
-    "./sfu/interfaces": {
-      "types": "./src/sfu/interfaces.ts",
-      "default": "./src/sfu/interfaces.ts"
-    },
     "./sfu/manager": {
       "types": "./src/sfu/manager.ts",
       "default": "./src/sfu/manager.ts"
@@ -91,10 +43,6 @@
     "./sfu/quality-score": {
       "types": "./src/sfu/quality-score.ts",
       "default": "./src/sfu/quality-score.ts"
-    },
-    "./sfu/stats-collector": {
-      "types": "./src/sfu/stats-collector.ts",
-      "default": "./src/sfu/stats-collector.ts"
     },
     "./sfu/types": {
       "types": "./src/sfu/types.ts",

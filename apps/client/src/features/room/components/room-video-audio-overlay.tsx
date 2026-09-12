@@ -1,16 +1,14 @@
 import { AudioLevelRings } from "@/features/room/components/audio-level-rings";
-import type { RoomAudioStore } from "@/features/room/contexts/room-audio.store";
-import { useAudioLevel } from "@/features/room/contexts/room-audio.store";
+import { useAudioLevel } from "@/features/room/contexts/room-audio.context";
 import { getAvatarColor, getInitials } from "@/lib/utils/display-name";
 
 interface Props {
-  audioStore: RoomAudioStore;
   userId: string;
   username?: string;
 }
 
-export function RoomVideoAudioOverlay({ audioStore, userId, username }: Props) {
-  const audioLevel = useAudioLevel(audioStore, userId);
+export function RoomVideoAudioOverlay({ userId, username }: Props) {
+  const audioLevel = useAudioLevel(userId);
   const avatarColor = getAvatarColor(username ?? "");
 
   return (

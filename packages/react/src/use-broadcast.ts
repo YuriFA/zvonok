@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { ISfuManager } from "@zvonok/client/sfu/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { SfuBroadcastError } from "@zvonok/client/sfu/types";
 import type { SfuBroadcastMessage } from "@zvonok/client/sfu/types";
 
@@ -69,7 +69,7 @@ export function useBroadcasts(topic: string): UseBroadcastsResult {
   const [messages, setMessages] = useState<SfuBroadcastMessage[]>([]);
 
   useEffect(() => {
-    const manager: ISfuManager | null = session.manager;
+    const manager: SfuManager | null = session.manager;
     if (!manager) {
       setMessages([]);
       return;

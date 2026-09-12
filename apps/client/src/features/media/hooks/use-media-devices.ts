@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-import { useDeviceService } from "@/features/media/contexts/media-manager.context";
+import { useZvonokSession } from "@zvonok/react";
 import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 
 export type DeviceType = "videoinput" | "audioinput" | "audiooutput";
@@ -58,7 +58,7 @@ export function useMediaDevices(): UseMediaDevicesReturn {
   const [selectedDevices, setSelectedDevices] = useState<SelectedDevices>(loadSelectedDevices);
   const [isLoading, setIsLoading] = useState(true);
   const [isPermissionGranted, setIsPermissionGranted] = useState(false);
-  const deviceService = useDeviceService();
+  const deviceService = useZvonokSession().mediaManager.getDeviceService();
 
   useEffect(() => {
     const handleDeviceChange = async () => {

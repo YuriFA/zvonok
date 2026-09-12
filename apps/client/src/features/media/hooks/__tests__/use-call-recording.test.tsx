@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RemotePeerMedia } from "@/hooks/use-mediasoup";
+import type { RemotePeerMedia } from "@/features/room/hooks/use-room-sfu";
 
 import { useCallRecording } from "../use-call-recording";
 

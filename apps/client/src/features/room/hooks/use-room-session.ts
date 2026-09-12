@@ -1,19 +1,17 @@
-import type { SfuState } from "@zvonok/client/sfu/types";
 import type { HostControls } from "@zvonok/react";
+import type { UseZvonokConnectionResult } from "@zvonok/react";
 import { useCallback } from "react";
 
 import type { Participant } from "@/components/room/participants-list";
 import { useMediaStreamContext } from "@/features/media/contexts/media-stream.context";
 import type { UseMediaControlsReturn } from "@/features/media/hooks/use-media-controls";
 import { useRoomParticipants } from "@/features/room/hooks/use-room-participants";
-import { useRoomSfu } from "@/features/room/hooks/use-room-sfu";
-import type { Room } from "@/features/room/types/room.types";
-import type { RemotePeerMedia } from "@/hooks/use-mediasoup";
+import { useRoomSfu, type RemotePeerMedia } from "@/features/room/hooks/use-room-sfu";
 
 export interface UseRoomSessionOptions {
-  room: Room;
   userId: string | undefined;
   displayName: string;
+  connection: UseZvonokConnectionResult;
 }
 
 export interface UseRoomSessionResult {
@@ -22,7 +20,8 @@ export interface UseRoomSessionResult {
   mediaControls: UseMediaControlsReturn;
   toggleVideo: () => Promise<void>;
   toggleAudio: () => Promise<void>;
-  sfuState: SfuState;
+  connectionState: string;
+  capabilities: string[];
   remotePeers: RemotePeerMedia[];
   wasKicked: boolean;
   kickPeer: (userId: string) => Promise<void>;
@@ -34,9 +33,9 @@ export interface UseRoomSessionResult {
 }
 
 export function useRoomSession({
-  room,
   userId,
   displayName,
+  connection,
 }: UseRoomSessionOptions): UseRoomSessionResult {
   const {
     videoStream: localVideoStream,
@@ -51,7 +50,8 @@ export function useRoomSession({
   }, [stopMedia]);
 
   const {
-    sfuState,
+    connectionState,
+    capabilities,
     remotePeers,
     wasKicked,
     kickPeer,
@@ -62,12 +62,10 @@ export function useRoomSession({
     mutedByHost,
     hostControls,
   } = useRoomSfu({
-    roomId: room.id,
-    roomSlug: room.slug,
     localVideoStream,
     localAudioStream,
     onKicked: handleKicked,
-    displayName,
+    connection,
   });
 
   const { participants } = useRoomParticipants({
@@ -75,7 +73,7 @@ export function useRoomSession({
     username: displayName,
     isAudioEnabled: mediaControls.isAudioEnabled,
     isVideoEnabled: mediaControls.isVideoEnabled,
-    connectionState: sfuState.connectionState,
+    connectionState,
     remotePeers,
   });
 
@@ -85,7 +83,8 @@ export function useRoomSession({
     mediaControls,
     toggleVideo,
     toggleAudio,
-    sfuState,
+    connectionState,
+    capabilities,
     remotePeers,
     wasKicked,
     kickPeer,

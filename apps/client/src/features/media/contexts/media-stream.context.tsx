@@ -11,7 +11,7 @@ import {
 
 import { loadSelectedDevices } from "@/features/media/hooks/use-media-devices";
 
-import { useMediaManagerDirect } from "./media-manager.context";
+import { useZvonokSession } from "@zvonok/react";
 
 export interface MediaStreamContextValue {
   videoStream: MediaStream | null;
@@ -29,7 +29,7 @@ export interface MediaStreamProviderProps {
 }
 
 export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
-  const manager = useMediaManagerDirect();
+  const manager = useZvonokSession().mediaManager;
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [videoState, setVideoState] = useState<CaptureState>(CaptureState.STOPPED);

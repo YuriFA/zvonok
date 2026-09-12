@@ -19,13 +19,13 @@ export function ActiveRoomHeader({
   onEndRoom,
   isEndingRoom,
 }: Props) {
-  const { mixer } = useRoomAudioContext();
+  const { setSink } = useRoomAudioContext();
 
   return (
     <Header>
       <div className="flex items-center gap-2">
         <DeviceSettingsPanel
-          mixer={mixer}
+          setSink={setSink}
           isVideoEnabled={isVideoEnabled}
           isAudioEnabled={isAudioEnabled}
         />

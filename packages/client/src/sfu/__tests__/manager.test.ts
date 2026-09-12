@@ -207,7 +207,6 @@ describe("SfuManager", () => {
     expect(stateCallback).toHaveBeenCalledWith(
       expect.objectContaining({
         connectionState: "connected",
-        isDeviceLoaded: true,
       }),
     );
   });
@@ -455,35 +454,6 @@ describe("SfuManager", () => {
       );
       expect(stateCallback).not.toHaveBeenCalledWith(
         expect.objectContaining({ connectionState: "disconnected" }),
-      );
-    });
-
-    it("resets isDeviceLoaded and isSendTransportCreated on disconnect", async () => {
-      const stateCallback = vi.fn();
-      manager.connect();
-
-      testContext.mockSocket.connected = true;
-      await testContext.emitSocketEvent("connect");
-      await testContext.emitSocketEvent("sfu:joined", {
-        routerRtpCapabilities: { codecs: [] },
-      });
-      await testContext.emitSocketEvent("sfu:transport-created", {
-        ...transportPayload,
-        direction: "send",
-        transportId: "send-transport",
-      });
-
-      manager.onStateChange(stateCallback);
-      stateCallback.mockClear();
-
-      testContext.mockSocket.connected = false;
-      await testContext.emitSocketEvent("disconnect");
-
-      expect(stateCallback).toHaveBeenCalledWith(
-        expect.objectContaining({
-          isDeviceLoaded: false,
-          isSendTransportCreated: false,
-        }),
       );
     });
 

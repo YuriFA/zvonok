@@ -95,6 +95,9 @@ export function createMockSfuManager() {
   const reconnectErrorListeners = new Set<
     (error: { code: string; message: string }) => void
   >();
+  const guestJoinRequestListeners = new Set<
+    (payload: { requestId: string; displayName: string }) => void
+  >();
   const broadcastListeners = new Set<
     (message: {
       senderId: string;
@@ -219,6 +222,14 @@ export function createMockSfuManager() {
         return () => screenShareStoppedListeners.delete(listener);
       },
     ),
+    onGuestJoinRequest: vi.fn(
+      (
+        listener: (payload: { requestId: string; displayName: string }) => void,
+      ) => {
+        guestJoinRequestListeners.add(listener);
+        return () => guestJoinRequestListeners.delete(listener);
+      },
+    ),
     simulateCapabilities(next: string[]): void {
       capabilities = next;
       stateListeners.forEach((listener) =>
@@ -269,6 +280,15 @@ export function createMockSfuManager() {
     },
     emitKicked(roomId = "room-1"): void {
       kickedListeners.forEach((listener) => listener({ roomId }));
+    },
+    emitRoomEnded(roomId = "room-1"): void {
+      roomEndedListeners.forEach((listener) => listener({ roomId }));
+    },
+    emitGuestJoinRequest(payload: {
+      requestId: string;
+      displayName: string;
+    }): void {
+      guestJoinRequestListeners.forEach((listener) => listener(payload));
     },
     emitProducerState(payload: {
       userId: string;
@@ -337,6 +357,42 @@ export function createMockMediaManager() {
     emitAudioState(state: CaptureState, track: MediaStreamTrack | null): void {
       audioStateListeners.forEach((listener) => listener(state, track));
     },
+  };
+}
+
+export interface MockScreenShareState {
+  isSharing: boolean;
+  screenStream: MediaStream | null;
+  isScreenShareBlocked: boolean;
+}
+
+export type MockScreenShareService = ReturnType<
+  typeof createMockScreenShareService
+>;
+
+/** Socket-level double standing in for the client's ScreenShareService. */
+export function createMockScreenShareService() {
+  const listeners = new Set<(state: MockScreenShareState) => void>();
+  let state: MockScreenShareState = {
+    isSharing: false,
+    screenStream: null,
+    isScreenShareBlocked: false,
+  };
+  const emit = () => listeners.forEach((listener) => listener(state));
+  return {
+    getState: vi.fn(() => state),
+    setState: vi.fn((patch: Partial<MockScreenShareState>) => {
+      state = { ...state, ...patch };
+      emit();
+    }),
+    onStateChange: vi.fn((listener: (state: MockScreenShareState) => void) => {
+      listeners.add(listener);
+      listener(state);
+      return () => listeners.delete(listener);
+    }),
+    start: vi.fn(async () => {}),
+    stop: vi.fn(),
+    destroy: vi.fn(),
   };
 }
 

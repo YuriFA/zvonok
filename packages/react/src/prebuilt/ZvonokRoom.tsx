@@ -18,17 +18,14 @@
  */
 
 import { isActive } from "@zvonok/client/media/capture-state";
-import {
-  ScreenShareService,
-  browserDisplayMediaService,
-} from "@zvonok/client/screen-share/service";
-import type { ScreenShareState } from "@zvonok/client/screen-share/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import "./zvonok.css";
 
 import { ZvonokProvider, useZvonokSession } from "../zvonok-context.js";
 import { useParticipants } from "../use-participants.js";
+import { useRemoteAudio } from "../use-remote-audio.js";
+import { useScreenShare } from "../use-screen-share.js";
 import { useZvonokConnection, type UseZvonokConnectionResult } from "../use-zvonok-connection.js";
 import { useDeviceControls, type ZvonokCaptureControl } from "../use-device-controls.js";
 import type { ZvonokParticipant } from "../types.js";
@@ -61,7 +58,6 @@ export interface ZvonokRoomProps {
 interface RoomTileProps {
   name: string;
   stream: MediaStream | null;
-  audioStream: MediaStream | null;
   isVideoOn: boolean;
   isAudioOn: boolean;
   isLocal: boolean;
@@ -70,21 +66,18 @@ interface RoomTileProps {
 
 /**
  * One grid tile: video attachment effect, avatar fallback while the camera
- * is off, name badge, and muted badge. Remote tiles play their audio
- * stream through a hidden audio element; the local tile stays muted to
- * avoid echo.
+ * is off, name badge, and muted badge. Remote audio plays through the
+ * shared useRemoteAudio graph, not per-tile elements.
  */
 function RoomTile({
   name,
   stream,
-  audioStream,
   isVideoOn,
   isAudioOn,
   isLocal,
   isScreen,
 }: RoomTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -92,13 +85,6 @@ function RoomTile({
       element.srcObject = stream;
     }
   }, [stream]);
-
-  useEffect(() => {
-    const element = audioRef.current;
-    if (element && audioStream && !isLocal) {
-      element.srcObject = audioStream;
-    }
-  }, [audioStream, isLocal]);
 
   return (
     <figure className={isScreen ? "zvk-tile zvk-tile-screen" : "zvk-tile"}>
@@ -109,7 +95,6 @@ function RoomTile({
           {name.charAt(0).toUpperCase() || "?"}
         </div>
       )}
-      {audioStream && !isLocal && <audio ref={audioRef} className="zvk-audio" autoPlay />}
       {!isAudioOn && <span className="zvk-badge zvk-badge-muted">muted</span>}
       <figcaption className="zvk-badge">
         {name}
@@ -248,41 +233,21 @@ function ZvonokRoomSurface({
   const [nameDraft, setNameDraft] = useState(displayName ?? "");
   const [prejoinMicOn, setPrejoinMicOn] = useState(true);
   const [prejoinCameraOn, setPrejoinCameraOn] = useState(true);
-  const [screenShare, setScreenShare] = useState<ScreenShareState>({
-    isSharing: false,
-    screenStream: null,
-    isScreenShareBlocked: false,
-  });
   const [notice, setNotice] = useState<string | null>(null);
   const [autoJoinPending, setAutoJoinPending] = useState(prejoinSkipped);
 
-  const screenShareServiceRef = useRef<ScreenShareService | null>(null);
   const autoJoinStartedRef = useRef(false);
 
   const inRoom =
     connection.status === "joined" ||
     connection.status === "connecting" ||
     connection.status === "reconnecting";
-  // Screen share orchestration over the joined manager. The service keeps
-  // its own state (sharing, stream, blocked by another sharer).
-  const manager = connection.manager;
-  useEffect(() => {
-    if (!manager) {
-      return;
-    }
-    const service = new ScreenShareService({
-      sfu: manager,
-      displayMedia: browserDisplayMediaService,
-    });
-    screenShareServiceRef.current = service;
-    setScreenShare(service.getState());
-    const unsubscribe = service.onStateChange(setScreenShare);
-    return () => {
-      unsubscribe();
-      service.destroy();
-      screenShareServiceRef.current = null;
-    };
-  }, [manager]);
+
+  // Remote-audio playout: one shared graph, no per-tile audio elements.
+  useRemoteAudio();
+  // Screen share orchestration over the joined manager: sharing state,
+  // exclusive-lock blocking, and typed failures live in the hook.
+  const screenShare = useScreenShare();
 
   // D5: the local replace-track sync, ported from the reference app. When
   // capture restarts (device switch) while a producer exists, swap the
@@ -383,21 +348,17 @@ function ZvonokRoomSurface({
   );
 
   const toggleScreenShare = useCallback(async () => {
-    const service = screenShareServiceRef.current;
-    if (!service) {
-      return;
-    }
     setNotice(null);
-    if (service.getState().isSharing) {
-      service.stop();
+    if (screenShare.sharing) {
+      screenShare.stop();
       return;
     }
     try {
-      await service.start();
+      await screenShare.start();
     } catch (error) {
       setNotice(screenShareNotice(error));
     }
-  }, []);
+  }, [screenShare]);
 
   // Recording control appears only for participants the server granted
   // start-recording; the capability list is server-delivered, never guessed.
@@ -465,7 +426,6 @@ function ZvonokRoomSurface({
           <RoomTile
             name={localName}
             stream={devices.camera.track ? new MediaStream([devices.camera.track]) : null}
-            audioStream={null}
             isVideoOn={cameraLive}
             isAudioOn={micLive}
             isLocal
@@ -476,7 +436,6 @@ function ZvonokRoomSurface({
               key={participant.userId}
               name={participant.displayName}
               stream={participant.cameraStream}
-              audioStream={participant.audioStream}
               isVideoOn={participant.isCameraEnabled}
               isAudioOn={participant.isAudioEnabled}
               isLocal={false}
@@ -490,8 +449,7 @@ function ZvonokRoomSurface({
                 key={`${participant.userId}-screen`}
                 name={`${participant.displayName}'s screen`}
                 stream={participant.screenStream}
-                audioStream={null}
-                isVideoOn
+                    isVideoOn
                 isAudioOn
                 isLocal={false}
                 isScreen
@@ -523,9 +481,9 @@ function ZvonokRoomSurface({
           {screenShareSupported && (
             <button
               type="button"
-              className={screenShare.isSharing ? "zvk-button" : "zvk-button zvk-button-off"}
-              aria-pressed={screenShare.isSharing}
-              disabled={!screenShare.isSharing && screenShare.isScreenShareBlocked}
+              className={screenShare.sharing ? "zvk-button" : "zvk-button zvk-button-off"}
+              aria-pressed={screenShare.sharing}
+              disabled={!screenShare.sharing && screenShare.blocked}
               onClick={() => void toggleScreenShare()}
             >
               Share screen

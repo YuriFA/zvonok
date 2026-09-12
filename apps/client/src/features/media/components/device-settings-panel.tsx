@@ -1,4 +1,3 @@
-import type { IRemoteAudioMixer } from "@zvonok/client/audio/remote-audio-mixer";
 import { Settings, X, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -11,14 +10,15 @@ import { ActiveDeviceDisplay } from "./active-device-display";
 import { SingleDeviceSelector } from "./single-device-selector";
 
 export interface DeviceSettingsPanelProps {
-  mixer?: IRemoteAudioMixer | null;
+  /** Routes remote-audio playout to a speaker device; absent before joining. */
+  setSink?: (deviceId: string) => Promise<boolean>;
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
   className?: string;
 }
 
 export function DeviceSettingsPanel({
-  mixer,
+  setSink,
   isVideoEnabled,
   isAudioEnabled,
   className,
@@ -46,13 +46,13 @@ export function DeviceSettingsPanel({
   const activeSpeaker =
     speakerDevices.find((d) => d.deviceId === selectedDevices.speakerDeviceId) ?? speakerDevices[0];
 
-  // Apply the saved speaker selection when the mixer becomes available.
+  // Apply the saved speaker selection when the sink router becomes available.
   useEffect(() => {
     const speakerDeviceId = selectedDevices.speakerDeviceId;
-    if (!mixer || !speakerDeviceId) return;
+    if (!setSink || !speakerDeviceId) return;
 
-    mixer.setSink(speakerDeviceId).catch(() => {});
-  }, [selectedDevices.speakerDeviceId, mixer]);
+    setSink(speakerDeviceId).catch(() => {});
+  }, [selectedDevices.speakerDeviceId, setSink]);
 
   const handleVideoChange = useCallback(
     async (deviceId: string) => {
@@ -89,14 +89,14 @@ export function DeviceSettingsPanel({
       setIsSwitching("speaker");
       try {
         setSelectedSpeakerDevice(deviceId);
-        if (mixer) {
-          await mixer.setSink(deviceId);
+        if (setSink) {
+          await setSink(deviceId);
         }
       } finally {
         setIsSwitching(null);
       }
     },
-    [mixer, setSelectedSpeakerDevice],
+    [setSink, setSelectedSpeakerDevice],
   );
 
   const renderSelectors = () => (

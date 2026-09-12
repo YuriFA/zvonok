@@ -110,7 +110,9 @@ export class SfuJoinError extends Error {
 // the server derives it from a room token (platform) or the authenticated
 // session cookies (app UI).
 export interface SfuJoinPayload {
-  roomId: string;
+  /** Room id, when the consumer knows it. Supply the id, the slug, or
+   * both; the server resolves the room from whichever it is given. */
+  roomId?: string;
   roomSlug?: string;
   /** Room token (project rooms). When present, the server derives identity
    * from the verified token claims. */
@@ -334,7 +336,9 @@ export interface SfuKickPeerPayload {
 }
 
 export interface SfuKickedPayload {
-  roomId: string;
+  /** Absent only when a rejoin denial is synthesized for a slug-only
+   * join whose room id the client never knew. */
+  roomId?: string;
 }
 
 export interface SfuRoomEndedPayload {
@@ -384,10 +388,6 @@ export type SfuConnectionState =
 // SFU manager state
 export interface SfuState {
   connectionState: SfuConnectionState;
-  isDeviceLoaded: boolean;
-  isSendTransportCreated: boolean;
-  sendTransportConnected: boolean;
-  recvTransportConnected: boolean;
   /** Own capabilities delivered by the server; empty until joined. */
   capabilities: CapabilityId[];
   /** Latest egress session state broadcast for the room; null when idle. */

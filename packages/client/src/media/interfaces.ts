@@ -29,22 +29,6 @@ export interface IErrorClassifier {
   };
 }
 
-export interface ICaptureStateReader {
-  getState(): CaptureState;
-  onStateChange(cb: StateCallback): () => void;
-}
-
-export interface ICaptureController {
-  toggle(enabled: boolean): Promise<boolean>;
-  switchDevice(deviceId: string): Promise<boolean>;
-  stop(): void;
-}
-
-export interface ICaptureTrackProvider {
-  getTrack(): MediaStreamTrack | null;
-  onStateChange(cb: StateCallback): () => void;
-}
-
 export interface IMediaManager {
   readonly videoCapture: IMediaCapture;
   readonly audioCapture: IMediaCapture;

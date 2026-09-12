@@ -15,12 +15,11 @@ import { ScreenShareSpotlight } from "@/features/room/components/screen-share-sp
 import { useKeyboardShortcuts } from "@/features/room/hooks/use-keyboard-shortcuts";
 import type { UseRoomSessionResult } from "@/features/room/hooks/use-room-session";
 import { roomPanels } from "@/features/room/room-panels";
-import type { ScreenShareError } from "@/hooks/use-screen-share";
-import { useScreenShare } from "@/hooks/use-screen-share";
+import type { ScreenShareError } from "@zvonok/client/screen-share/types";
+import { useScreenShare } from "@zvonok/react";
 
 import { useGuestRequests } from "../contexts/guest-requests.context";
-import { useRoomAudioContext } from "../contexts/room-audio.context";
-import { useActiveSpeakerId } from "../contexts/room-audio.store";
+import { useActiveSpeakerId } from "../contexts/room-audio.context";
 import type { Room } from "../types/room.types";
 import { AsidePanel, AsidePanelContainer, AsidePanelHeader } from "./aside-panel";
 import { RoomLeftControls } from "./room-left-controls";
@@ -63,7 +62,7 @@ export function ActiveRoomView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
-  const { isSharing, screenStream, isScreenShareBlocked, startScreenShare, stopScreenShare } =
+  const { sharing: isSharing, screenStream, blocked: isScreenShareBlocked, start: startScreenShare, stop: stopScreenShare } =
     useScreenShare();
   const [screenShareState, setScreenShareState] = useState<"idle" | "starting" | "sharing">("idle");
 
@@ -98,8 +97,7 @@ export function ActiveRoomView({
   }, [isSharing, screenStream, localUserId, currentUsername, remotePeers]);
 
   const isSpotlightMode = activeScreenShare !== null;
-  const { store: audioStore } = useRoomAudioContext();
-  const activeSpeakerId = useActiveSpeakerId(audioStore);
+  const activeSpeakerId = useActiveSpeakerId();
 
   const recorder = useCallRecording({
     roomSlug: room.slug,
@@ -186,7 +184,7 @@ export function ActiveRoomView({
 
   // Server-delivered capabilities gate the host affordances; role and
   // owner knowledge never lives in the client.
-  const ownCapabilities = session.sfuState.capabilities;
+  const ownCapabilities = session.capabilities;
   const canMuteUsers = ownCapabilities.includes("mute-users");
   const canLockRoom = ownCapabilities.includes("lock-room");
   const canRemoveParticipants = ownCapabilities.includes("remove-participants");

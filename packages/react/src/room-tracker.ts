@@ -5,7 +5,7 @@
  * consumers can use the class directly.
  */
 
-import type { ISfuManager } from "@zvonok/client/sfu/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { SfuMediaSource } from "@zvonok/client/sfu/types";
 
 import type { ZvonokParticipant } from "./types.js";
@@ -127,7 +127,7 @@ function trackEndedUpdate(
 }
 
 export class RoomTracker {
-  private readonly manager: ISfuManager;
+  private readonly manager: SfuManager;
   private readonly localUserId: string | undefined;
   private participants: ParticipantMap = new Map();
   private locked = false;
@@ -137,7 +137,7 @@ export class RoomTracker {
   private unsubscribes: Array<() => void> = [];
   private socketBound = false;
 
-  constructor(manager: ISfuManager, options: RoomTrackerOptions = {}) {
+  constructor(manager: SfuManager, options: RoomTrackerOptions = {}) {
     this.manager = manager;
     this.localUserId = options.localUserId;
     this.bind();

@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 
-import type { ISfuManager } from "@zvonok/client/sfu/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import {
   SfuEgressActionError,
   type SfuEgressOutputRequest,
@@ -36,7 +36,7 @@ export function useEgressControls(): UseEgressControlsResult {
   const session = useZvonokSession();
 
   return useMemo(() => {
-    const requireManager = (): ISfuManager => {
+    const requireManager = (): SfuManager => {
       const manager = session.manager;
       if (!manager) {
         throw new ZvonokEgressError(
@@ -47,7 +47,7 @@ export function useEgressControls(): UseEgressControlsResult {
       return manager;
     };
 
-    const run = (action: (manager: ISfuManager) => Promise<void>): Promise<void> =>
+    const run = (action: (manager: SfuManager) => Promise<void>): Promise<void> =>
       action(requireManager()).catch((error: unknown) => {
         throw toZvonokEgressError(error);
       });

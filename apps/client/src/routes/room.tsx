@@ -1,11 +1,9 @@
-import { createMediaManager } from "@zvonok/client/media/manager-factory";
-import { sfuManager } from "@zvonok/client/sfu/manager";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useZvonokConnection, ZvonokProvider } from "@zvonok/react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
 
 import { LinkButton } from "@/components/ui/link-button";
 import { useAuth } from "@/features/auth/contexts/auth.context";
-import { MediaManagerProvider } from "@/features/media/contexts/media-manager.context";
 import { MediaStreamProvider } from "@/features/media/contexts/media-stream.context";
 import { CallEndedView } from "@/features/room/components/call-ended-view";
 import { GuestApprovalDialog } from "@/features/room/components/guest-approval-dialog";
@@ -15,10 +13,83 @@ import { GuestRequestsProvider } from "@/features/room/contexts/guest-requests.c
 import { useGuestJoinRoom } from "@/features/room/hooks/use-guest-join-room";
 import { useRoom } from "@/features/room/hooks/use-room";
 import { roomApi } from "@/features/room/services/room-api";
-import { SfuManagerProvider } from "@/features/sfu/contexts/sfu-manager.context";
 import { loadGuestDisplayName, saveGuestDisplayName } from "@/lib/utils/display-name";
 
+const SOCKET_URL =
+  (import.meta.env as { VITE_SOCKET_URL?: string }).VITE_SOCKET_URL ?? "http://localhost:3000";
+
 type RoomViewState = "prejoin" | "active" | "ended";
+
+/** Inside the provider: owns the connection and the join/ended flow. */
+function RoomSession({
+  room,
+  displayName,
+  currentUserId,
+  viewState,
+  setViewState,
+  guestView,
+}: {
+  room: NonNullable<ReturnType<typeof useRoom>["data"]>;
+  displayName: string;
+  currentUserId: string | undefined;
+  viewState: RoomViewState;
+  setViewState: (state: RoomViewState) => void;
+  guestView: React.ReactNode;
+}) {
+  const { user } = useAuth();
+  // Cookie-session join: no token, the server verifies the browser session.
+  const connection = useZvonokConnection({ roomId: room.id, roomSlug: room.slug });
+
+  // Entering the room connects and joins; leaving the pre-join stage is the
+  // single join trigger, matching the previous orchestration.
+  useEffect(() => {
+    if (viewState !== "active" || connection.status !== "disconnected") {
+      return;
+    }
+    void connection.join().catch(() => {
+      // Typed failure is in session state; the room stays on prejoin.
+      setViewState("prejoin");
+    });
+  }, [viewState, connection, setViewState]);
+
+  // A server-ended room is terminal for the local session.
+  useEffect(() => {
+    if (connection.roomEnded) {
+      setViewState("ended");
+    }
+  }, [connection.roomEnded, setViewState]);
+
+  const isOwner = user?.id === room.ownerId;
+
+  return (
+    <MediaStreamProvider>
+      {viewState === "prejoin" ? (
+        guestView
+      ) : (
+        <>
+          {isOwner ? (
+            <GuestRequestsProvider roomSlug={room.slug}>
+              <GuestApprovalDialog />
+              <RoomView
+                room={room}
+                displayName={displayName}
+                currentUserId={currentUserId}
+                connection={connection}
+              />
+            </GuestRequestsProvider>
+          ) : (
+            <RoomView
+              room={room}
+              displayName={displayName}
+              currentUserId={currentUserId}
+              connection={connection}
+            />
+          )}
+        </>
+      )}
+    </MediaStreamProvider>
+  );
+}
 
 export const RoomPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -29,8 +100,6 @@ export const RoomPage = () => {
 
   const [displayName, setDisplayName] = useState(() => user?.username ?? loadGuestDisplayName());
   const [guestPreApproved, setGuestPreApproved] = useState(false);
-
-  const mediaManager = useMemo(() => createMediaManager(), []);
 
   const [guestUserId, setGuestUserId] = useState<string | undefined>(undefined);
 
@@ -81,16 +150,6 @@ export const RoomPage = () => {
     }
   }, [room?.status]);
 
-  const handleRoomEnded = useCallback(() => {
-    setViewState("ended");
-  }, []);
-
-  useEffect(() => {
-    if (viewState !== "active") return;
-    const unsubscribe = sfuManager.onRoomEnded(handleRoomEnded);
-    return unsubscribe;
-  }, [viewState, handleRoomEnded]);
-
   const handleJoin = useCallback(async () => {
     if (!slug) return;
 
@@ -126,36 +185,27 @@ export const RoomPage = () => {
   }
 
   const roomUrl = `${window.location.origin}/room/${room.slug}`;
-  const isOwner = user?.id === room.ownerId;
 
   return (
-    <MediaManagerProvider manager={mediaManager}>
-      <SfuManagerProvider manager={sfuManager}>
-        <MediaStreamProvider>
-          {viewState === "prejoin" ? (
-            <PrejoinView
-              roomUrl={roomUrl}
-              displayName={displayName}
-              onDisplayNameChange={setDisplayName}
-              onJoin={handleJoin}
-              guestState={user ? undefined : guestState}
-              errorMessage={joinError}
-              onRetry={retry}
-            />
-          ) : (
-            <>
-              {isOwner ? (
-                <GuestRequestsProvider roomSlug={room.slug}>
-                  <GuestApprovalDialog />
-                  <RoomView room={room} displayName={displayName} currentUserId={currentUserId} />
-                </GuestRequestsProvider>
-              ) : (
-                <RoomView room={room} displayName={displayName} currentUserId={currentUserId} />
-              )}
-            </>
-          )}
-        </MediaStreamProvider>
-      </SfuManagerProvider>
-    </MediaManagerProvider>
+    <ZvonokProvider serverUrl={SOCKET_URL}>
+      <RoomSession
+        room={room}
+        displayName={displayName}
+        currentUserId={currentUserId}
+        viewState={viewState}
+        setViewState={setViewState}
+        guestView={
+          <PrejoinView
+            roomUrl={roomUrl}
+            displayName={displayName}
+            onDisplayNameChange={setDisplayName}
+            onJoin={handleJoin}
+            guestState={user ? undefined : guestState}
+            errorMessage={joinError}
+            onRetry={retry}
+          />
+        }
+      />
+    </ZvonokProvider>
   );
 };
