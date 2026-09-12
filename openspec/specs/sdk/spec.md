@@ -10,21 +10,29 @@ The externally consumable SDK surface: npm-published `@zvonok/client` and `@zvon
 `@zvonok/client` and `@zvonok/react` SHALL be installable from the public npm
 registry into a clean external project with no access to the monorepo.
 Published artifacts contain built JavaScript with type declarations and
-complete package metadata (name, version, license, repository). The workspace
-itself keeps consuming package sources directly; publishing is a manual
-versioned release per package.
+complete package metadata (name, version, license, repository). The packages'
+public surface SHALL be exactly what their `exports` map enumerates: modules
+outside the map are implementation details and external consumers SHALL NOT
+import them. The workspace itself keeps consuming package sources through the
+same map; publishing is a manual versioned release per package.
 
 #### Scenario: Clean-project install
 - **WHEN** a developer outside the monorepo runs `npm i @zvonok/client` (or `@zvonok/react`)
 - **THEN** the package installs with its dependencies and type declarations, and imports resolve without monorepo paths
 
 #### Scenario: Workspace stays source-based
-- **WHEN** the zvonok app imports `@zvonok/client/*` during development
+- **WHEN** the zvonok app or the react package imports a public `@zvonok/client` subpath during development
 - **THEN** it consumes package sources directly, without requiring a build of the package first
 
+#### Scenario: Internal modules stay package-private
+- **WHEN** a consumer imports a subpath that the exports map does not list (for example `@zvonok/client/sfu/connection` or a mock path)
+- **THEN** the import fails to resolve instead of silently coupling the consumer to package internals
+
 ### Requirement: Connection and join contract
-`@zvonok/client` SHALL expose a connection entry point that takes a server URL,
-a room identifier, and an identity (room token for platform consumers), joins
+`@zvonok/client` SHALL expose a connection entry point that takes a server
+URL, a room identifier (a room slug, a room id, or both), and an optional
+identity - platform consumers pass a room token, app-embedded consumers pass
+none and rely on the browser session the server verifies at handshake - joins
 the room over signalling, and exposes typed events for participant and track
 lifecycle and join errors. The public vocabulary of the packages SHALL name
 the room member a participant uniformly: participant state, participant
@@ -38,7 +46,10 @@ fields when the participant joined with a token that had them. The join
 payload SHALL NOT carry trusted identity fields: platform consumers
 authenticate with a room token, and app-embedded usage authenticates with the
 browser session the server already verifies (handshake cookies). Join-refusal
-errors surface as typed errors on every identity path.
+errors surface as typed errors on every identity path. When the server ends
+the room, the session SHALL surface a room-ended state, release the
+connection, and stop recovery. Publish options MAY carry a mobile-sender
+hint that adapts the producer's simulcast encodings for mobile devices.
 
 After a successful join, the SDK SHALL recover from signalling disconnects
 automatically: on disconnect it enters a `reconnecting` status while
@@ -56,6 +67,14 @@ surface a typed error and stop.
 #### Scenario: Token-based join from external app
 - **WHEN** an external app connects with a server URL, room slug, and a valid room token
 - **THEN** the SDK joins and receives participant and track events for other participants, named with the participant vocabulary throughout the public surface
+
+#### Scenario: App joins on its browser session
+- **WHEN** the zvonok app joins a room without passing a token, relying on its verified session cookie from the handshake
+- **THEN** the join succeeds with server-derived identity exactly as a token join does, and join refusals surface as typed errors
+
+#### Scenario: Join accepts room id or slug
+- **WHEN** a consumer passes a room id, a room slug, or both to the join entry point
+- **THEN** the join reaches the same room in every case
 
 #### Scenario: Own capabilities after join
 - **WHEN** a join succeeds
@@ -87,8 +106,15 @@ surface a typed error and stop.
 
 #### Scenario: Unauthenticated join surfaces typed error
 - **WHEN** a connection is attempted with no verifiable credential
-- **THEN** the SDK surfaces a typed authentication join error and does not
-  retry into a dead room
+- **THEN** the SDK surfaces a typed authentication join error and does not retry into a dead room
+
+#### Scenario: Room ended surfaces and cleans up
+- **WHEN** the server ends the room while the participant is joined
+- **THEN** the session surfaces a room-ended state, releases the connection, and performs no further reconnection attempts
+
+#### Scenario: Mobile hint adapts encodings
+- **WHEN** a track is published with the mobile-sender hint set
+- **THEN** the producer's simulcast encodings are the mobile-adapted set, and publishing without the hint is unchanged
 
 ### Requirement: React binding
 `@zvonok/react` SHALL provide a provider carrying SDK configuration and hooks
@@ -271,3 +297,87 @@ topic-filtered receive hook delivering only messages of its topic.
 #### Scenario: Sender does not receive their own message
 - **WHEN** a consumer sends a broadcast
 - **THEN** their own receive surfaces do not deliver that message back
+
+### Requirement: Remote audio playout
+`@zvonok/react` SHALL expose remote-audio playout as a single hook backed by
+the SDK's audio mixer: it SHALL play every remote participant's audio without
+consumer-managed audio elements, SHALL support per-participant volume and
+output-device routing, and SHALL feed audio-activity readings (per-participant
+levels and the active speaker) from the same playout graph. Releasing the hook
+on room leave SHALL stop all playback and sampling resources.
+
+#### Scenario: Remote audio plays without manual wiring
+- **WHEN** a participant joins a room where others publish microphone audio
+- **THEN** remote audio is audible with no consumer-created audio elements or stream attachment
+
+#### Scenario: Per-participant volume
+- **WHEN** the consumer sets a participant's volume to zero
+- **THEN** that participant becomes inaudible while other participants remain audible at their volumes
+
+#### Scenario: Output device routing
+- **WHEN** the consumer selects an output device id
+- **THEN** all remote playout routes to that device
+
+#### Scenario: Levels share the playout graph
+- **WHEN** audio-activity readings are consumed alongside playout
+- **THEN** levels and the active speaker reflect the played audio without a second sampling pipeline
+
+#### Scenario: Leave releases resources
+- **WHEN** the room is left
+- **THEN** playback elements, gain nodes, and sampling timers are released
+
+### Requirement: Screen share control
+`@zvonok/react` SHALL expose screen share as a hook over the SDK's screen
+share service: start captures the display and publishes it as a separate
+screen producer honoring the server's room-level exclusive lock, stop
+unpublishes it, and the hook SHALL expose sharing state including the
+blocked-by-another-participant condition, with typed failures surfaced to the
+consumer.
+
+#### Scenario: Start publishes a screen producer
+- **WHEN** a capable participant starts screen share
+- **THEN** a screen track is published and the hook reports sharing active
+
+#### Scenario: Exclusive lock surfaces as blocked
+- **WHEN** screen share is requested while another participant holds the room's share
+- **THEN** the request fails without disrupting the call and the hook reports the blocked state
+
+#### Scenario: Stop unpublishes
+- **WHEN** the sharing participant stops screen share
+- **THEN** the screen producer is closed and the hook reports sharing inactive
+
+### Requirement: Guest join requests (owner side)
+`@zvonok/react` SHALL expose the room's guest join-request stream as a hook:
+it SHALL deliver each new request (request id, display name) and expose the
+pending queue state for the room owner's UI. Approval and denial actions SHALL
+remain with the consumer; the hook SHALL NOT perform authorization actions.
+
+#### Scenario: Owner sees a pending request
+- **WHEN** a guest requests to join an approval-required room the owner is in
+- **THEN** the hook's queue gains the request with its request id and display name
+
+#### Scenario: Queue is state only
+- **WHEN** the owner's client approves or denies a request through its own actions
+- **THEN** the hook reflects the removal from the pending queue without itself having called any approval endpoint
+
+### Requirement: Minimal public surface
+`@zvonok/client` SHALL expose one manager construction entry point
+(`createSfuManager`) that returns a connected `SfuManager`; consumers SHALL
+NOT assemble the manager from a separate connection object. The published
+set SHALL be limited to the manager, its public types, the quality-score
+helper, the media manager factory and its state types, the remote-audio and
+audio-activity modules, and the screen share service and types. Test doubles,
+the signalling connection, the event router, the stats collector, and
+single-implementation role interfaces SHALL NOT be published.
+
+#### Scenario: Manager from one factory call
+- **WHEN** a consumer builds a manager to join a room
+- **THEN** a single `createSfuManager` call yields a manager with its connection already composed, and no separate connection class is exported
+
+#### Scenario: No published test doubles
+- **WHEN** a consumer looks for a mock manager or mock screen share service in the package exports
+- **THEN** none exist, and consumers test against the real modules with fake transports instead
+
+#### Scenario: State hides transport internals
+- **WHEN** a consumer reads the manager's state
+- **THEN** it sees connection status, capabilities, egress, broadcast, producer identifiers, and share-blocking state - not per-transport creation flags
