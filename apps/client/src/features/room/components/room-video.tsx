@@ -1,7 +1,6 @@
+import { useVideoStream } from "@zvonok/react";
 import { Mic, MicOff } from "lucide-react";
 import { memo, useRef } from "react";
-
-import { useVideoStream } from "@zvonok/react";
 
 import { usePeerQualityContext, usePeerViewport } from "../contexts/peer-quality.context";
 import { RoomVideoAudioOverlay } from "./room-video-audio-overlay";
