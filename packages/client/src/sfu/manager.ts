@@ -85,6 +85,28 @@ const SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
   { rid: "high", maxBitrate: 2_000_000 },
 ];
 
+/**
+ * Mobile senders cap the encoded frame rate and the top-layer bitrate:
+ * the camera still captures at its native rate, but the encoder and the
+ * radio - the two dominant battery costs of publishing - shed most of
+ * the work. Publishing without the mobile hint is unchanged.
+ */
+const MOBILE_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
+  {
+    rid: "low",
+    maxBitrate: 150_000,
+    scaleResolutionDownBy: 4,
+    maxFramerate: 15,
+  },
+  {
+    rid: "mid",
+    maxBitrate: 400_000,
+    scaleResolutionDownBy: 2,
+    maxFramerate: 15,
+  },
+  { rid: "high", maxBitrate: 900_000, maxFramerate: 15 },
+];
+
 /** Rejoin storm guard: no more than this many rejoins per sliding window. */
 const REJOIN_WINDOW_MS = 30_000;
 const REJOIN_MAX_PER_WINDOW = 5;
@@ -630,7 +652,12 @@ export class SfuManager {
         // Tracks are caller-owned: teardown (including a reconnect blip)
         // must never stop the capture, so retained tracks replay on rejoin.
         stopTracks: false,
-        encodings: isVideo && !isScreen ? SIMULCAST_ENCODINGS : undefined,
+        encodings:
+          isVideo && !isScreen
+            ? isMobile
+              ? MOBILE_SIMULCAST_ENCODINGS
+              : SIMULCAST_ENCODINGS
+            : undefined,
         codecOptions: isVideo
           ? { videoGoogleStartBitrate: 1000 }
           : {

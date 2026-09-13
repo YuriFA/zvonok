@@ -374,6 +374,34 @@ describe("SfuManager", () => {
     });
   });
 
+  it("adapts video encodings to the capped mobile set under the mobile hint", async () => {
+    manager.connect();
+
+    testContext.mockSocket.connected = true;
+    await testContext.emitSocketEvent("connect");
+    await testContext.emitSocketEvent("sfu:joined", {
+      routerRtpCapabilities: { codecs: [] },
+    });
+    await testContext.emitSocketEvent("sfu:transport-created", {
+      ...transportPayload,
+      direction: "send",
+      transportId: "send-transport",
+    });
+
+    const track = { kind: "video", readyState: "live" } as MediaStreamTrack;
+    await manager.produce(track, { isMobile: true });
+
+    expect(testContext.mockSendTransport.produce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        encodings: [
+          expect.objectContaining({ rid: "low", maxFramerate: 15 }),
+          expect.objectContaining({ rid: "mid", maxBitrate: 400_000, maxFramerate: 15 }),
+          expect.objectContaining({ rid: "high", maxBitrate: 900_000, maxFramerate: 15 }),
+        ],
+      }),
+    );
+  });
+
   it("serializes concurrent replaceTrack calls per kind", async () => {
     manager.connect();
     testContext.mockSocket.connected = true;
