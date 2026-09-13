@@ -15,6 +15,12 @@ export {
   useParticipants,
   type UseParticipantsResult,
 } from "./use-participants.js";
+export { useViewportQuality } from "./use-viewport-quality.js";
+export { useVideoStream } from "./use-video-stream.js";
+export {
+  useDevicePermissions,
+  type DevicePermissionState,
+} from "./use-device-permissions.js";
 export {
   useActiveSpeaker,
   useAudioLevels,

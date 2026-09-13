@@ -4,6 +4,7 @@
  */
 
 import type { Socket } from "socket.io-client";
+import { singleFlight } from "@zvonok/client/helpers/concurrency";
 import { createSfuManager, type SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -141,8 +142,10 @@ export function useZvonokConnection({
 }: UseZvonokConnectionOptions): UseZvonokConnectionResult {
   const session = useZvonokSession();
   const managerRef = useRef<SfuManager | null>(null);
-  const joinPromiseRef = useRef<Promise<void> | null>(null);
+  const joinLocksRef = useRef(new Map<string, Promise<unknown>>());
   const detachRoomListenersRef = useRef<(() => void) | null>(null);
+  /** Bumped by every leave(); in-flight joins check it before acting. */
+  const leaveGenerationRef = useRef(0);
   const [wasKicked, setWasKicked] = useState(false);
 
   const ensureManager = useCallback((): SfuManager => {
@@ -156,6 +159,9 @@ export function useZvonokConnection({
   }, [session]);
 
   const leave = useCallback(() => {
+    // Supersede any in-flight join first: it observes the generation bump
+    // after each await and stops touching the session.
+    leaveGenerationRef.current += 1;
     detachRoomListenersRef.current?.();
     detachRoomListenersRef.current = null;
     const manager = managerRef.current;
@@ -164,15 +170,12 @@ export function useZvonokConnection({
       manager.disconnect();
     }
     managerRef.current = null;
-    joinPromiseRef.current = null;
+    joinLocksRef.current.delete("join");
     setWasKicked(false);
     session.update({ manager: null, status: "disconnected", error: null, locked: false });
   }, [session]);
 
   const join = useCallback((): Promise<void> => {
-    if (joinPromiseRef.current) {
-      return joinPromiseRef.current;
-    }
     if (!roomId && !roomSlug) {
       return Promise.reject(
         new ZvonokJoinError(
@@ -181,7 +184,13 @@ export function useZvonokConnection({
         ),
       );
     }
-    const attempt = (async () => {
+    return singleFlight(joinLocksRef.current, "join", async () => {
+      const generation = leaveGenerationRef.current;
+      // A leave() that landed before or during this join supersedes it: the
+      // join settles silently instead of fighting the teardown for state.
+      const superseded = () => leaveGenerationRef.current !== generation;
+      if (superseded()) return;
+
       const manager = ensureManager();
       session.update({ status: "connecting", error: null, roomEnded: false });
       manager.connect();
@@ -215,19 +224,22 @@ export function useZvonokConnection({
         },
       );
 
-      await waitForConnectionState(manager, CONNECTION_TIMEOUT_MS);
-      ack.send();
-      await ack.promise;
-      session.update({ status: "joined" });
-    })().catch((error: unknown) => {
+      try {
+        await waitForConnectionState(manager, CONNECTION_TIMEOUT_MS);
+        if (superseded()) return;
+        ack.send();
+        await ack.promise;
+        if (superseded()) return;
+        session.update({ status: "joined" });
+      } catch (error) {
+        if (superseded()) return;
+        throw error;
+      }
+    }).catch((error: unknown) => {
       const typedError = toZvonokError(error, "JOIN_FAILED");
       session.update({ status: "error", error: typedError });
       throw typedError;
     });
-    joinPromiseRef.current = attempt.finally(() => {
-      joinPromiseRef.current = null;
-    });
-    return joinPromiseRef.current;
   }, [ensureManager, roomId, roomSlug, session, token, tokenProvider]);
 
 

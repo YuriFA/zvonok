@@ -3,15 +3,28 @@
  */
 
 /**
+ * Server codes worth retrying (e.g. after a token refresh). Everything not
+ * listed is terminal by default: locked rooms, invalid tokens, missing
+ * capabilities, exhausted reconnects - surfacing them again would only
+ * repeat the failure.
+ */
+const RECOVERABLE_CODES: ReadonlySet<string> = new Set(["ROOM_TOKEN_EXPIRED"]);
+
+/**
  * Base class for all SDK errors. Carries a stable machine-readable code
- * mirroring the server's coded sfu events (sfu:join-error, sfu:host-error).
+ * mirroring the server's coded sfu events (sfu:join-error, sfu:host-error)
+ * plus a `recoverable` flag: whether retrying the failed action can
+ * plausibly succeed. The manager consults the code for its own
+ * token-refresh rejoin; consumers consult the flag for their retry UIs.
  */
 export class ZvonokError extends Error {
   readonly code: string;
+  readonly recoverable: boolean;
   constructor(code: string, message: string) {
     super(message);
     this.name = "ZvonokError";
     this.code = code;
+    this.recoverable = RECOVERABLE_CODES.has(code);
   }
 }
 

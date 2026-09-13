@@ -399,4 +399,36 @@ describe("useZvonokConnection", () => {
       });
     });
   });
+  it("a leave during an in-flight join supersedes it without stale state", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderConnection();
+
+      let joinPromise: Promise<void> = Promise.resolve();
+      act(() => {
+        joinPromise = result.current.join();
+      });
+      expect(result.current.status).toBe("connecting");
+
+      act(() => {
+        result.current.leave();
+      });
+      expect(result.current.status).toBe("disconnected");
+      expect(result.current.manager).toBeNull();
+      expect(lastSfu().manager.leaveRoom).toHaveBeenCalled();
+
+      // The in-flight join never confirms (no ack); once its timers run out
+      // it settles silently - no error status, no manager resurrection.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      await expect(joinPromise).resolves.toBeUndefined();
+      expect(result.current.status).toBe("disconnected");
+      expect(result.current.error).toBeNull();
+      expect(result.current.manager).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
 });

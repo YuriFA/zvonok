@@ -127,6 +127,11 @@ function trackEndedUpdate(
   };
 }
 
+/**
+ * Reference-stability invariant: a participant object keeps its identity
+ * across snapshot recomputes unless that participant itself is patched.
+ * Memoized consumer tiles rely on this to bail out of unrelated updates.
+ */
 export class RoomTracker {
   private readonly manager: SfuManager;
   private readonly localUserId: string | undefined;
@@ -341,8 +346,16 @@ export class RoomTracker {
   }
 
   private recompute(): void {
+    const participants = Array.from(this.participants.values());
+    // Identity-stable array: a patch touches one participant while the rest
+    // keep their references, so the array itself can stay identical when
+    // membership and order did not change. Memoized tiles rely on this.
+    const previous = this.snapshot.participants;
+    const stable =
+      previous.length === participants.length &&
+      participants.every((participant, index) => participant === previous[index]);
     this.snapshot = {
-      participants: Array.from(this.participants.values()),
+      participants: stable ? previous : participants,
       locked: this.locked,
       mutedByHost: this.localMutedByHost,
     };

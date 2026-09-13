@@ -159,6 +159,37 @@ describe("RoomTracker", () => {
     tracker.stop();
   });
 
+  it("keeps the participants array identity across single-participant patches", () => {
+    const harness = createManager({ socket: null });
+    const tracker = new RoomTracker(harness.manager as never, { localUserId: "u1" });
+
+    (harness.manager.getSocket as ReturnType<typeof vi.fn>).mockReturnValue(harness.socket);
+    harness.emitState({ connectionState: "connected" });
+    const joined = (
+      harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>
+    ).mock.calls[0]?.[0] as (peer: unknown) => void;
+    joined({ userId: "peer-1", username: "One" });
+    joined({ userId: "peer-2", username: "Two" });
+
+    const before = tracker.getSnapshot().participants;
+    expect(before).toHaveLength(2);
+
+    // Patching one participant keeps the array (and the untouched
+    // participant's object reference) identical.
+    harness.emitSocketEvent("sfu:peer-muted", { userId: "peer-1" });
+    const after = tracker.getSnapshot().participants;
+    expect(after).not.toBe(before);
+    expect(after[0]).not.toBe(before[0]);
+    expect(after[1]).toBe(before[1]);
+
+    // Joining a new participant replaces the array: membership changed.
+    joined({ userId: "peer-3", username: "Three" });
+    expect(tracker.getSnapshot().participants).toHaveLength(3);
+    expect(tracker.getSnapshot().participants).not.toBe(after);
+
+    tracker.stop();
+  });
+
   it("flags a participant disconnected on media detach and restores on join", () => {
     const harness = createManager({ socket: null });
     const tracker = new RoomTracker(harness.manager as never, { localUserId: "u1" });

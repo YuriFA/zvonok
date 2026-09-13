@@ -18,7 +18,7 @@
  */
 
 import { isActive } from "@zvonok/client/media/capture-state";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import "./zvonok.css";
 
@@ -27,6 +27,8 @@ import { useParticipants } from "../use-participants.js";
 import { useRemoteAudio } from "../use-remote-audio.js";
 import { useScreenShare } from "../use-screen-share.js";
 import { useZvonokConnection, type UseZvonokConnectionResult } from "../use-zvonok-connection.js";
+import { useViewportQuality } from "../use-viewport-quality.js";
+import { useVideoStream } from "../use-video-stream.js";
 import { useDeviceControls, type ZvonokCaptureControl } from "../use-device-controls.js";
 import type { ZvonokParticipant } from "../types.js";
 import { useEgressControls } from "../use-egress-controls.js";
@@ -57,6 +59,11 @@ export interface ZvonokRoomProps {
 
 interface RoomTileProps {
   name: string;
+  /**
+   * Participant id for camera tiles: opts the tile into viewport-driven
+   * layer selection. Screen-share and local tiles stay unwired.
+   */
+  userId?: string;
   stream: MediaStream | null;
   isVideoOn: boolean;
   isAudioOn: boolean;
@@ -68,9 +75,12 @@ interface RoomTileProps {
  * One grid tile: video attachment effect, avatar fallback while the camera
  * is off, name badge, and muted badge. Remote audio plays through the
  * shared useRemoteAudio graph, not per-tile elements.
+ * Memoized: participants keep stable object references between room
+ * snapshots, so unrelated room events must not re-render every tile.
  */
-function RoomTile({
+const RoomTile = memo(function RoomTile({
   name,
+  userId,
   stream,
   isVideoOn,
   isAudioOn,
@@ -78,16 +88,12 @@ function RoomTile({
   isScreen,
 }: RoomTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const element = videoRef.current;
-    if (element && stream) {
-      element.srcObject = stream;
-    }
-  }, [stream]);
+  const tileRef = useRef<HTMLElement>(null);
+  useViewportQuality(tileRef, !isScreen && !isLocal ? (userId ?? null) : null);
+  useVideoStream(videoRef, stream);
 
   return (
-    <figure className={isScreen ? "zvk-tile zvk-tile-screen" : "zvk-tile"}>
+    <figure ref={tileRef} className={isScreen ? "zvk-tile zvk-tile-screen" : "zvk-tile"}>
       {isVideoOn && stream ? (
         <video ref={videoRef} className="zvk-video" autoPlay playsInline muted={isLocal} />
       ) : (
@@ -102,7 +108,7 @@ function RoomTile({
       </figcaption>
     </figure>
   );
-}
+});
 
 interface PreJoinCardProps {
   showNameInput: boolean;
@@ -440,6 +446,7 @@ function ZvonokRoomSurface({
               isAudioOn={participant.isAudioEnabled}
               isLocal={false}
               isScreen={false}
+              userId={participant.userId}
             />
           ))}
           {participants
