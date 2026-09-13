@@ -45,6 +45,7 @@ import type {
   SfuProduceErrorCode,
   SfuMediaSource,
   SfuConsumerClosedPayload,
+  SfuPeerMediaDetachedPayload,
   SfuScreenShareStoppedPayload,
   SfuScreenShareStoppedCallback,
   SfuGuestJoinRequestPayload,
@@ -146,6 +147,9 @@ export class SfuManager {
   private trackCallbacks = new Set<SfuTrackCallback>();
   private peerJoinedCallbacks = new Set<SfuParticipantCallback>();
   private peerLeftCallbacks = new Set<(userId: string) => void>();
+  private peerMediaDetachedCallbacks = new Set<
+    (peer: SfuParticipantInfo) => void
+  >();
   private kickedCallbacks = new Set<(payload: SfuKickedPayload) => void>();
   private roomEndedCallbacks = new Set<
     (payload: SfuRoomEndedPayload) => void
@@ -215,6 +219,7 @@ export class SfuManager {
       onConsumerClosed: (p) => this.handleConsumerClosed(p),
       onProducerStateChanged: (p) => this.handleProducerStateChanged(p),
       onParticipantLeft: (p) => this.handlePeerLeft(p),
+      onPeerMediaDetached: (p) => this.handlePeerMediaDetached(p),
       onKicked: (p) => this.handleKicked(p),
       onRoomEnded: (p) => this.handleRoomEnded(p),
       onScreenShareStarted: (p) => this.handleScreenShareStarted(p),
@@ -843,6 +848,12 @@ export class SfuManager {
     return () => this.peerLeftCallbacks.delete(callback);
   }
 
+  onPeerMediaDetached(
+    callback: (peer: SfuParticipantInfo) => void,
+  ): () => void {
+    this.peerMediaDetachedCallbacks.add(callback);
+    return () => this.peerMediaDetachedCallbacks.delete(callback);
+  }
   // ISfuStateNotifier
   getState(): SfuState {
     return { ...this.state };
@@ -1266,6 +1277,8 @@ export class SfuManager {
       if (payload.username) {
         peer.username = payload.username;
       }
+      // A (re)joining peer's media is live again after a detach.
+      peer.mediaConnected = true;
     }
     this.peerJoinedCallbacks.forEach((callback) => {
       callback(peer!);
@@ -1289,6 +1302,8 @@ export class SfuManager {
         if (peerData.username) {
           peer.username = peerData.username;
         }
+        // A peer present in existing-peers has live membership.
+        peer.mediaConnected = true;
       }
       this.peerJoinedCallbacks.forEach((callback) => {
         callback(peer!);
@@ -1526,10 +1541,25 @@ export class SfuManager {
       source: payload.appData?.source,
     });
 
+    // Media from this peer is flowing again after any detach.
+    peer.mediaConnected = true;
+
     // Request to consume
     this.connection.getSocket()!.emit("sfu:consume", {
       producerId: payload.producerId,
       rtpCapabilities: this.device.recvRtpCapabilities,
+    });
+  }
+
+  private handlePeerMediaDetached(payload: SfuPeerMediaDetachedPayload): void {
+    console.log("[SFU] Peer media detached:", payload.userId);
+    const peer = this.peers.get(payload.userId);
+    if (!peer || peer.mediaConnected === false) {
+      return;
+    }
+    peer.mediaConnected = false;
+    this.peerMediaDetachedCallbacks.forEach((callback) => {
+      callback(peer);
     });
   }
 

@@ -416,6 +416,7 @@ export function ActiveRoomView({
           isAudioEnabled={mediaControls.isAudioEnabled}
           videoCaptureState={mediaControls.videoCaptureState}
           audioCaptureState={mediaControls.audioCaptureState}
+          isMutedByHost={session.mutedByHost}
           onToggleVideo={handleToggleVideo}
           onToggleAudio={handleToggleAudio}
         />

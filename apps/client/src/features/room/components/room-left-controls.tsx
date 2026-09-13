@@ -11,6 +11,8 @@ interface Props {
   isAudioEnabled: boolean;
   videoCaptureState: CaptureState;
   audioCaptureState: CaptureState;
+  /** The server forcibly muted this participant's microphone. */
+  isMutedByHost?: boolean;
   onToggleVideo: () => void;
   onToggleAudio: () => void;
   className?: string;
@@ -24,13 +26,20 @@ export const RoomLeftControls = ({
   isAudioEnabled,
   videoCaptureState,
   audioCaptureState,
+  isMutedByHost = false,
   onToggleVideo,
   onToggleAudio,
   buttonVariant = "outline",
   buttonInactiveVariant = "secondary",
 }: Props) => {
   const videoDisplay = getCaptureStateDisplay(videoCaptureState, "video");
-  const audioDisplay = getCaptureStateDisplay(audioCaptureState, "audio");
+  const audioDisplay = isMutedByHost
+    ? {
+        tooltip: "Muted by host",
+        status: "off" as const,
+        statusText: null,
+      }
+    : getCaptureStateDisplay(audioCaptureState, "audio");
 
   return (
     <div className={cn("flex gap-2", className)}>
@@ -67,7 +76,7 @@ export const RoomLeftControls = ({
           render={
             <Button
               type="button"
-              variant={isAudioEnabled ? buttonVariant : buttonInactiveVariant}
+              variant={isAudioEnabled && !isMutedByHost ? buttonVariant : buttonInactiveVariant}
               className="relative"
               size="icon"
               onClick={onToggleAudio}
@@ -85,7 +94,13 @@ export const RoomLeftControls = ({
               <Loader2 className="size-3 animate-spin" />
             </Badge>
           )}
-          {isAudioEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+          {isMutedByHost ? (
+            <MicOff className="size-4 text-red-500" />
+          ) : isAudioEnabled ? (
+            <Mic className="size-4" />
+          ) : (
+            <MicOff className="size-4" />
+          )}
         </TooltipTrigger>
         <TooltipContent>{audioDisplay.tooltip}</TooltipContent>
       </Tooltip>

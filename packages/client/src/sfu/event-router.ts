@@ -19,6 +19,7 @@ import type {
   SfuScreenShareStartedPayload,
   SfuScreenShareStoppedPayload,
   SfuConsumerClosedPayload,
+  SfuPeerMediaDetachedPayload,
   SfuGuestJoinRequestPayload,
   SfuJoinErrorPayload,
   SfuEgressStatusPayload,
@@ -45,6 +46,7 @@ export interface SfuEventHandlers {
   onConsumerClosed(payload: SfuConsumerClosedPayload): void;
   onProducerStateChanged(payload: SfuProducerStateChangedPayload): void;
   onParticipantLeft(payload: { userId: string }): void;
+  onPeerMediaDetached(payload: SfuPeerMediaDetachedPayload): void;
   onKicked(payload: SfuKickedPayload): void;
   onRoomEnded(payload: SfuRoomEndedPayload): void;
   onReconnectFailed(): void;
@@ -133,6 +135,11 @@ export class SfuEventRouter {
     );
     register("sfu:peer-left", (payload: unknown) =>
       this.handlers.onParticipantLeft(payload as { userId: string }),
+    );
+    register("sfu:peer-media-detached", (payload: unknown) =>
+      this.handlers.onPeerMediaDetached(
+        payload as SfuPeerMediaDetachedPayload,
+      ),
     );
     register("sfu:kicked", (payload: unknown) =>
       this.handlers.onKicked(payload as SfuKickedPayload),

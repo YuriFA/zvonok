@@ -41,7 +41,8 @@ export function useRoomParticipants({
         username: peer.username,
         isMuted: !peer.isAudioEnabled,
         isVideoOff: !peer.isCameraEnabled,
-        isConnected: true,
+        isConnected: peer.isConnected,
+        isMutedByHost: peer.mutedByHost,
       };
     });
 

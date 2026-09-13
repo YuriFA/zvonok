@@ -23,6 +23,7 @@ export interface RemotePeerMedia {
   isCameraEnabled: boolean;
   isScreenSharing: boolean;
   isAudioEnabled: boolean;
+  isConnected: boolean;
   mutedByHost: boolean;
 }
 
@@ -31,6 +32,10 @@ export interface UseRoomSfuOptions {
   localAudioStream: MediaStream | null;
   onKicked: () => void;
   connection: UseZvonokConnectionResult;
+  /** (Re)acquires the camera; used when no live video track exists. */
+  ensureVideo: () => Promise<MediaStream | null>;
+  /** (Re)acquires the microphone; used when no live audio track exists. */
+  ensureAudio: () => Promise<MediaStream | null>;
 }
 
 export interface UseRoomSfuResult {
@@ -57,6 +62,7 @@ function toRemotePeer(participant: ZvonokParticipant): RemotePeerMedia {
     isCameraEnabled: participant.isCameraEnabled,
     isScreenSharing: participant.isScreenSharing,
     isAudioEnabled: participant.isAudioEnabled,
+    isConnected: participant.isConnected,
     mutedByHost: participant.mutedByHost,
   };
 }
@@ -66,6 +72,8 @@ export function useRoomSfu({
   localAudioStream,
   onKicked,
   connection,
+  ensureVideo,
+  ensureAudio,
 }: UseRoomSfuOptions): UseRoomSfuResult {
   const isMobile = useIsMobile();
   const manager = connection.manager;
@@ -168,39 +176,47 @@ export function useRoomSfu({
     const nextEnabled = !mediaControls.isVideoEnabled;
     mediaControls.setVideoEnabled(nextEnabled);
 
-    if (nextEnabled) {
-      const track = localVideoStream?.getVideoTracks()[0];
+    if (!nextEnabled) {
+      if (hasProducer("video")) {
+        pauseProducer("video");
+      }
+      return;
+    }
+
+    let track = localVideoStream?.getVideoTracks()[0];
+    // A camera disabled in the lobby (or a lost device) leaves no live
+    // track; re-acquire capture before publishing.
+    if (!track || track.readyState !== "live") {
+      const stream = await ensureVideo();
+      track = stream?.getVideoTracks()[0];
       if (!track || track.readyState !== "live") {
         mediaControls.setVideoEnabled(false);
         return;
       }
-      if (!hasProducer("video")) {
-        const produced = await produceTrack(track, { isMobile });
-        if (!produced) {
-          mediaControls.setVideoEnabled(false);
-          return;
-        }
-        resumeProducer("video");
-        return;
-      }
-
-      // The producer still references the track that "off" ended. Swap it in
-      // first: resuming first would stream silence until the swap lands.
-      const replaced = await replaceTrack("video", track);
-      if (!replaced) {
-        toast.error("Failed to restart the camera");
+    }
+    if (!hasProducer("video")) {
+      const produced = await produceTrack(track, { isMobile });
+      if (!produced) {
         mediaControls.setVideoEnabled(false);
         return;
       }
       resumeProducer("video");
-    } else {
-      if (hasProducer("video")) {
-        pauseProducer("video");
-      }
+      return;
     }
+
+    // The producer still references the track that "off" ended. Swap it in
+    // first: resuming first would stream silence until the swap lands.
+    const replaced = await replaceTrack("video", track);
+    if (!replaced) {
+      toast.error("Failed to restart the camera");
+      mediaControls.setVideoEnabled(false);
+      return;
+    }
+    resumeProducer("video");
   }, [
     mediaControls,
     localVideoStream,
+    ensureVideo,
     produceTrack,
     replaceTrack,
     hasProducer,
@@ -213,39 +229,47 @@ export function useRoomSfu({
     const nextEnabled = !mediaControls.isAudioEnabled;
     mediaControls.setAudioEnabled(nextEnabled);
 
-    if (nextEnabled) {
-      const track = localAudioStream?.getAudioTracks()[0];
+    if (!nextEnabled) {
+      if (hasProducer("audio")) {
+        pauseProducer("audio");
+      }
+      return;
+    }
+
+    let track = localAudioStream?.getAudioTracks()[0];
+    // A microphone disabled in the lobby (or a lost device) leaves no live
+    // track; re-acquire capture before publishing.
+    if (!track || track.readyState !== "live") {
+      const stream = await ensureAudio();
+      track = stream?.getAudioTracks()[0];
       if (!track || track.readyState !== "live") {
         mediaControls.setAudioEnabled(false);
         return;
       }
-      if (!hasProducer("audio")) {
-        const produced = await produceTrack(track, { isMobile });
-        if (!produced) {
-          mediaControls.setAudioEnabled(false);
-          return;
-        }
-        resumeProducer("audio");
-        return;
-      }
-
-      // The producer still references the track that "off" ended. Swap it in
-      // first: resuming first would stream silence until the swap lands.
-      const replaced = await replaceTrack("audio", track);
-      if (!replaced) {
-        toast.error("Failed to restart the microphone");
+    }
+    if (!hasProducer("audio")) {
+      const produced = await produceTrack(track, { isMobile });
+      if (!produced) {
         mediaControls.setAudioEnabled(false);
         return;
       }
       resumeProducer("audio");
-    } else {
-      if (hasProducer("audio")) {
-        pauseProducer("audio");
-      }
+      return;
     }
+
+    // The producer still references the track that "off" ended. Swap it in
+    // first: resuming first would stream silence until the swap lands.
+    const replaced = await replaceTrack("audio", track);
+    if (!replaced) {
+      toast.error("Failed to restart the microphone");
+      mediaControls.setAudioEnabled(false);
+      return;
+    }
+    resumeProducer("audio");
   }, [
     mediaControls,
     localAudioStream,
+    ensureAudio,
     produceTrack,
     replaceTrack,
     hasProducer,

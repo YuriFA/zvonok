@@ -275,6 +275,76 @@ describe("SfuManager", () => {
     );
   });
 
+  it("marks a peer media-detached and restores it on rejoin", async () => {
+    const onMediaDetached = vi.fn();
+    manager.onPeerMediaDetached(onMediaDetached);
+    manager.connect();
+
+    testContext.mockSocket.connected = true;
+    await testContext.emitSocketEvent("connect");
+    await testContext.emitSocketEvent("sfu:joined", {
+      routerRtpCapabilities: { codecs: [] },
+    });
+    await testContext.emitSocketEvent("sfu:peer-joined", {
+      userId: "user-2",
+      username: "bob",
+    });
+    expect(manager.getParticipant("user-2")?.mediaConnected).toBeUndefined();
+
+    await testContext.emitSocketEvent("sfu:peer-media-detached", {
+      userId: "user-2",
+    });
+    expect(manager.getParticipant("user-2")?.mediaConnected).toBe(false);
+    expect(onMediaDetached).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-2", mediaConnected: false }),
+    );
+
+    // A second detach while already detached must not re-notify.
+    await testContext.emitSocketEvent("sfu:peer-media-detached", {
+      userId: "user-2",
+    });
+    expect(onMediaDetached).toHaveBeenCalledTimes(1);
+
+    // Silent rejoin restore: the same peer joins again.
+    await testContext.emitSocketEvent("sfu:peer-joined", {
+      userId: "user-2",
+      username: "bob",
+    });
+    expect(manager.getParticipant("user-2")?.mediaConnected).toBe(true);
+  });
+
+  it("clears the detached flag when a detached peer's producer reappears", async () => {
+    manager.connect();
+
+    testContext.mockSocket.connected = true;
+    await testContext.emitSocketEvent("connect");
+    await testContext.emitSocketEvent("sfu:joined", {
+      routerRtpCapabilities: { codecs: [] },
+    });
+    await testContext.emitSocketEvent("sfu:transport-created", {
+      ...transportPayload,
+      direction: "recv",
+      transportId: "recv-transport",
+    });
+    await testContext.emitSocketEvent("sfu:peer-joined", {
+      userId: "user-2",
+      username: "bob",
+    });
+    await testContext.emitSocketEvent("sfu:peer-media-detached", {
+      userId: "user-2",
+    });
+    expect(manager.getParticipant("user-2")?.mediaConnected).toBe(false);
+
+    await testContext.emitSocketEvent("sfu:new-producer", {
+      producerId: "producer-remote",
+      userId: "user-2",
+      username: "bob",
+      kind: "video",
+    });
+
+    expect(manager.getParticipant("user-2")?.mediaConnected).toBe(true);
+  });
+
   it("produces a local track and replaces it through the matching producer", async () => {
     manager.connect();
 

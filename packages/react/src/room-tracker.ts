@@ -47,6 +47,7 @@ function upsertParticipant(
     isCameraEnabled: false,
     isScreenSharing: false,
     isAudioEnabled: false,
+    isConnected: true,
     mutedByHost: false,
   };
   next.set(userId, updater(current));
@@ -186,13 +187,17 @@ export class RoomTracker {
         this.update(peer.userId, (current) => ({
           ...current,
           displayName: peer.username || current.displayName,
+          isConnected: true,
         }));
       }),
     );
 
     this.unsubscribes.push(
       manager.onTrack((track, kind, userId, source) => {
-        this.update(userId, (current) => trackUpdate(current, track, kind, source));
+        this.update(userId, (current) =>
+          // Media flowing means any earlier detach has been restored.
+          trackUpdate({ ...current, isConnected: true }, track, kind, source),
+        );
 
         track.onmute = () => {
           this.update(userId, (current) => ({
@@ -259,8 +264,20 @@ export class RoomTracker {
       }),
     );
 
+    this.unsubscribes.push(
+      manager.onPeerMediaDetached(({ userId }) => {
+        if (!this.participants.has(userId)) {
+          return;
+        }
+        this.update(userId, (current) => ({
+          ...current,
+          isConnected: false,
+        }));
+      }),
+    );
     this.bindSocket();
   }
+
 
   /** Idempotently attaches sfu:peer-muted / sfu:room-locked listeners. */
   private bindSocket(): void {
@@ -277,14 +294,31 @@ export class RoomTracker {
       if (!userId) {
         return;
       }
-      if (this.localUserId !== undefined && userId === this.localUserId) {
+      // The manager's server-verified identity wins over caller hints: a
+      // guest client generates its own id that never matches the payload's
+      // server-issued userId, which would fabricate a phantom participant.
+      const selfId = this.manager.getLocalUserId?.() ?? this.localUserId;
+      if (selfId !== undefined && selfId !== null && userId === selfId) {
         // The local user is not a tracked (remote) participant; reflect the
         // mute only in the local flag instead of upserting a phantom entry.
         this.localMutedByHost = true;
         this.recompute();
         return;
       }
-      this.update(userId, (current) => ({ ...current, mutedByHost: true }));
+      // A mute only decorates live participants; upserting an unknown id
+      // would create a phantom entry named after the fallback displayName.
+      if (!this.participants.has(userId)) {
+        return;
+      }
+      // The server paused the target's producers: their media stopped and
+      // the room is told whose media it is. Reflect both, so listeners see
+      // the mute immediately instead of waiting for track events.
+      this.update(userId, (current) => ({
+        ...current,
+        isAudioEnabled: false,
+        isCameraEnabled: false,
+        mutedByHost: true,
+      }));
     };
     const onRoomLocked = (payload: unknown) => {
       const { locked } = (payload ?? {}) as { locked?: boolean };

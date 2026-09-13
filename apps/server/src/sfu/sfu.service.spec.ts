@@ -2028,6 +2028,63 @@ describe('rejoin grace', () => {
     });
   });
 
+  it('announces sfu:peer-media-detached when a peer seat is held', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+
+    await service.closePeer(bob);
+
+    expect(alice.emit).toHaveBeenCalledWith('sfu:peer-media-detached', {
+      userId: 'user-2',
+    });
+  });
+
+  it('announces sfu:peer-media-detached before the departure event', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+    presence.rejoinGraceMs = 10;
+
+    await service.closePeer(bob);
+    await wait(40);
+    presence.rejoinGraceMs = 30_000;
+
+    const events = (alice.emit as jest.Mock).mock.calls.map(
+      (call: unknown[]) => call[0],
+    );
+    expect(events.indexOf('sfu:peer-media-detached')).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf('sfu:peer-media-detached')).toBeLessThan(
+      events.indexOf('sfu:peer-left'),
+    );
+  });
+
+  it('does not repeat the detach announcement on a silent same-id rejoin', async () => {
+    const alice = createSocket('socket-alice');
+    const bob = createSocket('socket-bob');
+    await joinViaUser(alice, 'user-1');
+    await joinViaUser(bob, 'user-2');
+    (alice.emit as jest.Mock).mockClear();
+
+    await service.closePeer(bob);
+    const restored = createSocket('socket-bob-2');
+    await joinViaUser(restored, 'user-2');
+
+    // The initial blip announces the detach exactly once; the restore runs
+    // through the normal new-producer flow with no departure events.
+    const detachEvents = (alice.emit as jest.Mock).mock.calls.filter(
+      (call: unknown[]) => call[0] === 'sfu:peer-media-detached',
+    );
+    expect(detachEvents).toHaveLength(1);
+    expect(detachEvents[0]).toEqual(['sfu:peer-media-detached', { userId: 'user-2' }]);
+    expect((alice.emit as jest.Mock).mock.calls).not.toContainEqual([
+      'sfu:peer-left',
+      { userId: 'user-2' },
+    ]);
+  });
+
   it('refuses a kicked peer rejoin for the room lifetime', async () => {
     const owner = createSocket('socket-owner');
     const target = createSocket('socket-target');

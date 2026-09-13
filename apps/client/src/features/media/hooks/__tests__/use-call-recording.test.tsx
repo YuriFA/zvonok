@@ -101,6 +101,7 @@ function makePeer(userId: string, overrides: Partial<RemotePeerMedia> = {}): Rem
     isCameraEnabled: true,
     isScreenSharing: false,
     isAudioEnabled: true,
+    isConnected: true,
     mutedByHost: false,
     ...overrides,
   };

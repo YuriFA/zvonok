@@ -808,11 +808,21 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
    */
   private detachMedia(socketId: string): void {
     const peer = this.media.get(socketId);
-    const roomId = this.presence.contextOf(socketId)?.roomId;
-    if (!peer || !roomId) {
+    const ctx = this.presence.contextOf(socketId);
+    if (!peer || !ctx) {
       this.media.delete(socketId);
       return;
     }
+    const { roomId } = ctx;
+
+    // Announce the media detach before tearing transports down, so the room
+    // can flag the seat as disconnected for the rest of the grace window.
+    this.presence.broadcastToRoom(
+      roomId,
+      'sfu:peer-media-detached',
+      { userId: ctx.userId },
+      { excludeSocketId: socketId },
+    );
 
     // Close all producers through the shared path so screen-share lock is
     // released and peers are notified consistently.
@@ -822,9 +832,8 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
 
     // Fallback: if the screen-share lock is still held (e.g. producers map was
     // not populated), release it directly so the room state stays consistent.
-    const ctx = this.presence.contextOf(socketId);
     const currentSharer = this.roomScreenShare.get(roomId);
-    if (ctx && currentSharer === socketId) {
+    if (currentSharer === socketId) {
       this.roomScreenShare.delete(roomId);
       this.presence.broadcastToRoom(
         roomId,

@@ -27,6 +27,7 @@ describe("SfuEventRouter", () => {
       onConsumerClosed: vi.fn(),
       onProducerStateChanged: vi.fn(),
       onParticipantLeft: vi.fn(),
+      onPeerMediaDetached: vi.fn(),
       onKicked: vi.fn(),
       onJoinError: vi.fn(),
       onRoomEnded: vi.fn(),
@@ -72,6 +73,7 @@ describe("SfuEventRouter", () => {
     expect(events).toContain("sfu:consumer-created");
     expect(events).toContain("sfu:consumer-closed");
     expect(events).toContain("sfu:peer-left");
+    expect(events).toContain("sfu:peer-media-detached");
     expect(events).toContain("sfu:producer-state-changed");
     expect(events).toContain("sfu:kicked");
     expect(events).toContain("sfu:room-ended");
@@ -82,7 +84,7 @@ describe("SfuEventRouter", () => {
     expect(events).toContain("sfu:guest-join-request");
     expect(events).toContain("sfu:join-error");
     expect(events).toContain("egress:status");
-    expect(events).toHaveLength(23);
+    expect(events).toHaveLength(24);
   });
 
   it("routes connect event to onConnected", () => {

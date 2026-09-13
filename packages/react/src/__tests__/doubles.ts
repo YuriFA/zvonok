@@ -91,6 +91,9 @@ export function createMockSfuManager() {
   const screenShareStoppedListeners = new Set<
     (payload: { userId: string }) => void
   >();
+  const peerMediaDetachedListeners = new Set<
+    (payload: { userId: string }) => void
+  >();
   const produceErrorListeners = new Set<(code: string) => void>();
   const reconnectErrorListeners = new Set<
     (error: { code: string; message: string }) => void
@@ -220,6 +223,12 @@ export function createMockSfuManager() {
       (listener: (payload: { userId: string }) => void) => {
         screenShareStoppedListeners.add(listener);
         return () => screenShareStoppedListeners.delete(listener);
+      },
+    ),
+    onPeerMediaDetached: vi.fn(
+      (listener: (payload: { userId: string }) => void) => {
+        peerMediaDetachedListeners.add(listener);
+        return () => peerMediaDetachedListeners.delete(listener);
       },
     ),
     onGuestJoinRequest: vi.fn(

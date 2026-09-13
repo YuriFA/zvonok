@@ -294,6 +294,11 @@ export interface SfuConsumerClosedPayload {
   consumerId: string;
 }
 
+// Peer media detach notification from server (grace hold or departure)
+export interface SfuPeerMediaDetachedPayload {
+  userId: string;
+}
+
 // Consume payload sent to server
 export interface SfuConsumePayload {
   producerId: string;
@@ -354,6 +359,11 @@ export interface SfuGuestJoinRequestPayload {
 export interface SfuParticipantInfo {
   userId: string;
   username: string;
+  /**
+   * False while the peer's media is detached (e.g. disconnect grace hold);
+   * undefined or true means live. Cleared when their media reattaches.
+   */
+  mediaConnected?: boolean;
   /** Token-carried consumer correlation fields; absent on non-token paths. */
   externalId?: string;
   metadata?: unknown;

@@ -14,6 +14,7 @@ export interface ParticipantItemProps {
   isVideoOff: boolean;
   isConnected: boolean;
   isLocalUser?: boolean;
+  isMutedByHost?: boolean;
   canKick?: boolean;
   onKick?: (id: string) => void;
   canMute?: boolean;
@@ -29,6 +30,7 @@ export function ParticipantItem({
   isVideoOff,
   isConnected,
   isLocalUser,
+  isMutedByHost,
   canKick,
   onKick,
   canMute,
@@ -69,6 +71,12 @@ export function ParticipantItem({
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           {!isConnected && <span className="text-red-500">Disconnected</span>}
+          {isMutedByHost && (
+            <span className="flex items-center gap-1 text-amber-500" aria-label="Muted by host">
+              <MicOff className="size-3" />
+              Muted by host
+            </span>
+          )}
         </div>
       </div>
 
@@ -88,7 +96,7 @@ export function ParticipantItem({
       {/* Quality indicator - only show for remote users with quality data */}
       {qualityScore && <QualityIndicator score={qualityScore} stats={qualityStats} />}
 
-      {canMute && onMute && !isLocalUser && (
+      {canMute && onMute && !isLocalUser && !isMutedByHost && (
         <Button
           variant="ghost"
           size="icon"

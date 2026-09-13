@@ -23,6 +23,8 @@ export interface ZvonokParticipant {
   isCameraEnabled: boolean;
   isScreenSharing: boolean;
   isAudioEnabled: boolean;
+  /** False while the peer's media is detached (disconnect grace hold). */
+  isConnected: boolean;
   /** True after the host muted this peer and before the peer unmutes again. */
   mutedByHost: boolean;
 }

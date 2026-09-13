@@ -65,4 +65,21 @@ describe("ParticipantsList host mute control", () => {
     fireEvent.click(screen.getByLabelText("Mute bob"));
     expect(onMuteParticipant).toHaveBeenCalledWith("u2");
   });
+
+  it("reflects a host mute on the row and retires the mute control", () => {
+    render(
+      <ParticipantsList
+        participants={participants.map((p) =>
+          p.id === "u2" ? { ...p, isMutedByHost: true } : p,
+        )}
+        currentUserId="u1"
+        roomOwnerId="u1"
+        onMuteParticipant={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Muted by host")).toBeInTheDocument();
+    expect(screen.getByLabelText("Muted by host")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Mute bob")).not.toBeInTheDocument();
+  });
 });

@@ -13,6 +13,7 @@ export interface Participant {
   isVideoOff: boolean;
   isConnected: boolean;
   isSpeaking?: boolean;
+  isMutedByHost?: boolean;
   qualityScore?: QualityScore;
   qualityStats?: QualityStats;
 }
