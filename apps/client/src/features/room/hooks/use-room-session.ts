@@ -43,6 +43,8 @@ export function useRoomSession({
     stop: stopMedia,
     ensureAudio,
     ensureVideo,
+    stopVideoCapture,
+    stopAudioCapture,
   } = useMediaStreamContext();
 
   const localUserId = userId ?? "local";
@@ -70,6 +72,8 @@ export function useRoomSession({
     connection,
     ensureAudio,
     ensureVideo,
+    stopVideoCapture,
+    stopAudioCapture,
   });
 
   const { participants } = useRoomParticipants({

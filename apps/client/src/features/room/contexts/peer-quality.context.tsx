@@ -17,6 +17,10 @@ const PeerQualityContext = createContext<PeerQualityContextValue | null>(null);
 /** Debounce delay (ms) before emitting a simulcast layer switch */
 const LAYER_SWITCH_DEBOUNCE_MS = 3000;
 
+/** Stats polling cadence: phones poll slower to save radio wakeups. */
+// eslint-disable-next-line react-refresh/only-export-components
+export const STATS_INTERVAL_MS = { mobile: 5000, desktop: 2000 } as const;
+
 /** A tile counts as visible once this fraction of it enters the viewport. */
 const VIEWPORT_THRESHOLD = 0.25;
 
@@ -78,9 +82,10 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
         return;
       }
 
-      const effectiveLayer = store.isViewportVisible(userId)
-        ? qualityToSpatialLayer(peerStats.score.level)
-        : 0;
+      const effectiveLayer =
+        store.isViewportVisible(userId) && !store.isSuspended()
+          ? qualityToSpatialLayer(peerStats.score.level)
+          : 0;
 
       // Only schedule if the effective layer differs from the last emitted one
       if (lastEmittedLayerCurrent.get(userId) === effectiveLayer) {
@@ -101,7 +106,8 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
         const currentLayer = currentPeerStats
           ? qualityToSpatialLayer(currentPeerStats.score.level)
           : qualityToSpatialLayer(peerStats.score.level);
-        const effectiveNow = store.isViewportVisible(userId) ? currentLayer : 0;
+        const effectiveNow =
+          store.isViewportVisible(userId) && !store.isSuspended() ? currentLayer : 0;
         const currentConsumerId = sfuManager.getVideoConsumerIdForUserId(userId);
 
         if (!currentConsumerId) {
@@ -118,24 +124,32 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
       layerTimersCurrent.set(userId, timer);
     };
 
+    const knownPeers = new Set<string>();
     const unsubscribe = sfuManager.onQualityStats((stats) => {
       store.setStats(stats);
       clearMissingUserState(stats);
 
       for (const userId of stats.keys()) {
+        knownPeers.add(userId);
         scheduleLayerSwitch(userId);
       }
     });
     const unsubscribeVisibility = store.subscribeVisibility(scheduleLayerSwitch);
+    const unsubscribeSuspend = store.subscribeSuspended(() => {
+      for (const userId of knownPeers) {
+        scheduleLayerSwitch(userId);
+      }
+    });
     const unsubscribePeerLeft = sfuManager.onParticipantLeft((userId) => {
       clearUserLayerState(userId);
     });
 
-    sfuManager.startStatsCollection(isMobile ? 5000 : 2000);
+    sfuManager.startStatsCollection(STATS_INTERVAL_MS[isMobile ? "mobile" : "desktop"]);
 
     return () => {
       unsubscribe();
       unsubscribeVisibility();
+      unsubscribeSuspend();
       unsubscribePeerLeft();
       sfuManager.stopStatsCollection();
       store.reset();

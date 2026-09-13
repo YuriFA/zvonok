@@ -8,6 +8,9 @@ export class PeerQualityStore {
   private hiddenUsers = new Set<string>();
   private listeners = new Map<string, Set<Listener>>();
   private visibilityListeners = new Set<(userId: string) => void>();
+  /** Page-level suspend (tab hidden): clamps every tile to the lowest layer. */
+  private suspended = false;
+  private suspendListeners = new Set<() => void>();
 
   setStats(stats: Map<string, PeerQualityStats>) {
     const changedIds: string[] = [];
@@ -40,6 +43,7 @@ export class PeerQualityStore {
   reset() {
     this.stats = new Map();
     this.hiddenUsers.clear();
+    this.suspended = false;
     for (const listeners of this.listeners.values()) {
       for (const fn of listeners) {
         fn();
@@ -80,6 +84,31 @@ export class PeerQualityStore {
     this.visibilityListeners.add(listener);
     return () => {
       this.visibilityListeners.delete(listener);
+    };
+  }
+
+  isSuspended(): boolean {
+    return this.suspended;
+  }
+
+  /**
+   * Flips the page-level suspend clamp. Notifies suspend subscribers (the
+   * engine reschedules every known peer); no-op when unchanged.
+   */
+  setSuspended(suspended: boolean): void {
+    if (this.suspended === suspended) {
+      return;
+    }
+    this.suspended = suspended;
+    for (const listener of this.suspendListeners) {
+      listener();
+    }
+  }
+
+  subscribeSuspended(listener: () => void): () => void {
+    this.suspendListeners.add(listener);
+    return () => {
+      this.suspendListeners.delete(listener);
     };
   }
 

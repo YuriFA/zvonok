@@ -25,6 +25,11 @@ export const useGuestJoinRoom = ({ onJoinApproved }: { onJoinApproved?: () => vo
     (currentSlug: string, requestId: string) => {
       stopPolling();
       pollTimerRef.current = setInterval(async () => {
+        // A hidden tab does not need the answer yet; skip the network
+        // round trip until the tab is visible again.
+        if (document.hidden) {
+          return;
+        }
         try {
           const result = await roomApi.guestStatus(currentSlug, requestId);
           if (result.status === "approved") {

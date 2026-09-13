@@ -15,6 +15,10 @@ export interface MediaStreamContextValue {
   ensureAudio: () => Promise<MediaStream | null>;
   /** (Re)acquires the camera and returns the fresh stream; null on failure. */
   ensureVideo: () => Promise<MediaStream | null>;
+  /** Releases the camera capture track (hardware off); idempotent. */
+  stopVideoCapture: () => Promise<boolean>;
+  /** Releases the microphone capture track (hardware off); idempotent. */
+  stopAudioCapture: () => Promise<boolean>;
 }
 
 const MediaStreamContext = createContext<MediaStreamContextValue | null>(null);
@@ -84,6 +88,9 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
     manager.stop();
   }, [manager]);
 
+  const stopVideoCapture = useCallback(() => manager.videoCapture.toggle(false), [manager]);
+  const stopAudioCapture = useCallback(() => manager.audioCapture.toggle(false), [manager]);
+
   useEffect(() => {
     void start();
     return () => {
@@ -102,6 +109,8 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
         stop,
         ensureAudio,
         ensureVideo,
+        stopVideoCapture,
+        stopAudioCapture,
       }}
     >
       {children}

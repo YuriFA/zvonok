@@ -41,6 +41,10 @@ export interface UseRoomSfuOptions {
   ensureVideo: () => Promise<MediaStream | null>;
   /** (Re)acquires the microphone; used when no live audio track exists. */
   ensureAudio: () => Promise<MediaStream | null>;
+  /** Releases the camera capture track when the camera is toggled off. */
+  stopVideoCapture: () => Promise<boolean>;
+  /** Releases the microphone capture track when the mic is toggled off. */
+  stopAudioCapture: () => Promise<boolean>;
 }
 
 export interface UseRoomSfuResult {
@@ -79,6 +83,8 @@ export function useRoomSfu({
   connection,
   ensureVideo,
   ensureAudio,
+  stopVideoCapture,
+  stopAudioCapture,
 }: UseRoomSfuOptions): UseRoomSfuResult {
   const isMobile = useIsMobile();
   const manager = connection.manager;
@@ -182,6 +188,10 @@ export function useRoomSfu({
       if (hasProducer("video")) {
         pauseProducer("video");
       }
+      // Release the capture hardware: the sensor and preview pipeline
+      // otherwise run for the rest of the call. Re-enabling re-acquires
+      // the track through ensureVideo below.
+      await stopVideoCapture();
       return;
     }
 
@@ -222,6 +232,7 @@ export function useRoomSfu({
     produceTrack,
     replaceTrack,
     hasProducer,
+    stopVideoCapture,
     pauseProducer,
     resumeProducer,
     isMobile,
@@ -235,6 +246,10 @@ export function useRoomSfu({
       if (hasProducer("audio")) {
         pauseProducer("audio");
       }
+      // Release the microphone for the same reason as the camera: capture
+      // hardware stays hot otherwise. Re-enabling re-acquires through
+      // ensureAudio below.
+      await stopAudioCapture();
       return;
     }
 
@@ -275,7 +290,7 @@ export function useRoomSfu({
     produceTrack,
     replaceTrack,
     hasProducer,
-    pauseProducer,
+    stopAudioCapture,
     resumeProducer,
     isMobile,
   ]);

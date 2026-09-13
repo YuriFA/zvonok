@@ -190,6 +190,45 @@ describe("PeerQualityProvider", () => {
     expect(setPreferredLayers).toHaveBeenLastCalledWith("producer-1", 2);
   });
 
+  it("clamps every peer to the lowest layer while the page is suspended and restores on resume", () => {
+    const manager = createFakeSfuManager();
+    const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
+    vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
+
+    let store: PeerQualityStore | null = null;
+    const captureStore = (captured: PeerQualityStore) => {
+      store = captured;
+    };
+
+    manager.simulateParticipantJoined(createPeer("user-2", "producer-1"));
+
+    render(
+      <SessionManagerProvider manager={manager}>
+        <PeerQualityProvider>
+          <StoreProbe onStore={captureStore} />
+        </PeerQualityProvider>
+      </SessionManagerProvider>,
+    );
+
+    act(() => {
+      manager.emitQualityStats(new Map([["user-2", createQualityStats("user-2", "excellent")]]));
+      vi.advanceTimersByTime(3000);
+    });
+    expect(setPreferredLayers).toHaveBeenCalledWith("producer-1", 2);
+
+    act(() => {
+      store!.setSuspended(true);
+      vi.advanceTimersByTime(3000);
+    });
+    expect(setPreferredLayers).toHaveBeenLastCalledWith("producer-1", 0);
+
+    act(() => {
+      store!.setSuspended(false);
+      vi.advanceTimersByTime(3000);
+    });
+    expect(setPreferredLayers).toHaveBeenLastCalledWith("producer-1", 2);
+  });
+
   afterEach(() => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
