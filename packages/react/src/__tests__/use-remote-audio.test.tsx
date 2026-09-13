@@ -17,6 +17,8 @@ const mixerHarness = vi.hoisted(() => {
     setGain: ReturnType<typeof vi.fn>;
     setSink: ReturnType<typeof vi.fn>;
     getAnalyser: ReturnType<typeof vi.fn>;
+    addAnalysisTap: ReturnType<typeof vi.fn>;
+    removeAnalysisTap: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
   }> = [];
   return { instances };
@@ -31,6 +33,8 @@ vi.mock("@zvonok/client/audio/remote-audio-mixer", () => ({
       setGain: vi.fn(),
       setSink: vi.fn(async () => true),
       getAnalyser: vi.fn(() => ({ fake: "analyser" })),
+      addAnalysisTap: vi.fn(() => ({ fake: "mic-analyser" })),
+      removeAnalysisTap: vi.fn(),
       destroy: vi.fn(),
     };
     mixerHarness.instances.push(instance);
@@ -196,8 +200,9 @@ describe("useRemoteAudio", () => {
     });
     await attachManager(result, sfu);
 
-    expect(samplerHarness.addOwned).toHaveBeenCalledWith("me-1", expect.anything());
     const mixer = mixerHarness.instances.at(-1)!;
+    expect(mixer.addAnalysisTap).toHaveBeenCalledWith("me-1", expect.anything());
+    expect(samplerHarness.addBorrowed).toHaveBeenCalledWith("me-1", { fake: "mic-analyser" });
     expect(mixer.addPeer).not.toHaveBeenCalledWith("me-1", expect.anything());
   });
 

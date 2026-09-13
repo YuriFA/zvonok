@@ -5,6 +5,14 @@ export interface IRemoteAudioMixer {
   setSink(deviceId: string): Promise<boolean>;
   setGain(userId: string, value: number): void;
   getAnalyser(userId: string): AnalyserNode | undefined;
+  /**
+   * Analysis-only tap for a track that is never played back (the local
+   * microphone). Runs on the shared playout context, so metering needs no
+   * second AudioContext. Idempotent per track; returns the analyser or
+   * null when the graph rejects the track.
+   */
+  addAnalysisTap(userId: string, audioTrack: MediaStreamTrack): AnalyserNode | null;
+  removeAnalysisTap(userId: string): void;
   destroy(): void;
 }
 
@@ -16,10 +24,17 @@ interface PeerNodes {
   analysisSource: MediaStreamAudioSourceNode;
 }
 
+interface TapNodes {
+  source: MediaStreamAudioSourceNode;
+  analyser: AnalyserNode;
+  trackId: string;
+}
+
 export class RemoteAudioMixer implements IRemoteAudioMixer {
   private ctx: AudioContext;
   private peers: Map<string, PeerNodes> = new Map();
   private sinkId: string | null = null;
+  private taps = new Map<string, TapNodes>();
 
   constructor() {
     this.ctx = new AudioContext();
@@ -136,9 +151,45 @@ export class RemoteAudioMixer implements IRemoteAudioMixer {
     return this.peers.get(userId)?.analyser;
   }
 
+  addAnalysisTap(userId: string, audioTrack: MediaStreamTrack): AnalyserNode | null {
+    const existing = this.taps.get(userId);
+    if (existing && existing.trackId === audioTrack.id) {
+      return existing.analyser;
+    }
+
+    this.removeAnalysisTap(userId);
+
+    try {
+      this.resumeCtx();
+      // Same reasoning as the per-peer analysis pipeline: the tap rides on
+      // the shared playout context (no second AudioContext) and is never
+      // connected to the destination, so there is no feedback path.
+      const source = this.ctx.createMediaStreamSource(new MediaStream([audioTrack]));
+      const analyser = this.ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
+      source.connect(analyser);
+      this.taps.set(userId, { source, analyser, trackId: audioTrack.id });
+      return analyser;
+    } catch {
+      return null;
+    }
+  }
+
+  removeAnalysisTap(userId: string): void {
+    const tap = this.taps.get(userId);
+    if (!tap) return;
+    tap.source.disconnect();
+    tap.analyser.disconnect();
+    this.taps.delete(userId);
+  }
+
   destroy(): void {
     for (const userId of Array.from(this.peers.keys())) {
       this.removePeer(userId);
+    }
+    for (const userId of Array.from(this.taps.keys())) {
+      this.removeAnalysisTap(userId);
     }
 
     try {

@@ -97,13 +97,17 @@ export function useRemoteAudio(options: UseRemoteAudioOptions = {}): UseRemoteAu
     if (!manager || !mixer || !sampler || !detector) {
       return;
     }
-
-    // Local microphone: analysed so the consumer sees themselves as the
-    // speaker, never played back.
+    // Local microphone: analysed through the mixer's shared playout
+    // context - no dedicated AudioContext - and never played back.
     const localUserId = localAudio?.userId ?? null;
-    if (localUserId && localAudio?.stream) {
-      sampler.addOwned(localUserId, localAudio.stream);
+    const micTrack = localAudio?.stream?.getAudioTracks()[0] ?? null;
+    if (localUserId && micTrack) {
+      const micAnalyser = mixer.addAnalysisTap(localUserId, micTrack);
+      if (micAnalyser) {
+        sampler.addBorrowed(localUserId, micAnalyser);
+      }
     } else if (localUserId) {
+      mixer.removeAnalysisTap(localUserId);
       sampler.remove(localUserId);
     }
 
@@ -142,9 +146,17 @@ export function useRemoteAudio(options: UseRemoteAudioOptions = {}): UseRemoteAu
       }
     }
     prevTrackIdsRef.current = currentTrackIds;
+  }, [manager, participants, localAudio?.userId, localAudio?.stream]);
 
+  // One sampling loop per manager attach: it reads refs only, so room
+  // events (participant flips, mute changes) no longer tear down and
+  // recreate the timer.
+  useEffect(() => {
+    if (!manager) {
+      return;
+    }
     const interval = setInterval(() => {
-      const sampled = sampler.sample();
+      const sampled = samplerRef.current?.sample() ?? new Map<string, number>();
       let changed = false;
       const next: Record<string, number> = {};
       for (const [userId, level] of sampled) {
@@ -159,7 +171,7 @@ export function useRemoteAudio(options: UseRemoteAudioOptions = {}): UseRemoteAu
       }
       tickRef.current += 1;
       if (tickRef.current % ACTIVE_SPEAKER_EVERY_N_TICKS === 0) {
-        setActiveSpeakerId(detector.detect(sampled));
+        setActiveSpeakerId(detectorRef.current?.detect(sampled) ?? null);
       }
     }, SAMPLE_INTERVAL_MS);
 
@@ -167,7 +179,7 @@ export function useRemoteAudio(options: UseRemoteAudioOptions = {}): UseRemoteAu
       clearInterval(interval);
       tickRef.current = 0;
     };
-  }, [manager, participants, localAudio?.userId, localAudio?.stream]);
+  }, [manager]);
 
   useEffect(() => {
     const sampler = samplerRef.current;

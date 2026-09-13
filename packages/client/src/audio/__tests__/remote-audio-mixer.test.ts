@@ -233,4 +233,34 @@ describe("RemoteAudioMixer", () => {
       }
     });
   });
+
+  it("adds an idempotent analysis tap and removes it on demand", () => {
+    const track = mockTrack("mic-1");
+
+    const first = mixer.addAnalysisTap("me-1", track);
+    const second = mixer.addAnalysisTap("me-1", track);
+
+    expect(first).not.toBeNull();
+    expect(second).toBe(first);
+    expect(mockCtx.createMediaStreamSource).toHaveBeenCalledTimes(1);
+
+    mixer.removeAnalysisTap("me-1");
+    expect(mockCtx._analysisSourceNode.disconnect).toHaveBeenCalled();
+  });
+
+  it("rebuilds the tap when the analysed track changes", () => {
+    mixer.addAnalysisTap("me-1", mockTrack("mic-1"));
+    mixer.addAnalysisTap("me-1", mockTrack("mic-2"));
+
+    expect(mockCtx.createMediaStreamSource).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the shared context on destroy after taps were used", () => {
+    mixer.addAnalysisTap("me-1", mockTrack("mic-1"));
+    expect(mockCtx.close).not.toHaveBeenCalled();
+
+    mixer.destroy();
+
+    expect(mockCtx.close).toHaveBeenCalledTimes(1);
+  });
 });
