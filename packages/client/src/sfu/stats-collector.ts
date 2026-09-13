@@ -5,6 +5,7 @@
 
 import type { Consumer, Transport } from "mediasoup-client/types";
 
+import { createLogger } from "../helpers/logger.js";
 import { calculateQualityScore } from "./quality-score.js";
 import type { QualityStatsCallback, PeerQualityStats, QualityStats } from "./types.js";
 
@@ -12,6 +13,7 @@ import type { QualityStatsCallback, PeerQualityStats, QualityStats } from "./typ
  * Collects quality statistics for SFU consumers.
  */
 export class SfuStatsCollector {
+  private readonly log = createLogger("stats");
   private interval: ReturnType<typeof setInterval> | null = null;
   private callbacks = new Set<QualityStatsCallback>();
   private getRecvTransport: () => Transport | null;
@@ -90,7 +92,7 @@ export class SfuStatsCollector {
           statsMap.set(userId, { userId, stats, score });
         }
       } catch (error) {
-        console.error("[SFU] Failed to get stats for consumer:", error);
+        this.log.error("Failed to get stats for consumer:", error);
       }
     }
 
@@ -152,7 +154,7 @@ export class SfuStatsCollector {
 
       return { bitrate, packetLoss, rtt, jitter, width, height, fps };
     } catch (error) {
-      console.error("[SFU] Error getting consumer stats:", error);
+      this.log.error("Error getting consumer stats:", error);
       return null;
     }
   }

@@ -1,3 +1,5 @@
+import { ensureExhausted } from "../helpers/exhausted.js";
+
 export const CaptureState = {
   STOPPED: 0,
   STARTING: 1,
@@ -110,6 +112,6 @@ export function getCaptureStateDisplay(
         tooltip: `${label} unavailable`,
       };
     default:
-      return { status: "off", tooltip: `${label} off`, statusText: null };
+      return ensureExhausted(state);
   }
 }

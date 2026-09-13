@@ -17,6 +17,7 @@ const PUBLIC_SUBPATHS = [
   "./audio/active-speaker-detector",
   "./audio/audio-level-sampler",
   "./audio/remote-audio-mixer",
+  "./helpers/concurrency",
   "./media/capture-state",
   "./media/interfaces",
   "./media/manager-factory",

@@ -970,6 +970,22 @@ describe("SfuManager", () => {
       ).toBe(false);
     });
 
+    it("gives up recovery when rejoins exceed the sliding-window limit", async () => {
+      await establishSession();
+      const failures: string[] = [];
+      manager.onReconnectError((error) => failures.push(error.code));
+
+      // Six rapid reconnect cycles: five replays pass, the sixth trips the
+      // sliding-window limiter and recovery fails typed.
+      for (let cycle = 0; cycle < 6; cycle++) {
+        await testContext.emitSocketEvent("disconnect");
+        await testContext.emitSocketEvent("connect");
+      }
+
+      expect(manager.getState().connectionState).toBe("failed");
+      expect(failures).toContain("RECONNECT_EXHAUSTED");
+    });
+
     it("refreshes an expired token once through the provider and rejoins", async () => {
       await establishSession();
       const provider = vi.fn(async () => "fresh-token");

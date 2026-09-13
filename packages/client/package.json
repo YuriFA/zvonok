@@ -16,6 +16,10 @@
       "types": "./src/audio/remote-audio-mixer.ts",
       "default": "./src/audio/remote-audio-mixer.ts"
     },
+    "./helpers/concurrency": {
+      "types": "./src/helpers/concurrency.ts",
+      "default": "./src/helpers/concurrency.ts"
+    },
     "./media/capture-state": {
       "types": "./src/media/capture-state.ts",
       "default": "./src/media/capture-state.ts"
@@ -105,6 +109,10 @@
       "./config/media": {
         "types": "./dist/config/media.d.ts",
         "default": "./dist/config/media.js"
+      },
+      "./helpers/concurrency": {
+        "types": "./dist/helpers/concurrency.d.ts",
+        "default": "./dist/helpers/concurrency.js"
       },
       "./media/capture": {
         "types": "./dist/media/capture.d.ts",

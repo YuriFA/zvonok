@@ -20,6 +20,8 @@ import type { Socket } from "socket.io-client";
 import { SfuConnection } from "./connection.js";
 import { SfuEventRouter, type SfuEventHandlers } from "./event-router.js";
 import { SfuStatsCollector } from "./stats-collector.js";
+import { singleFlight, withoutConcurrency } from "../helpers/concurrency.js";
+import { createLogger } from "../helpers/logger.js";
 import type {
   SfuState,
   SfuJoinedPayload,
@@ -83,6 +85,10 @@ const SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
   { rid: "high", maxBitrate: 2_000_000 },
 ];
 
+/** Rejoin storm guard: no more than this many rejoins per sliding window. */
+const REJOIN_WINDOW_MS = 30_000;
+const REJOIN_MAX_PER_WINDOW = 5;
+
 /**
  * The SFU connection facade: one deep module owning connection, room
  * membership, host controls, egress control, the data channel, producer
@@ -97,6 +103,7 @@ const SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
  * session; join refusals surface as coded SfuJoinError values.
  */
 export class SfuManager {
+  private readonly log = createLogger("sfu");
   private connection: SfuConnection;
   private statsCollector: SfuStatsCollector;
 
@@ -108,11 +115,9 @@ export class SfuManager {
   private consumers = new Map<string, Consumer>();
   private peers = new Map<string, SfuParticipantInfo>();
   private pendingNewProducers: SfuNewProducerPayload[] = [];
+  // Serialized replaceTrack chains per media kind (see withoutConcurrency).
+  private readonly locks = new Map<string, Promise<unknown>>();
   private producingInProgress = new Map<string, Promise<Producer | null>>();
-  private replaceChains: Record<"audio" | "video", Promise<boolean>> = {
-    audio: Promise.resolve(true),
-    video: Promise.resolve(true),
-  };
   private pendingProduceRequests = new Map<
     string,
     {
@@ -179,6 +184,8 @@ export class SfuManager {
   private joinOptions: SfuJoinOptions | null = null;
   /** One token refresh attempt per rejoin. */
   private tokenRefreshAttempted = false;
+  /** Timestamps of recent rejoins for the sliding-window rate limit. */
+  private rejoinTimes: number[] = [];
   /** Live local tracks + produce intents held across a reconnect blip. */
   private retainedLocalProduces: Array<{
     track: MediaStreamTrack;
@@ -562,21 +569,19 @@ export class SfuManager {
       // early produce calls (camera/mic right after join) are buffered and
       // flushed once the send transport exists instead of being dropped.
       if (!this.connection.isConnected()) {
-        console.error("[SFU] Send transport not ready and not connected");
+        this.log.error("[SFU] Send transport not ready and not connected");
         return null;
       }
       if (this.pendingLocalProduces.length >= 8) {
-        console.warn("[SFU] Local produce queue full, dropping request");
+        this.log.warn("[SFU] Local produce queue full, dropping request");
         return null;
       }
       if (track.readyState === "ended") {
-        console.warn("[SFU] Not queueing produce for an ended track");
+        this.log.warn("[SFU] Not queueing produce for an ended track");
         return null;
       }
-      console.log(
-        "[SFU] Send transport not ready yet, buffering produce for:",
-        track.kind,
-      );
+      this.log.debug("[SFU] Send transport not ready yet, buffering produce for:",
+      track.kind,);
       return new Promise<Producer | null>((resolve, reject) => {
         this.pendingLocalProduces.push({
           track,
@@ -594,31 +599,20 @@ export class SfuManager {
     if (source !== "screen") {
       const existing = this.getProducerByKind(kind);
       if (existing) {
-        console.warn("[SFU] Producer already exists for kind:", kind);
+        this.log.warn("[SFU] Producer already exists for kind:", kind);
         return existing;
       }
     } else {
       const existing = this.getScreenProducer();
       if (existing) {
-        console.warn("[SFU] Screen producer already exists");
+        this.log.warn("[SFU] Screen producer already exists");
         return existing;
       }
     }
 
-    const pending = this.producingInProgress.get(dedupeKey);
-    if (pending) {
-      console.warn("[SFU] Produce already in-flight for:", dedupeKey);
-      return pending;
-    }
-
-    const producePromise = this.doProduceTrack(track, source, { isMobile });
-    this.producingInProgress.set(dedupeKey, producePromise);
-
-    try {
-      return await producePromise;
-    } finally {
-      this.producingInProgress.delete(dedupeKey);
-    }
+    return singleFlight(this.producingInProgress, dedupeKey, () =>
+      this.doProduceTrack(track, source, { isMobile }),
+    );
   }
 
   private async doProduceTrack(
@@ -654,12 +648,10 @@ export class SfuManager {
       });
 
       this.producers.set(producer.id, producer);
-      console.log(
-        "[SFU] Produced track:",
-        track.kind,
-        producer.id,
-        source ?? "",
-      );
+      this.log.debug("[SFU] Produced track:",
+      track.kind,
+      producer.id,
+      source ?? "",);
 
       producer.on("transportclose", () => {
         this.producers.delete(producer.id);
@@ -667,7 +659,7 @@ export class SfuManager {
 
       return producer;
     } catch (error) {
-      console.error("[SFU] Failed to produce track:", error);
+      this.log.error("[SFU] Failed to produce track:", error);
       // Re-throw structured produce errors so callers can inspect the code.
       // For all other errors, return null to preserve existing behaviour.
       if (error instanceof SfuProduceError) {
@@ -764,21 +756,19 @@ export class SfuManager {
   ): Promise<boolean> {
     const producer = this.getProducerByKind(kind);
     if (!producer) return true;
-    // Two callers can request the same swap (the track-sync hook reacts to the
-    // capture state change while the toggle handler awaits its own swap).
-    // Serialize and skip redundant work: concurrent replaceTrack calls reject.
-    const swap = this.replaceChains[kind].then(async () => {
+    // Two callers can request the same swap (the track-sync hook reacts to
+    // the capture state change while the toggle handler awaits its own
+    // swap): serialize per media kind, skipping redundant work.
+    return withoutConcurrency(this.locks, `replace:${kind}`, async () => {
       if (producer.track === newTrack) return true;
       try {
         await producer.replaceTrack({ track: newTrack });
         return true;
       } catch (error) {
-        console.error(`[SFU] Failed to replace ${kind} track:`, error);
+        this.log.error(`[SFU] Failed to replace ${kind} track:`, error);
         return false;
       }
     });
-    this.replaceChains[kind] = swap.catch(() => false);
-    return swap;
   }
 
   getProducerByKind(kind: "audio" | "video"): Producer | undefined {
@@ -906,10 +896,22 @@ export class SfuManager {
 
   // Event handlers
   private handleConnected(): void {
-    console.log("[SFU] Connected");
+    this.log.info("[SFU] Connected");
     if (this.sessionEstablished && this.lastJoinPayload) {
       // socket.io reconnected mid-session: replay the join pipeline and
-      // keep the reconnecting status until the join ack lands.
+      // keep the reconnecting status until the join ack lands. A
+      // sliding-window rate limit stops endless flapping from looping the
+      // rejoin forever; exceeding it fails recovery like a socket
+      // exhaustion would.
+      if (!this.allowRejoin()) {
+        this.failRecovery(
+          new SfuReconnectError(
+            "RECONNECT_EXHAUSTED",
+            "Too many rejoin attempts in a short window",
+          ),
+        );
+        return;
+      }
       this.tokenRefreshAttempted = false;
       void this.joinRoom(this.lastJoinPayload).catch(() => undefined);
       return;
@@ -917,8 +919,20 @@ export class SfuManager {
     this.updateState({ connectionState: "connected" });
   }
 
+  /** Sliding-window rejoin budget; false when this rejoin exceeds it. */
+  private allowRejoin(): boolean {
+    const now = Date.now();
+    this.rejoinTimes = this.rejoinTimes.filter((t) => now - t < REJOIN_WINDOW_MS);
+    if (this.rejoinTimes.length >= REJOIN_MAX_PER_WINDOW) {
+      this.log.warn("[SFU] Rejoin rate limit reached, giving up recovery");
+      return false;
+    }
+    this.rejoinTimes.push(now);
+    return true;
+  }
+
   private handleDisconnected(): void {
-    console.log("[SFU] Disconnected");
+    this.log.info("[SFU] Disconnected");
     const recovering = this.sessionEstablished && this.lastJoinPayload !== null;
     this.updateState({
       connectionState: recovering ? "reconnecting" : "connecting",
@@ -963,18 +977,16 @@ export class SfuManager {
   private replayRetainedProduces(): void {
     if (this.retainedLocalProduces.length === 0) return;
     const retained = this.retainedLocalProduces.splice(0);
-    console.log(
-      "[SFU] Replaying",
-      retained.length,
-      "retained local produce(s)",
-    );
+    this.log.info("[SFU] Replaying",
+    retained.length,
+    "retained local produce(s)",);
     for (const entry of retained) {
       void this.produceWithSource(entry.track, entry.source, entry.options);
     }
   }
 
   private handleReconnectFailed(): void {
-    console.log("[SFU] Reconnect failed");
+    this.log.warn("[SFU] Reconnect failed");
     if (this.sessionEstablished && this.lastJoinPayload) {
       this.failRecovery(
         new SfuReconnectError(
@@ -988,7 +1000,7 @@ export class SfuManager {
   }
 
   private async handleJoined(payload: SfuJoinedPayload): Promise<void> {
-    console.log("[SFU] Joined room, loading device...");
+    this.log.info("[SFU] Joined room, loading device...");
     // The server echoes back the verified identity and the effective
     // capabilities; payload identity is never trusted and rights are never
     // decoded from the token client-side.
@@ -1098,11 +1110,9 @@ export class SfuManager {
       // producing now is safe even before DTLS completes.
       if (this.pendingLocalProduces.length > 0) {
         const pending = this.pendingLocalProduces.splice(0);
-        console.log(
-          "[SFU] Flushing",
-          pending.length,
-          "buffered local produce(s)",
-        );
+        this.log.debug("[SFU] Flushing",
+        pending.length,
+        "buffered local produce(s)",);
         for (const entry of pending) {
           this.produceWithSource(entry.track, entry.source, entry.options).then(
             entry.resolve,
@@ -1116,11 +1126,9 @@ export class SfuManager {
       // Replay any producers that arrived before the recv transport was ready
       if (this.pendingNewProducers.length > 0) {
         const pending = this.pendingNewProducers.splice(0);
-        console.log(
-          "[SFU] Processing",
-          pending.length,
-          "buffered new-producer(s)",
-        );
+        this.log.debug("[SFU] Processing",
+        pending.length,
+        "buffered new-producer(s)",);
         for (const pendingPayload of pending) {
           void this.consumeProducer(pendingPayload);
         }
@@ -1153,7 +1161,7 @@ export class SfuManager {
   }
 
   private handleTransportConnected(payload: { transportId: string }): void {
-    console.log("[SFU] Transport connected:", payload.transportId);
+    this.log.debug("[SFU] Transport connected:", payload.transportId);
     if (this.sendTransport?.id === payload.transportId) {
     } else if (this.recvTransport?.id === payload.transportId) {
     }
@@ -1163,7 +1171,7 @@ export class SfuManager {
     const { requestId, producerId, kind, appData } = payload;
     const source = appData?.source;
 
-    console.log("[SFU] Producer created:", kind, producerId, source ?? "");
+    this.log.debug("[SFU] Producer created:", kind, producerId, source ?? "");
 
     const pending = this.pendingProduceRequests.get(requestId);
     if (pending) {
@@ -1185,7 +1193,7 @@ export class SfuManager {
     code: SfuProduceErrorCode;
     message: string;
   }): void {
-    console.error("[SFU] Produce error:", payload.code, payload.message);
+    this.log.error("[SFU] Produce error:", payload.code, payload.message);
 
     const pending = this.pendingProduceRequests.get(payload.requestId);
     if (pending) {
@@ -1199,7 +1207,7 @@ export class SfuManager {
   }
 
   private handleJoinError(payload: SfuJoinErrorPayload): void {
-    console.error("[SFU] Join error:", payload.code, payload.message);
+    this.log.error("[SFU] Join error:", payload.code, payload.message);
     const error = new SfuJoinError(payload.code, payload.message);
 
     if (this.sessionEstablished && this.lastJoinPayload) {
@@ -1262,7 +1270,7 @@ export class SfuManager {
   }
 
   private handlePeerJoined(payload: SfuParticipantJoinedPayload): void {
-    console.log("[SFU] Peer joined:", payload.userId, payload.username);
+    this.log.debug("[SFU] Peer joined:", payload.userId, payload.username);
     let peer = this.peers.get(payload.userId);
     if (!peer) {
       peer = {
@@ -1286,7 +1294,7 @@ export class SfuManager {
   }
 
   private handleExistingPeers(peers: SfuExistingParticipantsPayload[]): void {
-    console.log("[SFU] Existing peers:", peers.length);
+    this.log.debug("[SFU] Existing peers:", peers.length);
     for (const peerData of peers) {
       let peer = this.peers.get(peerData.userId);
       if (!peer) {
@@ -1312,7 +1320,7 @@ export class SfuManager {
   }
 
   private handleNewProducer(payload: SfuNewProducerPayload): void {
-    console.log("[SFU] New producer:", payload.userId, payload.kind);
+    this.log.debug("[SFU] New producer:", payload.userId, payload.kind);
     // A screen-share producer from another peer means the room is blocked for us.
     if (
       payload.appData?.source === "screen" &&
@@ -1337,7 +1345,7 @@ export class SfuManager {
       });
 
       this.consumers.set(consumer.id, consumer);
-      console.log("[SFU] Consumer ready:", payload.kind, consumer.id);
+      this.log.debug("[SFU] Consumer ready:", payload.kind, consumer.id);
 
       // Resume the consumer  -  delay for audio to let jitter buffer initialise
       if (payload.kind === "audio") {
@@ -1392,26 +1400,24 @@ export class SfuManager {
         this.consumers.delete(consumer.id);
       });
     } catch (error) {
-      console.error("[SFU] Failed to create consumer:", error);
+      this.log.error("[SFU] Failed to create consumer:", error);
     }
   }
 
   private handleProducerStateChanged(
     payload: SfuProducerStateChangedPayload,
   ): void {
-    console.log(
-      "[SFU] Producer state changed:",
-      payload.userId,
-      payload.kind,
-      payload.paused ? "paused" : "resumed",
-    );
+    this.log.debug("[SFU] Producer state changed:",
+    payload.userId,
+    payload.kind,
+    payload.paused ? "paused" : "resumed",);
     this.producerStateCallbacks.forEach((callback) => {
       callback(payload);
     });
   }
 
   private handlePeerLeft(payload: { userId: string }): void {
-    console.log("[SFU] Peer left:", payload.userId);
+    this.log.debug("[SFU] Peer left:", payload.userId);
     const peer = this.peers.get(payload.userId);
     if (peer) {
       // Close consumers for this peer
@@ -1429,7 +1435,7 @@ export class SfuManager {
   }
 
   private handleKicked(payload: SfuKickedPayload): void {
-    console.log("[SFU] Kicked from room:", payload.roomId);
+    this.log.debug("[SFU] Kicked from room:", payload.roomId);
     this.kickedCallbacks.forEach((callback) => {
       callback(payload);
     });
@@ -1443,7 +1449,7 @@ export class SfuManager {
   }
 
   private handleRoomEnded(payload: SfuRoomEndedPayload): void {
-    console.log("[SFU] Room ended:", payload.roomId);
+    this.log.debug("[SFU] Room ended:", payload.roomId);
     for (const callback of this.roomEndedCallbacks) {
       callback(payload);
     }
@@ -1453,7 +1459,7 @@ export class SfuManager {
   }
 
   private handleScreenShareStarted(payload: { userId: string }): void {
-    console.log("[SFU] Screen share started:", payload.userId);
+    this.log.debug("[SFU] Screen share started:", payload.userId);
     if (payload.userId !== this.localUserId) {
       this.updateState({ isScreenShareBlocked: true });
     }
@@ -1462,7 +1468,7 @@ export class SfuManager {
   private handleScreenShareStopped(
     payload: SfuScreenShareStoppedPayload,
   ): void {
-    console.log("[SFU] Screen share stopped:", payload.userId);
+    this.log.debug("[SFU] Screen share stopped:", payload.userId);
     if (payload.userId !== this.localUserId) {
       this.updateState({ isScreenShareBlocked: false });
       // Notify subscribers so they can clear the remote peer's screen state
@@ -1480,7 +1486,7 @@ export class SfuManager {
   }
 
   private handleConsumerClosed(payload: SfuConsumerClosedPayload): void {
-    console.log("[SFU] Consumer closed by server:", payload.consumerId);
+    this.log.debug("[SFU] Consumer closed by server:", payload.consumerId);
     const consumer = this.consumers.get(payload.consumerId);
     if (!consumer) return;
     consumer.close();
@@ -1494,12 +1500,12 @@ export class SfuManager {
     try {
       this.device = new Device();
       await this.device.load({ routerRtpCapabilities });
-      console.log("[SFU] Device loaded");
+      this.log.debug("[SFU] Device loaded");
 
       // Create transports after device is loaded
       await this.createTransports();
     } catch (error) {
-      console.error("[SFU] Failed to load device:", error);
+      this.log.error("[SFU] Failed to load device:", error);
       this.updateState({ connectionState: "failed" });
     }
   }
@@ -1514,10 +1520,8 @@ export class SfuManager {
 
   private async consumeProducer(payload: SfuNewProducerPayload): Promise<void> {
     if (!this.connection.getSocket() || !this.device || !this.recvTransport) {
-      console.warn(
-        "[SFU] Recv transport not ready, buffering new-producer:",
-        payload.producerId,
-      );
+      this.log.warn("[SFU] Recv transport not ready, buffering new-producer:",
+      payload.producerId,);
       this.pendingNewProducers.push(payload);
       return;
     }
@@ -1552,7 +1556,7 @@ export class SfuManager {
   }
 
   private handlePeerMediaDetached(payload: SfuPeerMediaDetachedPayload): void {
-    console.log("[SFU] Peer media detached:", payload.userId);
+    this.log.debug("[SFU] Peer media detached:", payload.userId);
     const peer = this.peers.get(payload.userId);
     if (!peer || peer.mediaConnected === false) {
       return;
@@ -1606,8 +1610,8 @@ export class SfuManager {
   private clearSession(): void {
     this.sessionEstablished = false;
     this.lastJoinPayload = null;
-    this.joinOptions = null;
     this.tokenRefreshAttempted = false;
+    this.rejoinTimes = [];
     this.retainedLocalProduces = [];
   }
 

@@ -1,9 +1,10 @@
+import { ensureExhausted } from "../helpers/exhausted.js";
+import type { QualityStats, QualityScore, QualityLevel, SimulcastSpatialLayer } from "./types.js";
+
 /**
  * Quality score calculation for SFU streams.
  * Pure functions for calculating stream quality based on WebRTC stats.
  */
-
-import type { QualityStats, QualityScore, QualityLevel, SimulcastSpatialLayer } from "./types.js";
 
 /**
  * Get quality level from score.
@@ -94,5 +95,7 @@ export function qualityToSpatialLayer(level: QualityLevel): SimulcastSpatialLaye
       return 1;
     case "poor":
       return 0;
+    default:
+      return ensureExhausted(level);
   }
 }

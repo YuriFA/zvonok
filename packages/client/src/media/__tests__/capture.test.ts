@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MediaCapture } from "../capture";
 import { CaptureState } from "../capture-state";
+import { clearDevicePreferences, loadDevicePreferences } from "../device-preferences";
 import type { IMediaDeviceService } from "../device-service";
 import type { IErrorClassifier } from "../error-classifier";
 
@@ -213,6 +214,55 @@ describe("MediaCapture", () => {
       expect(constraints.audio).toEqual(
         expect.objectContaining({ deviceId: { exact: "device-2" } }),
       );
+    });
+});
+
+  describe("device preference integration", () => {
+    beforeEach(() => {
+      clearDevicePreferences();
+    });
+
+    it("falls back to the default device when the requested one is missing", async () => {
+      const video = new MediaCapture(deviceService, "video", mockErrorClassifier);
+      const gum = deviceService.getUserMedia as ReturnType<typeof vi.fn>;
+      const track = createMockTrack("video");
+      gum
+        .mockRejectedValueOnce(new DOMException("gone", "NotFoundError"))
+        .mockResolvedValueOnce(createMockStream([track]));
+
+      const result = await video.start("gone-device");
+
+      expect(result).toBe(true);
+      expect(video.getState()).toBe(CaptureState.ACTIVE);
+      expect(gum).toHaveBeenCalledTimes(2);
+      const retryConstraints = gum.mock.calls[1][0] as MediaStreamConstraints;
+      expect((retryConstraints.video as MediaTrackConstraints).deviceId).toBeUndefined();
+    });
+
+    it("remembers the device id after a successful start", async () => {
+      const video = new MediaCapture(deviceService, "video", mockErrorClassifier);
+      const track = createMockTrack("video", "device-9");
+      (deviceService.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue(
+        createMockStream([track]),
+      );
+
+      await video.start();
+
+      expect(loadDevicePreferences().video).toEqual({ deviceId: "device-9" });
+    });
+
+    it("records audio mute intent on explicit toggles", async () => {
+      const audio = new MediaCapture(deviceService, "audio", mockErrorClassifier);
+      const track = createMockTrack("audio");
+      (deviceService.getUserMedia as ReturnType<typeof vi.fn>).mockResolvedValue(
+        createMockStream([track]),
+      );
+
+      await audio.toggle(false);
+      expect(loadDevicePreferences().audio?.muted).toBe(true);
+
+      await audio.toggle(true);
+      expect(loadDevicePreferences().audio?.muted).toBeUndefined();
     });
   });
 });

@@ -1,9 +1,18 @@
 import { DEFAULT_AUDIO_CONSTRAINTS, DEFAULT_VIDEO_CONSTRAINTS } from "../config/media.js";
+import { rememberAudioMuted, rememberDevice } from "./device-preferences.js";
 import { CaptureState } from "./capture-state.js";
 import type { IMediaDeviceService } from "./device-service.js";
 import type { IErrorClassifier } from "./error-classifier.js";
 import type { IMediaCapture } from "./interfaces.js";
 import type { StateCallback } from "./types.js";
+
+/** True when a capture failed because the requested device is not present. */
+function isDeviceMissing(error: unknown): boolean {
+  return (
+    error instanceof DOMException &&
+    (error.name === "NotFoundError" || error.name === "OverconstrainedError")
+  );
+}
 
 export class MediaCapture implements IMediaCapture {
   private state: CaptureState = CaptureState.STOPPED;
@@ -74,6 +83,10 @@ export class MediaCapture implements IMediaCapture {
       this.track = track;
       this.deviceId = track.getSettings().deviceId ?? deviceId ?? null;
 
+      if (this.deviceId) {
+        rememberDevice(this.kind, this.deviceId);
+      }
+
       track.addEventListener("ended", () => {
         if (requestId === this.currentRequestId) {
           this.deviceId = null;
@@ -84,6 +97,12 @@ export class MediaCapture implements IMediaCapture {
       this.setState(CaptureState.ACTIVE);
       return true;
     } catch (error) {
+      // A remembered device may have vanished since the last session: retry
+      // once with the browser default before surfacing an error.
+      if (deviceId && isDeviceMissing(error)) {
+        return this.start();
+      }
+
       if (requestId !== this.currentRequestId) return false;
 
       const classification = this.errorClassifier.classify(error, this.kind);
@@ -111,6 +130,9 @@ export class MediaCapture implements IMediaCapture {
   }
 
   async toggle(enabled: boolean): Promise<boolean> {
+    if (this.kind === "audio") {
+      rememberAudioMuted(!enabled);
+    }
     if (!enabled) {
       this.stop();
       return true;
