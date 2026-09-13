@@ -134,7 +134,7 @@ The environment is the source of truth for the full variable list. Gotchas:
 **Source of truth:** `openspec/specs/` describes current implemented behavior per domain. `openspec/changes/` holds in-flight deltas.
 
 
-Commands (also available as `.omp/skills/openspec-*` skills):
+Commands (harness skills are installed locally with `openspec update`):
 
 - `/opsx-explore` - map an unfamiliar area before proposing
 - `/opsx-propose` - create a change: proposal.md + delta specs + tasks

@@ -18,6 +18,12 @@ dist-ssr
 .idea
 .zcode
 .DS_Store
+
+# Agent harness local files (openspec installs skills per harness via `openspec update`)
+.pi/
+.omp/
+.opencode/
+opencode.json
 *.suo
 *.ntvs*
 *.njsproj
