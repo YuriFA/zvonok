@@ -1,4 +1,16 @@
 import { act, render } from "@testing-library/react";
+
+import { PeerQualityProvider, usePeerQualityContext } from "../peer-quality.context";
+import type { PeerQualityStore } from "../peer-quality.store";
+
+/** Captures the engine's store so tests can drive viewport visibility. */
+function StoreProbe({ onStore }: { onStore: (store: PeerQualityStore) => void }) {
+  const { store } = usePeerQualityContext();
+  useEffect(() => {
+    onStore(store);
+  }, [onStore, store]);
+  return null;
+}
 import type { PeerQualityStats, QualityLevel, SfuParticipantInfo } from "@zvonok/client/sfu/types";
 import { ZvonokProvider } from "@zvonok/react";
 import { useZvonokSession } from "@zvonok/react";
@@ -74,8 +86,6 @@ function SessionSetter({ manager }: { manager: unknown }) {
   return null;
 }
 
-import { PeerQualityProvider } from "../peer-quality.context";
-
 function createPeer(userId: string, producerId: string): SfuParticipantInfo {
   return {
     userId,
@@ -113,6 +123,71 @@ function createQualityStats(userId: string, level: QualityLevel): PeerQualitySta
 describe("PeerQualityProvider", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+  it("clamps a hidden peer to the lowest layer regardless of quality", () => {
+    const manager = createFakeSfuManager();
+    const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
+    vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
+
+    let store: PeerQualityStore | null = null;
+    const captureStore = (captured: PeerQualityStore) => {
+      store = captured;
+    };
+
+    manager.simulateParticipantJoined(createPeer("user-2", "producer-1"));
+
+    render(
+      <SessionManagerProvider manager={manager}>
+        <PeerQualityProvider>
+          <StoreProbe onStore={captureStore} />
+        </PeerQualityProvider>
+      </SessionManagerProvider>,
+    );
+
+    act(() => {
+      manager.emitQualityStats(new Map([["user-2", createQualityStats("user-2", "excellent")]]));
+      store!.setVisibility("user-2", false);
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(setPreferredLayers).toHaveBeenCalledTimes(1);
+    expect(setPreferredLayers).toHaveBeenCalledWith("producer-1", 0);
+  });
+
+  it("restores the quality layer when a hidden peer becomes visible again", () => {
+    const manager = createFakeSfuManager();
+    const setPreferredLayers = vi.spyOn(manager, "setPreferredLayers");
+    vi.spyOn(manager, "startStatsCollection").mockImplementation(() => {});
+
+    let store: PeerQualityStore | null = null;
+    const captureStore = (captured: PeerQualityStore) => {
+      store = captured;
+    };
+
+    manager.simulateParticipantJoined(createPeer("user-2", "producer-1"));
+
+    render(
+      <SessionManagerProvider manager={manager}>
+        <PeerQualityProvider>
+          <StoreProbe onStore={captureStore} />
+        </PeerQualityProvider>
+      </SessionManagerProvider>,
+    );
+
+    act(() => {
+      manager.emitQualityStats(new Map([["user-2", createQualityStats("user-2", "excellent")]]));
+      store!.setVisibility("user-2", false);
+      vi.advanceTimersByTime(3000);
+    });
+    expect(setPreferredLayers).toHaveBeenLastCalledWith("producer-1", 0);
+
+    act(() => {
+      store!.setVisibility("user-2", true);
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(setPreferredLayers).toHaveBeenCalledTimes(2);
+    expect(setPreferredLayers).toHaveBeenLastCalledWith("producer-1", 2);
   });
 
   afterEach(() => {

@@ -1,7 +1,9 @@
 import { Mic, MicOff } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { memo, useRef } from "react";
 
-import { usePeerQualityContext } from "../contexts/peer-quality.context";
+import { useVideoStream } from "@zvonok/react";
+
+import { usePeerQualityContext, usePeerViewport } from "../contexts/peer-quality.context";
 import { RoomVideoAudioOverlay } from "./room-video-audio-overlay";
 import { RoomVideoQualityBadge } from "./room-video-quality-badge";
 import { RoomVideoSpeakerTile } from "./room-video-speaker-tile";
@@ -14,7 +16,13 @@ interface Props extends React.ComponentProps<"div"> {
   isAudioEnabled?: boolean;
 }
 
-export function RoomVideo({
+/**
+ * Memoized: the room tracker preserves per-participant references, so a
+ * room event that touches someone else must not re-render this tile. The
+ * grid keeps style objects stable across unrelated updates (see
+ * active-room-view).
+ */
+export const RoomVideo = memo(function RoomVideo({
   userId,
   stream,
   username,
@@ -23,16 +31,14 @@ export function RoomVideo({
   style,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const tileRef = useRef<HTMLDivElement>(null);
+  usePeerViewport(tileRef, userId);
   const { store: qualityStore } = usePeerQualityContext();
 
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
+  useVideoStream(videoRef, stream);
 
   return (
-    <RoomVideoSpeakerTile userId={userId} style={style}>
+    <RoomVideoSpeakerTile ref={tileRef} userId={userId} style={style}>
       <div className="relative size-full overflow-hidden rounded-lg bg-muted">
         <video
           ref={videoRef}
@@ -59,4 +65,4 @@ export function RoomVideo({
       </div>
     </RoomVideoSpeakerTile>
   );
-}
+});

@@ -1,10 +1,10 @@
 import { CaptureState } from "@zvonok/client/media/capture-state";
-import { useZvonokSession } from "@zvonok/react";
+import { useDevicePermissions, useZvonokSession } from "@zvonok/react";
 import { AlertTriangleIcon, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { LocalVideo } from "@/components/local-video";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 import { useMediaStreamContext } from "../contexts/media-stream.context";
@@ -47,6 +47,11 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
 
   const [permissionModalOpen, setPermissionModalOpen] = useState(false);
   const [deniedDevices, setDeniedDevices] = useState({ camera: false, microphone: false });
+
+  // Proactive, pre-capture permission state: explains blocked devices before
+  // the user attempts to join, updating live as they change the setting.
+  const cameraPermission = useDevicePermissions("video");
+  const micPermission = useDevicePermissions("audio");
 
   const handleToggleVideo = useCallback(async () => {
     const nextEnabled = !mediaControls.isVideoEnabled;
@@ -128,6 +133,26 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
           />
         )}
       </div>
+
+      {cameraPermission === "denied" && (
+        <Alert className="border-destructive bg-destructive/10 text-destructive">
+          <AlertTriangleIcon />
+          <AlertTitle>Camera access is blocked</AlertTitle>
+          <AlertDescription>
+            Allow camera access for this site in your browser settings, then reload.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {micPermission === "denied" && (
+        <Alert className="border-destructive bg-destructive/10 text-destructive">
+          <AlertTriangleIcon />
+          <AlertTitle>Microphone access is blocked</AlertTitle>
+          <AlertDescription>
+            Allow microphone access for this site in your browser settings, then reload.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {videoDevices.length === 0 && !isVideoLoading && (
         <Alert className="order-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50">

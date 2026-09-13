@@ -17,6 +17,9 @@ const PeerQualityContext = createContext<PeerQualityContextValue | null>(null);
 /** Debounce delay (ms) before emitting a simulcast layer switch */
 const LAYER_SWITCH_DEBOUNCE_MS = 3000;
 
+/** A tile counts as visible once this fraction of it enters the viewport. */
+const VIEWPORT_THRESHOLD = 0.25;
+
 interface Props {
   enabled?: boolean;
   children: ReactNode;
@@ -66,47 +69,64 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
       }
     };
 
+    // One scheduler owns this user's preferred layer: quality adapts the
+    // target for visible tiles, viewport visibility clamps hidden tiles to
+    // the lowest layer. Triggered by stats updates and visibility flips.
+    const scheduleLayerSwitch = (userId: string) => {
+      const peerStats = store.getPeerStats(userId);
+      if (!peerStats) {
+        return;
+      }
+
+      const effectiveLayer = store.isViewportVisible(userId)
+        ? qualityToSpatialLayer(peerStats.score.level)
+        : 0;
+
+      // Only schedule if the effective layer differs from the last emitted one
+      if (lastEmittedLayerCurrent.get(userId) === effectiveLayer) {
+        return;
+      }
+
+      // Cancel any pending timer for this peer
+      const existing = layerTimersCurrent.get(userId);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+      }
+
+      // Debounce: emit after LAYER_SWITCH_DEBOUNCE_MS of stability
+      const timer = setTimeout(() => {
+        layerTimersCurrent.delete(userId);
+        // Re-check: inputs may have changed while the timer was running
+        const currentPeerStats = store.getPeerStats(userId);
+        const currentLayer = currentPeerStats
+          ? qualityToSpatialLayer(currentPeerStats.score.level)
+          : qualityToSpatialLayer(peerStats.score.level);
+        const effectiveNow = store.isViewportVisible(userId) ? currentLayer : 0;
+        const currentConsumerId = sfuManager.getVideoConsumerIdForUserId(userId);
+
+        if (!currentConsumerId) {
+          lastEmittedLayerCurrent.delete(userId);
+          return;
+        }
+
+        if (lastEmittedLayerCurrent.get(userId) !== effectiveNow) {
+          sfuManager.setPreferredLayers(currentConsumerId, effectiveNow);
+          lastEmittedLayerCurrent.set(userId, effectiveNow);
+        }
+      }, LAYER_SWITCH_DEBOUNCE_MS);
+
+      layerTimersCurrent.set(userId, timer);
+    };
+
     const unsubscribe = sfuManager.onQualityStats((stats) => {
       store.setStats(stats);
       clearMissingUserState(stats);
 
-      // Adapt simulcast layer per peer based on their received quality
-      for (const [userId, peerStats] of stats) {
-        const desiredLayer = qualityToSpatialLayer(peerStats.score.level);
-
-        // Only schedule if the desired layer differs from the last emitted one
-        if (lastEmittedLayerCurrent.get(userId) === desiredLayer) continue;
-
-        // Cancel any pending timer for this peer
-        const existing = layerTimersCurrent.get(userId);
-        if (existing !== undefined) {
-          clearTimeout(existing);
-        }
-
-        // Debounce: emit after LAYER_SWITCH_DEBOUNCE_MS of stability
-        const timer = setTimeout(() => {
-          layerTimersCurrent.delete(userId);
-          // Re-check: the desired layer may have changed while the timer was running
-          const currentPeerStats = store.getPeerStats(userId);
-          const currentLayer = currentPeerStats
-            ? qualityToSpatialLayer(currentPeerStats.score.level)
-            : desiredLayer;
-          const currentConsumerId = sfuManager.getVideoConsumerIdForUserId(userId);
-
-          if (!currentConsumerId) {
-            lastEmittedLayerCurrent.delete(userId);
-            return;
-          }
-
-          if (lastEmittedLayerCurrent.get(userId) !== currentLayer) {
-            sfuManager.setPreferredLayers(currentConsumerId, currentLayer);
-            lastEmittedLayerCurrent.set(userId, currentLayer);
-          }
-        }, LAYER_SWITCH_DEBOUNCE_MS);
-
-        layerTimersCurrent.set(userId, timer);
+      for (const userId of stats.keys()) {
+        scheduleLayerSwitch(userId);
       }
     });
+    const unsubscribeVisibility = store.subscribeVisibility(scheduleLayerSwitch);
     const unsubscribePeerLeft = sfuManager.onParticipantLeft((userId) => {
       clearUserLayerState(userId);
     });
@@ -115,6 +135,7 @@ export function PeerQualityProvider({ enabled = true, children }: Props) {
 
     return () => {
       unsubscribe();
+      unsubscribeVisibility();
       unsubscribePeerLeft();
       sfuManager.stopStatsCollection();
       store.reset();
@@ -142,4 +163,36 @@ export function usePeerQualityContext(): PeerQualityContextValue {
     throw new Error("usePeerQualityContext must be used within a PeerQualityProvider");
   }
   return ctx;
+}
+
+/**
+ * Observes a participant tile and feeds its viewport visibility into the
+ * quality engine: hidden tiles clamp to the lowest simulcast layer, visible
+ * tiles follow quality-based adaptation. Unmounting the tile restores the
+ * visible default, so untracked tiles keep full quality.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function usePeerViewport(ref: React.RefObject<HTMLElement | null>, userId: string): void {
+  const { store } = usePeerQualityContext();
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const isVisible = entries.some((entry) => entry.isIntersecting);
+        store.setVisibility(userId, isVisible);
+      },
+      { threshold: [VIEWPORT_THRESHOLD] },
+    );
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      store.setVisibility(userId, true);
+    };
+  }, [ref, store, userId]);
 }

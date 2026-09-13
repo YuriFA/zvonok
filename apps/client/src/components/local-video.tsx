@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+
+import { useVideoStream } from "@zvonok/react";
 
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/utils/display-name";
@@ -12,12 +14,7 @@ interface Props {
 
 export function LocalVideo({ stream, username, isVideoEnabled, className }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
+  useVideoStream(videoRef, stream);
 
   return (
     <div className={cn("relative overflow-hidden rounded-lg bg-muted", className)}>

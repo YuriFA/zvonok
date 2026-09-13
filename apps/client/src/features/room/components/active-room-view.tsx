@@ -151,6 +151,23 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     [dimensions.height, dimensions.width, remotePeers.length, isSpotlightMode],
   );
 
+  // Stable per-tile style objects: RoomVideo is memoized, so rebuilding
+  // styles on every participant event would defeat the bailout.
+  const tileStyles = useMemo(
+    () =>
+      layout.tiles.map(
+        (tile): React.CSSProperties => ({
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: tile?.width ?? 0,
+          height: tile?.height ?? 0,
+          transform: `translateX(${tile?.x ?? 0}px) translateY(${tile?.y ?? 0}px)`,
+        }),
+      ),
+    [layout.tiles],
+  );
+
   const isOwner = currentUserId === room.ownerId;
 
   // Server-delivered capabilities gate the host affordances; role and
@@ -258,14 +275,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
               {/* Local participant tile */}
               <RoomVideo
                 userId={localUserId}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  width: layout.tiles[0]?.width ?? 0,
-                  height: layout.tiles[0]?.height ?? 0,
-                  transform: `translateX(${layout.tiles[0]?.x ?? 0}px) translateY(${layout.tiles[0]?.y ?? 0}px)`,
-                }}
+                style={tileStyles[0]}
                 stream={localVideoStream}
                 username={currentUsername}
                 isVideoEnabled={mediaControls.isVideoEnabled}
@@ -277,14 +287,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                 <RoomVideo
                   key={peer.userId}
                   userId={peer.userId}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: layout.tiles[index + 1]?.width ?? 0,
-                    height: layout.tiles[index + 1]?.height ?? 0,
-                    transform: `translateX(${layout.tiles[index + 1]?.x ?? 0}px) translateY(${layout.tiles[index + 1]?.y ?? 0}px)`,
-                  }}
+                  style={tileStyles[index + 1]}
                   stream={peer.cameraStream}
                   username={peer.username}
                   isVideoEnabled={peer.isCameraEnabled}

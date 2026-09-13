@@ -2,10 +2,12 @@ import type { PeerQualityStats } from "@zvonok/client/sfu/types";
 import { useSyncExternalStore } from "react";
 
 type Listener = () => void;
-
 export class PeerQualityStore {
   private stats = new Map<string, PeerQualityStats>();
+  /** Users whose tile is outside the viewport; absence means visible. */
+  private hiddenUsers = new Set<string>();
   private listeners = new Map<string, Set<Listener>>();
+  private visibilityListeners = new Set<(userId: string) => void>();
 
   setStats(stats: Map<string, PeerQualityStats>) {
     const changedIds: string[] = [];
@@ -37,6 +39,7 @@ export class PeerQualityStore {
 
   reset() {
     this.stats = new Map();
+    this.hiddenUsers.clear();
     for (const listeners of this.listeners.values()) {
       for (const fn of listeners) {
         fn();
@@ -46,6 +49,38 @@ export class PeerQualityStore {
 
   getPeerStats(userId: string): PeerQualityStats | undefined {
     return this.stats.get(userId);
+  }
+
+  /** Viewport visibility defaults to true: untracked tiles keep full quality. */
+  isViewportVisible(userId: string): boolean {
+    return !this.hiddenUsers.has(userId);
+  }
+
+  /**
+   * Records whether the user's tile is in the viewport. No-op (and no
+   * notification) when the value is unchanged; the first "visible" write for
+   * an unknown user is also a no-op, since visible is the default.
+   */
+  setVisibility(userId: string, visible: boolean): void {
+    if (this.isViewportVisible(userId) === visible) {
+      return;
+    }
+    if (visible) {
+      this.hiddenUsers.delete(userId);
+    } else {
+      this.hiddenUsers.add(userId);
+    }
+    for (const listener of this.visibilityListeners) {
+      listener(userId);
+    }
+  }
+
+  /** Subscribes to visibility flips; the engine recomputes layers for the user. */
+  subscribeVisibility(listener: (userId: string) => void): () => void {
+    this.visibilityListeners.add(listener);
+    return () => {
+      this.visibilityListeners.delete(listener);
+    };
   }
 
   subscribePeer(userId: string, listener: Listener): () => void {
