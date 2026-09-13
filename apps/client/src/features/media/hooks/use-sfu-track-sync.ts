@@ -1,7 +1,6 @@
 import { CaptureState } from "@zvonok/client/media/capture-state";
-import { useEffect } from "react";
-
 import { useZvonokSession } from "@zvonok/react";
+import { useEffect } from "react";
 
 export function useSfuTrackSync(): void {
   const { mediaManager, manager: sfuManager } = useZvonokSession();

@@ -8,6 +8,10 @@ export const roomKeys = {
   details: () => [...roomKeys.all, "detail"] as const,
 
   detail: (slug: string) => [...roomKeys.details(), slug] as const,
+
+  guestCheck: (slug: string) => [...roomKeys.all, "guest-check", slug] as const,
+
+  me: (slug: string) => [...roomKeys.all, "me", slug] as const,
 } as const;
 
 /**
@@ -32,6 +36,20 @@ export const historyKeys = {
  * Type assertion for query keys
  */
 export type HistoryKeys = typeof historyKeys;
+
+/**
+ * Query keys factory for room chat
+ */
+export const chatKeys = {
+  all: ["chat"] as const,
+
+  history: (roomId: string) => [...chatKeys.all, "history", roomId] as const,
+} as const;
+
+/**
+ * Type assertion for chat keys
+ */
+export type ChatKeys = typeof chatKeys;
 
 /**
  * Query keys factory for the developer console

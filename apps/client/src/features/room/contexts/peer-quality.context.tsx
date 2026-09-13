@@ -1,6 +1,6 @@
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { qualityToSpatialLayer } from "@zvonok/client/sfu/quality-score";
 import type { SimulcastSpatialLayer } from "@zvonok/client/sfu/types";
-import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { useZvonokSession } from "@zvonok/react";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 

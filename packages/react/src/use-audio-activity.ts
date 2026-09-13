@@ -7,9 +7,10 @@
 import { ActiveSpeakerDetector } from "@zvonok/client/audio/active-speaker-detector";
 import { AudioLevelSampler } from "@zvonok/client/audio/audio-level-sampler";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useZvonokSession } from "./zvonok-context.js";
+import { useStoreSelector } from "./use-store-selector.js";
 
 const TICK_MS = 100;
 const LEVEL_EPSILON = 0.01;
@@ -208,13 +209,10 @@ function engineFor(manager: SfuManager): AudioActivityEngine {
   return engine;
 }
 
-function useAudioActivitySnapshot(): AudioActivitySnapshot {
+function useAudioActivityEngine(): AudioActivityEngine | null {
   const session = useZvonokSession();
   const manager = session.manager;
-  const engine = useMemo(
-    () => (manager ? engineFor(manager) : null),
-    [manager],
-  );
+  const engine = useMemo(() => (manager ? engineFor(manager) : null), [manager]);
 
   useEffect(() => {
     if (!engine) return;
@@ -222,23 +220,23 @@ function useAudioActivitySnapshot(): AudioActivitySnapshot {
     return () => engine.release();
   }, [engine]);
 
-  const subscribe = useCallback(
-    (listener: () => void) => engine?.subscribe(listener) ?? (() => {}),
-    [engine],
-  );
-  const getSnapshot = useCallback(
-    () => engine?.getSnapshot() ?? EMPTY_AUDIO_ACTIVITY,
-    [engine],
-  );
-  return useSyncExternalStore(subscribe, getSnapshot);
+  return engine;
 }
+
+const selectActiveSpeaker = (state: AudioActivitySnapshot) => ({
+  activeSpeakerId: state.activeSpeakerId,
+});
+
+const selectLevels = (state: AudioActivitySnapshot) => state.levels;
 
 /** Currently speaking participant's id, or null in silence; local mic included. */
 export function useActiveSpeaker(): string | null {
-  return useAudioActivitySnapshot().activeSpeakerId;
+  const engine = useAudioActivityEngine();
+  return useStoreSelector(engine, selectActiveSpeaker)?.activeSpeakerId ?? null;
 }
 
 /** Smoothed 0..1 audio level per audio-active participant id, local included. */
 export function useAudioLevels(): Record<string, number> {
-  return useAudioActivitySnapshot().levels;
+  const engine = useAudioActivityEngine();
+  return useStoreSelector(engine, selectLevels) ?? EMPTY_AUDIO_ACTIVITY.levels;
 }

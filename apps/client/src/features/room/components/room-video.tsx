@@ -42,9 +42,7 @@ export function RoomVideo({
           className="size-full mirror object-cover"
         />
 
-        {!isVideoEnabled && (
-          <RoomVideoAudioOverlay userId={userId} username={username} />
-        )}
+        {!isVideoEnabled && <RoomVideoAudioOverlay userId={userId} username={username} />}
 
         {username && (
           <div className="absolute bottom-2 left-2 rounded bg-black/50 px-2 py-1 text-xs text-white">

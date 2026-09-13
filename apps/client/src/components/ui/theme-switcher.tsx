@@ -22,24 +22,20 @@ import {
 } from "@/lib/config/themes";
 
 export function ThemeSwitcher() {
-  const [color, setColor] = useState<ColorTheme>("teal");
-  const [mode, setMode] = useState<Mode>("light");
+  // The stored theme seeds the first render; applying to the document is the
+  // only side effect and stays in sync with this single state object.
+  const [theme, setTheme] = useState(() => getInitialTheme());
 
   useEffect(() => {
-    const initial = getInitialTheme();
-    setColor(initial.color);
-    setMode(initial.mode);
-    applyTheme(initial.color, initial.mode);
-  }, []);
+    applyTheme(theme.color, theme.mode);
+  }, [theme]);
 
   const handleColorChange = (newColor: ColorTheme) => {
-    setColor(newColor);
-    applyTheme(newColor, mode);
+    setTheme((prev) => ({ ...prev, color: newColor }));
   };
 
   const handleModeChange = (newMode: Mode) => {
-    setMode(newMode);
-    applyTheme(color, newMode);
+    setTheme((prev) => ({ ...prev, mode: newMode }));
   };
 
   return (
@@ -55,22 +51,25 @@ export function ThemeSwitcher() {
         <DropdownMenuGroup>
           <DropdownMenuLabel>Accent Color</DropdownMenuLabel>
           <DropdownMenuRadioGroup
-            value={color}
+            value={theme.color}
             onValueChange={(v) => handleColorChange(v as ColorTheme)}
           >
-            {colorThemes.map((theme) => (
-              <DropdownMenuRadioItem key={theme.id} value={theme.id}>
+            {colorThemes.map((colorTheme) => (
+              <DropdownMenuRadioItem key={colorTheme.id} value={colorTheme.id}>
                 <span
                   className="mr-2 inline-block size-3 rounded-full border border-border"
-                  style={{ backgroundColor: theme.color }}
+                  style={{ backgroundColor: colorTheme.color }}
                 />
-                {theme.label}
+                {colorTheme.label}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Mode</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
+          <DropdownMenuRadioGroup
+            value={theme.mode}
+            onValueChange={(v) => handleModeChange(v as Mode)}
+          >
             {modes.map((m) => (
               <DropdownMenuRadioItem key={m.id} value={m.id}>
                 {m.id === "light" ? (

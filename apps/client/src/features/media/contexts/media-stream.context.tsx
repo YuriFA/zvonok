@@ -1,17 +1,8 @@
 import { CaptureState } from "@zvonok/client/media/capture-state";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useZvonokSession } from "@zvonok/react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { loadSelectedDevices } from "@/features/media/hooks/use-media-devices";
-
-import { useZvonokSession } from "@zvonok/react";
 
 export interface MediaStreamContextValue {
   videoStream: MediaStream | null;
@@ -38,27 +29,15 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [videoState, setVideoState] = useState<CaptureState>(CaptureState.STOPPED);
   const [audioState, setAudioState] = useState<CaptureState>(CaptureState.STOPPED);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     const unsubVideo = manager.onVideoStateChange((state) => {
-      if (mountedRef.current) {
-        setVideoState(state);
-        setVideoStream(manager.videoCapture.getStream());
-      }
+      setVideoState(state);
+      setVideoStream(manager.videoCapture.getStream());
     });
     const unsubAudio = manager.onAudioStateChange((state) => {
-      if (mountedRef.current) {
-        setAudioState(state);
-        setAudioStream(manager.audioCapture.getStream());
-      }
+      setAudioState(state);
+      setAudioStream(manager.audioCapture.getStream());
     });
 
     return () => {
@@ -86,9 +65,7 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
       (await manager.audioCapture.start(deviceId)) ||
       (deviceId !== undefined ? await manager.audioCapture.start() : false);
     const stream = ok ? manager.audioCapture.getStream() : null;
-    if (mountedRef.current) {
-      setAudioStream(stream);
-    }
+    setAudioStream(stream);
     return stream;
   }, [manager]);
 
@@ -99,9 +76,7 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
       (await manager.videoCapture.start(deviceId)) ||
       (deviceId !== undefined ? await manager.videoCapture.start() : false);
     const stream = ok ? manager.videoCapture.getStream() : null;
-    if (mountedRef.current) {
-      setVideoStream(stream);
-    }
+    setVideoStream(stream);
     return stream;
   }, [manager]);
 
@@ -110,13 +85,11 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
   }, [manager]);
 
   useEffect(() => {
-    if (!mountedRef.current) return;
-    start();
+    void start();
     return () => {
       manager.stop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [start, manager]);
 
   return (
     <MediaStreamContext.Provider

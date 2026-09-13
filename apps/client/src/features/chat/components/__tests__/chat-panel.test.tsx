@@ -1,8 +1,15 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ChatContextValue } from "../../contexts/chat.context";
 import type { Message } from "../../types/chat.types";
 import { ChatPanel } from "../chat-panel";
+
+const mockUseChatContext = vi.hoisted(() => vi.fn());
+
+vi.mock("../../contexts/chat.context", () => ({
+  useChatContext: mockUseChatContext,
+}));
 
 function makeMessage(overrides: Partial<Message> = {}): Message {
   return {
@@ -16,56 +23,49 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
   };
 }
 
-describe("ChatPanel", () => {
-  const onClose = vi.fn();
-  const onSendMessage = vi.fn();
-
-  let defaultProps: {
-    messages: Message[];
-    currentUserId: string;
-    isOpen: boolean;
-    onSendMessage: (content: string) => Promise<void>;
-    onClose: () => void;
+function makeChat(overrides: Partial<ChatContextValue> = {}): ChatContextValue {
+  return {
+    currentUserId: "u1",
+    messages: [],
+    unreadCount: 0,
+    isLoading: false,
+    hasMore: false,
+    sendMessage: vi.fn(async () => {}),
+    loadMore: vi.fn(),
+    resetUnreadCount: vi.fn(),
+    ...overrides,
   };
+}
 
+describe("ChatPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    defaultProps = {
-      messages: [],
-      currentUserId: "u1",
-      isOpen: true,
-      onSendMessage,
-      onClose,
-    };
+    mockUseChatContext.mockReturnValue(makeChat());
   });
 
-  it("renders message input when open", () => {
-    render(<ChatPanel {...defaultProps} />);
+  it("renders message input", () => {
+    render(<ChatPanel />);
     expect(screen.getByLabelText("Chat message input")).toBeInTheDocument();
   });
 
-  it("renders messages when provided", () => {
-    const messages = [makeMessage(), makeMessage({ id: "m2", content: "World" })];
-    render(<ChatPanel {...defaultProps} messages={messages} />);
+  it("renders messages from the context", () => {
+    mockUseChatContext.mockReturnValue(
+      makeChat({ messages: [makeMessage(), makeMessage({ id: "m2", content: "World" })] }),
+    );
+    render(<ChatPanel />);
     expect(screen.getByText("Hello")).toBeInTheDocument();
     expect(screen.getByText("World")).toBeInTheDocument();
   });
 
   it("shows load earlier button when hasMore is true with messages", () => {
-    const onLoadMore = vi.fn();
-    render(
-      <ChatPanel
-        {...defaultProps}
-        messages={[makeMessage()]}
-        hasMore={true}
-        onLoadMore={onLoadMore}
-      />,
-    );
+    mockUseChatContext.mockReturnValue(makeChat({ messages: [makeMessage()], hasMore: true }));
+    render(<ChatPanel />);
     expect(screen.getByText("Load earlier messages")).toBeInTheDocument();
   });
 
   it("does not show load earlier button when hasMore is false", () => {
-    render(<ChatPanel {...defaultProps} messages={[makeMessage()]} hasMore={false} />);
+    mockUseChatContext.mockReturnValue(makeChat({ messages: [makeMessage()], hasMore: false }));
+    render(<ChatPanel />);
     expect(screen.queryByText("Load earlier messages")).not.toBeInTheDocument();
   });
 });

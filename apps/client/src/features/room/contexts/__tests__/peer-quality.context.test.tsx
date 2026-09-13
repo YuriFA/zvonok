@@ -1,10 +1,9 @@
 import { act, render } from "@testing-library/react";
 import type { PeerQualityStats, QualityLevel, SfuParticipantInfo } from "@zvonok/client/sfu/types";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useEffect, useRef } from "react";
-
 import { ZvonokProvider } from "@zvonok/react";
 import { useZvonokSession } from "@zvonok/react";
+import { useEffect, useRef } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Socket-level fake of the parts of SfuManager the auto-quality engine
@@ -47,7 +46,13 @@ function createFakeSfuManager() {
 }
 
 /** Test helper: pushes a manager into the provider session. */
-function SessionManagerProvider({ manager, children }: { manager: unknown; children: React.ReactNode }) {
+function SessionManagerProvider({
+  manager,
+  children,
+}: {
+  manager: unknown;
+  children: React.ReactNode;
+}) {
   return (
     <ZvonokProvider serverUrl="https://sfu.test">
       <SessionSetter manager={manager} />

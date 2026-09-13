@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useZvonokConnection, ZvonokProvider } from "@zvonok/react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
@@ -10,9 +11,14 @@ import { GuestApprovalDialog } from "@/features/room/components/guest-approval-d
 import { PrejoinView } from "@/features/room/components/prejoin-view";
 import { RoomView } from "@/features/room/components/room-view";
 import { GuestRequestsProvider } from "@/features/room/contexts/guest-requests.context";
+import {
+  RoomIdentityProvider,
+  useRoomIdentity,
+} from "@/features/room/contexts/room-identity.context";
 import { useGuestJoinRoom } from "@/features/room/hooks/use-guest-join-room";
 import { useRoom } from "@/features/room/hooks/use-room";
 import { roomApi } from "@/features/room/services/room-api";
+import { roomKeys } from "@/lib/react-query/query-keys";
 import { loadGuestDisplayName, saveGuestDisplayName } from "@/lib/utils/display-name";
 
 const SOCKET_URL =
@@ -23,20 +29,16 @@ type RoomViewState = "prejoin" | "active" | "ended";
 /** Inside the provider: owns the connection and the join/ended flow. */
 function RoomSession({
   room,
-  displayName,
-  currentUserId,
   viewState,
   setViewState,
   guestView,
 }: {
   room: NonNullable<ReturnType<typeof useRoom>["data"]>;
-  displayName: string;
-  currentUserId: string | undefined;
   viewState: RoomViewState;
   setViewState: (state: RoomViewState) => void;
   guestView: React.ReactNode;
 }) {
-  const { user } = useAuth();
+  const { userId } = useRoomIdentity();
   // Cookie-session join: no token, the server verifies the browser session.
   const connection = useZvonokConnection({ roomId: room.id, roomSlug: room.slug });
 
@@ -59,7 +61,7 @@ function RoomSession({
     }
   }, [connection.roomEnded, setViewState]);
 
-  const isOwner = user?.id === room.ownerId;
+  const isOwner = userId === room.ownerId;
 
   return (
     <MediaStreamProvider>
@@ -70,20 +72,10 @@ function RoomSession({
           {isOwner ? (
             <GuestRequestsProvider roomSlug={room.slug}>
               <GuestApprovalDialog />
-              <RoomView
-                room={room}
-                displayName={displayName}
-                currentUserId={currentUserId}
-                connection={connection}
-              />
+              <RoomView room={room} connection={connection} />
             </GuestRequestsProvider>
           ) : (
-            <RoomView
-              room={room}
-              displayName={displayName}
-              currentUserId={currentUserId}
-              connection={connection}
-            />
+            <RoomView room={room} connection={connection} />
           )}
         </>
       )}
@@ -98,12 +90,27 @@ export const RoomPage = () => {
 
   const { data: room, isLoading, error } = useRoom(slug || "");
 
-  const [displayName, setDisplayName] = useState(() => user?.username ?? loadGuestDisplayName());
-  const [guestPreApproved, setGuestPreApproved] = useState(false);
+  // Guest pre-approval and identity come from the server as queries; both are
+  // derived values, never synced into state by effects.
+  const guestCheckQuery = useQuery({
+    queryKey: roomKeys.guestCheck(slug || ""),
+    queryFn: () => roomApi.guestCheck(slug || ""),
+    enabled: !user && !!slug,
+  });
+  const roomMeQuery = useQuery({
+    queryKey: roomKeys.me(slug || ""),
+    queryFn: () => roomApi.getRoomMe(slug || ""),
+    enabled: !user && !!slug && viewState === "active",
+  });
 
-  const [guestUserId, setGuestUserId] = useState<string | undefined>(undefined);
-
-  const currentUserId = user?.id ?? guestUserId;
+  const guestPreApproved = guestCheckQuery.data?.valid ?? false;
+  const currentUserId = user?.id ?? roomMeQuery.data?.userId;
+  const [displayNameOverride, setDisplayNameOverride] = useState<string | null>(null);
+  const displayName =
+    displayNameOverride ??
+    user?.username ??
+    guestCheckQuery.data?.displayName ??
+    loadGuestDisplayName();
 
   const handleJoined = useCallback(() => {
     setViewState("active");
@@ -114,35 +121,6 @@ export const RoomPage = () => {
     guestState,
     error: joinError,
   } = useGuestJoinRoom({ onJoinApproved: handleJoined });
-
-  // On mount: if guest, check for a valid HTTP-only cookie
-  useEffect(() => {
-    if (user || !slug) return;
-    roomApi
-      .guestCheck(slug)
-      .then((result) => {
-        if (result.valid) {
-          setGuestPreApproved(true);
-          if (result.displayName) {
-            setDisplayName(result.displayName);
-          }
-        }
-      })
-      .catch(() => {
-        // silent fail — treat as no pre-approval
-      });
-  }, [user, slug]);
-
-  // Resolve guest identity from the server once the guest enters the room
-  useEffect(() => {
-    if (user || !slug || viewState !== "active") return;
-    roomApi
-      .getRoomMe(slug)
-      .then((result) => setGuestUserId(result.userId))
-      .catch(() => {
-        // silent fail — identity will be undefined
-      });
-  }, [user, slug, viewState]);
 
   useEffect(() => {
     if (room?.status === "ended") {
@@ -188,24 +166,24 @@ export const RoomPage = () => {
 
   return (
     <ZvonokProvider serverUrl={SOCKET_URL}>
-      <RoomSession
-        room={room}
-        displayName={displayName}
-        currentUserId={currentUserId}
-        viewState={viewState}
-        setViewState={setViewState}
-        guestView={
-          <PrejoinView
-            roomUrl={roomUrl}
-            displayName={displayName}
-            onDisplayNameChange={setDisplayName}
-            onJoin={handleJoin}
-            guestState={user ? undefined : guestState}
-            errorMessage={joinError}
-            onRetry={retry}
-          />
-        }
-      />
+      <RoomIdentityProvider userId={currentUserId} displayName={displayName}>
+        <RoomSession
+          room={room}
+          viewState={viewState}
+          setViewState={setViewState}
+          guestView={
+            <PrejoinView
+              roomUrl={roomUrl}
+              displayName={displayName}
+              onDisplayNameChange={setDisplayNameOverride}
+              onJoin={handleJoin}
+              guestState={user ? undefined : guestState}
+              errorMessage={joinError}
+              onRetry={retry}
+            />
+          }
+        />
+      </RoomIdentityProvider>
     </ZvonokProvider>
   );
 };

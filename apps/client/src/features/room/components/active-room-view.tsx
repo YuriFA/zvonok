@@ -1,25 +1,27 @@
+import type { ScreenShareError } from "@zvonok/client/screen-share/types";
+import { useScreenShare } from "@zvonok/react";
 import { computeLayout } from "@zvonok/video-layout";
 import { Lock, LockOpen, MessageSquare, MicOff, Users } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ParticipantsList } from "@/components/room/participants-list";
 import { Button } from "@/components/ui/button";
 import { VideoGrid } from "@/components/video-grid";
 import { ChatPanel } from "@/features/chat/components/chat-panel";
-import { useChat } from "@/features/chat/hooks/use-chat";
+import { ChatProvider, useChatContext } from "@/features/chat/contexts/chat.context";
 import { useCallRecording } from "@/features/media/hooks/use-call-recording";
 import { RoomCenterControls } from "@/features/room/components/room-center-controls";
 import { RoomVideo } from "@/features/room/components/room-video";
 import { ScreenShareSpotlight } from "@/features/room/components/screen-share-spotlight";
 import { useKeyboardShortcuts } from "@/features/room/hooks/use-keyboard-shortcuts";
-import type { UseRoomSessionResult } from "@/features/room/hooks/use-room-session";
 import { roomPanels } from "@/features/room/room-panels";
-import type { ScreenShareError } from "@zvonok/client/screen-share/types";
-import { useScreenShare } from "@zvonok/react";
+import { useElementSize } from "@/hooks/use-element-size";
 
 import { useGuestRequests } from "../contexts/guest-requests.context";
 import { useActiveSpeakerId } from "../contexts/room-audio.context";
+import { useRoomIdentity } from "../contexts/room-identity.context";
+import { useRoomSessionActions, useRoomSessionState } from "../contexts/room-session.context";
 import type { Room } from "../types/room.types";
 import { AsidePanel, AsidePanelContainer, AsidePanelHeader } from "./aside-panel";
 import { RoomLeftControls } from "./room-left-controls";
@@ -33,38 +35,45 @@ interface ActiveScreenShare {
 }
 
 interface ActiveRoomViewProps {
-  session: UseRoomSessionResult;
   room: Room;
-  currentUserId: string | undefined;
-  currentUsername: string | undefined;
 }
 
-export function ActiveRoomView({
-  session,
-  room,
-  currentUserId,
-  currentUsername,
-}: ActiveRoomViewProps) {
+export function ActiveRoomView({ room }: ActiveRoomViewProps) {
+  const { userId: currentUserId } = useRoomIdentity();
+
+  return (
+    <ChatProvider roomId={room.id} currentUserId={currentUserId}>
+      <ActiveRoomViewContent room={room} />
+    </ChatProvider>
+  );
+}
+
+function ActiveRoomViewContent({ room }: { room: Room }) {
+  const { userId: currentUserId, displayName: currentUsername } = useRoomIdentity();
+  const chat = useChatContext();
   const {
     localVideoStream,
     localAudioStream,
     mediaControls,
-    toggleVideo,
-    toggleAudio,
     remotePeers,
     localUserId,
     participants,
-    kickPeer,
     isRoomLocked,
-    hostControls,
-  } = session;
+    capabilities,
+  } = useRoomSessionState();
+  const { toggleVideo, toggleAudio, kickPeer, hostControls } = useRoomSessionActions();
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const { ref: containerRef, size: dimensions } = useElementSize<HTMLDivElement>();
 
-  const { sharing: isSharing, screenStream, blocked: isScreenShareBlocked, start: startScreenShare, stop: stopScreenShare } =
-    useScreenShare();
-  const [screenShareState, setScreenShareState] = useState<"idle" | "starting" | "sharing">("idle");
+  const {
+    sharing: isSharing,
+    screenStream,
+    blocked: isScreenShareBlocked,
+    start: startScreenShare,
+    stop: stopScreenShare,
+  } = useScreenShare();
+  const [isStartingScreenShare, setIsStartingScreenShare] = useState(false);
+  const screenShareState = isSharing ? "sharing" : isStartingScreenShare ? "starting" : "idle";
 
   const isScreenShareSupported =
     typeof navigator !== "undefined" &&
@@ -142,49 +151,11 @@ export function ActiveRoomView({
     [dimensions.height, dimensions.width, remotePeers.length, isSpotlightMode],
   );
 
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { clientWidth: width, clientHeight: height } = entry.target;
-        setDimensions((prev) => {
-          if (prev.width === width && prev.height === height) {
-            return prev;
-          }
-          return { width, height };
-        });
-      }
-    });
-
-    observer.observe(element);
-
-    setDimensions({
-      width: element.clientWidth,
-      height: element.clientHeight,
-    });
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  const handleToggleVideo = useCallback(async () => {
-    await toggleVideo();
-  }, [toggleVideo]);
-
-  const handleToggleAudio = useCallback(async () => {
-    await toggleAudio();
-  }, [toggleAudio]);
-
   const isOwner = currentUserId === room.ownerId;
 
   // Server-delivered capabilities gate the host affordances; role and
   // owner knowledge never lives in the client.
-  const ownCapabilities = session.capabilities;
+  const ownCapabilities = capabilities;
   const canMuteUsers = ownCapabilities.includes("mute-users");
   const canLockRoom = ownCapabilities.includes("lock-room");
   const canRemoveParticipants = ownCapabilities.includes("remove-participants");
@@ -221,26 +192,17 @@ export function ActiveRoomView({
   );
   const { pendingRequests, approveRequest, denyRequest } = useGuestRequests();
 
-  const chat = useChat({
-    roomId: room.id,
-    currentUserId,
-    enabled: true,
-  });
-
   const handleToggleScreenShare = useCallback(async () => {
     if (isSharing) {
       stopScreenShare();
-      setScreenShareState("idle");
       return;
     }
 
-    setScreenShareState("starting");
+    setIsStartingScreenShare(true);
     try {
       await startScreenShare();
-      setScreenShareState("sharing");
     } catch (error) {
       const kind = error as ScreenShareError;
-      setScreenShareState("idle");
       if (kind === "unsupported") {
         return;
       }
@@ -249,20 +211,15 @@ export function ActiveRoomView({
         return;
       }
       toast.error("Screen share was not started");
+    } finally {
+      setIsStartingScreenShare(false);
     }
   }, [isSharing, startScreenShare, stopScreenShare]);
   useKeyboardShortcuts({
-    onToggleAudio: handleToggleAudio,
-    onToggleVideo: handleToggleVideo,
+    onToggleAudio: toggleAudio,
+    onToggleVideo: toggleVideo,
     onToggleScreenShare: handleToggleScreenShare,
   });
-
-  // Sync screenShareState with isSharing (auto-stop via track.ended)
-  useEffect(() => {
-    if (!isSharing && screenShareState === "sharing") {
-      setScreenShareState("idle");
-    }
-  }, [isSharing, screenShareState]);
 
   const hasValidDimensions = dimensions.width > 0 && dimensions.height > 0;
 
@@ -397,29 +354,14 @@ export function ActiveRoomView({
                 <MessageSquare className="size-4" />
                 Chat
               </AsidePanelHeader>
-              <ChatPanel
-                currentUserId={currentUserId}
-                messages={chat.messages}
-                isLoading={chat.isLoading}
-                hasMore={chat.hasMore}
-                onSendMessage={chat.sendMessage}
-                onLoadMore={chat.loadHistory}
-              />
+              <ChatPanel />
             </AsidePanel>
           )}
         </AsidePanelContainer>
       </div>
 
       <div className="flex items-center justify-between border-t p-4">
-        <RoomLeftControls
-          isVideoEnabled={mediaControls.isVideoEnabled}
-          isAudioEnabled={mediaControls.isAudioEnabled}
-          videoCaptureState={mediaControls.videoCaptureState}
-          audioCaptureState={mediaControls.audioCaptureState}
-          isMutedByHost={session.mutedByHost}
-          onToggleVideo={handleToggleVideo}
-          onToggleAudio={handleToggleAudio}
-        />
+        <RoomLeftControls />
 
         <RoomCenterControls
           className="mx-auto"

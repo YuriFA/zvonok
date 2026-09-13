@@ -1,4 +1,5 @@
 import { CaptureState } from "@zvonok/client/media/capture-state";
+import { useZvonokSession } from "@zvonok/react";
 import { AlertTriangleIcon, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { useCallback, useState } from "react";
 
@@ -6,7 +7,6 @@ import { LocalVideo } from "@/components/local-video";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-import { useZvonokSession } from "@zvonok/react";
 import { useMediaStreamContext } from "../contexts/media-stream.context";
 import { useDeviceSwitching } from "../hooks/use-device-switching";
 import { useMediaControls } from "../hooks/use-media-controls";

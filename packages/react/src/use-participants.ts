@@ -4,10 +4,11 @@
  * over the framework-free RoomTracker.
  */
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo } from "react";
 
-import { EMPTY_ROOM_STATE, RoomTracker } from "./room-tracker.js";
+import { EMPTY_ROOM_STATE, RoomTracker, type RoomTrackerState } from "./room-tracker.js";
 import type { ZvonokParticipant } from "./types.js";
+import { useStoreSelector } from "./use-store-selector.js";
 import { useZvonokSession } from "./zvonok-context.js";
 
 export interface UseParticipantsResult {
@@ -21,12 +22,10 @@ export function useParticipants(): UseParticipantsResult {
 
   useEffect(() => () => tracker?.stop(), [tracker]);
 
-  const subscribe = useCallback(
-    (listener: () => void) => tracker?.subscribe(listener) ?? (() => {}),
-    [tracker],
-  );
-  const getSnapshot = useCallback(() => tracker?.getSnapshot() ?? EMPTY_ROOM_STATE, [tracker]);
-  const state = useSyncExternalStore(subscribe, getSnapshot);
+  const participants =
+    useStoreSelector(tracker, selectParticipants) ?? EMPTY_ROOM_STATE.participants;
 
-  return { participants: state.participants };
+  return { participants };
 }
+
+const selectParticipants = (state: RoomTrackerState): ZvonokParticipant[] => state.participants;

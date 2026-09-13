@@ -1,28 +1,16 @@
 import { cn } from "@/lib/utils";
 
-import type { Message } from "../types/chat.types";
+import { useChatContext } from "../contexts/chat.context";
 import { MessageInput } from "./message-input";
 import { MessageList } from "./message-list";
 
 interface ChatPanelProps {
-  messages: Message[];
-  currentUserId: string | undefined;
   className?: string;
-  isLoading?: boolean;
-  hasMore?: boolean;
-  onSendMessage: (content: string) => Promise<void>;
-  onLoadMore?: () => void;
 }
 
-export function ChatPanel({
-  messages,
-  currentUserId,
-  className,
-  isLoading,
-  hasMore,
-  onSendMessage,
-  onLoadMore,
-}: ChatPanelProps) {
+export function ChatPanel({ className }: ChatPanelProps) {
+  const { messages, currentUserId, isLoading, hasMore, sendMessage, loadMore } = useChatContext();
+
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
       <MessageList
@@ -30,9 +18,9 @@ export function ChatPanel({
         currentUserId={currentUserId ?? ""}
         isLoading={isLoading}
         hasMore={hasMore}
-        onLoadMore={onLoadMore}
+        onLoadMore={loadMore}
       />
-      <MessageInput onSend={onSendMessage} />
+      <MessageInput onSend={sendMessage} />
     </div>
   );
 }

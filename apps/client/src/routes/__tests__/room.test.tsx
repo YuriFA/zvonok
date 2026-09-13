@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CaptureState } from "@zvonok/client/media/capture-state";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -309,16 +310,22 @@ describe("RoomPage", () => {
     mockGetRoomMe.mockResolvedValue({ userId: "guest-abc" });
   });
 
-  const renderRoomPage = () =>
-    render(
-      <TooltipProvider>
-        <MemoryRouter initialEntries={[`/room/${room.slug}`]}>
-          <Routes>
-            <Route path="/room/:slug" element={<RoomPage />} />
-          </Routes>
-        </MemoryRouter>
-      </TooltipProvider>,
+  const renderRoomPage = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={[`/room/${room.slug}`]}>
+            <Routes>
+              <Route path="/room/:slug" element={<RoomPage />} />
+            </Routes>
+          </MemoryRouter>
+        </TooltipProvider>
+      </QueryClientProvider>,
     );
+  };
 
   it("renders prejoin view and transitions to active room after joining (authenticated)", async () => {
     renderRoomPage();
@@ -383,9 +390,12 @@ describe("RoomPage", () => {
       await waitFor(() => {
         expect(mockGuestCheck).toHaveBeenCalledWith("alpha");
       });
-      // Let the pre-approval promise resolve and commit before clicking,
-      // otherwise the click races the check and takes the request path.
-      await act(async () => {});
+      // Wait until the pre-approval commits to the UI (the input shows the
+      // server-provided name), otherwise the click races the check and takes
+      // the request path.
+      await waitFor(() => {
+        expect(screen.getByDisplayValue("Bob")).toBeInTheDocument();
+      });
 
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Join Room" }));

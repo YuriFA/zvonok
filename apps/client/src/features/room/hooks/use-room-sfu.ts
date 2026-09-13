@@ -3,15 +3,20 @@ import {
   createHostControls,
   EMPTY_ROOM_STATE,
   RoomTracker,
+  useStoreSelector,
   type HostControls,
+  type RoomTrackerState,
   type UseZvonokConnectionResult,
   type ZvonokParticipant,
 } from "@zvonok/react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/features/auth/contexts/auth.context";
-import { useMediaControls, type UseMediaControlsReturn } from "@/features/media/hooks/use-media-controls";
+import {
+  useMediaControls,
+  type UseMediaControlsReturn,
+} from "@/features/media/hooks/use-media-controls";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 
 export interface RemotePeerMedia {
@@ -91,16 +96,13 @@ export function useRoomSfu({
     [manager, localUserId],
   );
   useEffect(() => () => tracker?.stop(), [tracker]);
-  const subscribe = useCallback(
-    (listener: () => void) => tracker?.subscribe(listener) ?? (() => {}),
-    [tracker],
-  );
-  const getSnapshot = useCallback(() => tracker?.getSnapshot() ?? EMPTY_ROOM_STATE, [tracker]);
-  const roomState = useSyncExternalStore(subscribe, getSnapshot);
+  const roomState = useStoreSelector(tracker, selectRoomState) ?? EMPTY_ROOM_STATE;
 
   // Manager connection state, mirrored for consumers (participants list,
   // auto-quality gate). Same vocabulary as before the migration.
-  const [connectionState, setConnectionState] = useState(() => manager?.getState().connectionState ?? "disconnected");
+  const [connectionState, setConnectionState] = useState(
+    () => manager?.getState().connectionState ?? "disconnected",
+  );
   useEffect(() => {
     if (!manager) {
       setConnectionState("disconnected");
@@ -296,7 +298,10 @@ export function useRoomSfu({
     [connection.manager],
   );
 
-  const remotePeers = useMemo(() => roomState.participants.map(toRemotePeer), [roomState]);
+  const remotePeers = useMemo(
+    () => roomState.participants.map(toRemotePeer),
+    [roomState.participants],
+  );
 
   return {
     connectionState,
@@ -312,3 +317,5 @@ export function useRoomSfu({
     hostControls,
   };
 }
+
+const selectRoomState = (state: RoomTrackerState) => state;

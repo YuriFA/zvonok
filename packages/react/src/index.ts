@@ -60,6 +60,10 @@ export {
   type RoomTrackerState,
 } from "./room-tracker.js";
 export {
+  useStoreSelector,
+  type ExternalStore,
+} from "./use-store-selector.js";
+export {
   useDeviceControls,
   type UseDeviceControlsResult,
 } from "./use-device-controls.js";

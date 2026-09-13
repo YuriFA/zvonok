@@ -1,6 +1,6 @@
+import { useZvonokSession } from "@zvonok/react";
 import { useState, useEffect, useCallback } from "react";
 
-import { useZvonokSession } from "@zvonok/react";
 import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 
 export type DeviceType = "videoinput" | "audioinput" | "audiooutput";

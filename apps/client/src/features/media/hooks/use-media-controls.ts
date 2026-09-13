@@ -1,7 +1,6 @@
 import { CaptureState, isActive } from "@zvonok/client/media/capture-state";
-import { useCallback, useEffect, useState } from "react";
-
 import { useZvonokSession } from "@zvonok/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export interface UseMediaControlsReturn {
   isVideoEnabled: boolean;
@@ -51,14 +50,28 @@ export function useMediaControls(): UseMediaControlsReturn {
     setIsAudioEnabled(enabled);
   }, []);
 
-  return {
-    isVideoEnabled,
-    isAudioEnabled,
-    videoCaptureState,
-    audioCaptureState,
-    getVideoCaptureState,
-    getAudioCaptureState,
-    setVideoEnabled,
-    setAudioEnabled,
-  };
+  // Stable identity between state changes: the room session exposes this
+  // object through a memoized context value, and toggle actions depend on it.
+  return useMemo(
+    () => ({
+      isVideoEnabled,
+      isAudioEnabled,
+      videoCaptureState,
+      audioCaptureState,
+      getVideoCaptureState,
+      getAudioCaptureState,
+      setVideoEnabled,
+      setAudioEnabled,
+    }),
+    [
+      isVideoEnabled,
+      isAudioEnabled,
+      videoCaptureState,
+      audioCaptureState,
+      getVideoCaptureState,
+      getAudioCaptureState,
+      setVideoEnabled,
+      setAudioEnabled,
+    ],
+  );
 }

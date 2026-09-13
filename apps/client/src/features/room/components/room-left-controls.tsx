@@ -1,4 +1,4 @@
-import { CaptureState, getCaptureStateDisplay } from "@zvonok/client/media/capture-state";
+import { getCaptureStateDisplay } from "@zvonok/client/media/capture-state";
 import { AlertTriangle, Loader2, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -6,15 +6,9 @@ import { Button, type ButtonProps } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+import { useRoomSessionActions, useRoomSessionState } from "../contexts/room-session.context";
+
 interface Props {
-  isVideoEnabled: boolean;
-  isAudioEnabled: boolean;
-  videoCaptureState: CaptureState;
-  audioCaptureState: CaptureState;
-  /** The server forcibly muted this participant's microphone. */
-  isMutedByHost?: boolean;
-  onToggleVideo: () => void;
-  onToggleAudio: () => void;
   className?: string;
   buttonVariant?: ButtonProps["variant"];
   buttonInactiveVariant?: ButtonProps["variant"];
@@ -22,16 +16,13 @@ interface Props {
 
 export const RoomLeftControls = ({
   className,
-  isVideoEnabled,
-  isAudioEnabled,
-  videoCaptureState,
-  audioCaptureState,
-  isMutedByHost = false,
-  onToggleVideo,
-  onToggleAudio,
   buttonVariant = "outline",
   buttonInactiveVariant = "secondary",
 }: Props) => {
+  const { mediaControls, mutedByHost: isMutedByHost } = useRoomSessionState();
+  const { toggleVideo: onToggleVideo, toggleAudio: onToggleAudio } = useRoomSessionActions();
+  const { isVideoEnabled, isAudioEnabled, videoCaptureState, audioCaptureState } = mediaControls;
+
   const videoDisplay = getCaptureStateDisplay(videoCaptureState, "video");
   const audioDisplay = isMutedByHost
     ? {
