@@ -39,7 +39,10 @@ pnpm-debug.log*
 !.env.example
 
 # Documentation
-docs
+# docs/ must stay in the build context: it is the VitePress source for the
+# docs image (Dockerfile.docs). Only its build output and cache are excluded.
+docs/.vitepress/dist
+docs/.vitepress/cache
 *.md
 !README.md
 
