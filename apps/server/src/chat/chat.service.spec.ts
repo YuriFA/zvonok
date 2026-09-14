@@ -3,7 +3,11 @@ jest.mock('src/prisma/prisma.service', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -218,6 +222,86 @@ describe('ChatService', () => {
           orderBy: { createdAt: 'asc' },
         }),
       );
+    });
+  });
+
+  describe('saveGuestMessage', () => {
+    it('persists a guest message with guest fields only', async () => {
+      prisma.room.findUnique.mockResolvedValue(baseRoom);
+      prisma.message.create.mockResolvedValue({ id: 'msg-9' });
+
+      await service.saveGuestMessage(
+        'guest-1',
+        'Guest Name',
+        'Hi there',
+        'room-1',
+        'abc123',
+      );
+
+      expect(prisma.message.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { content: 'Hi there', guestId: 'guest-1', roomId: 'room-1' },
+        }),
+      );
+    });
+
+    it('throws Forbidden for a slug mismatch and never creates', async () => {
+      prisma.room.findUnique.mockResolvedValue(baseRoom);
+
+      await expect(
+        service.saveGuestMessage(
+          'guest-1',
+          'Guest Name',
+          'Hi',
+          'room-1',
+          'other-slug',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(prisma.message.create).not.toHaveBeenCalled();
+    });
+
+    it('throws Forbidden for a missing room so existence cannot be probed', async () => {
+      prisma.room.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.saveGuestMessage(
+          'guest-1',
+          'Guest Name',
+          'Hi',
+          'nonexistent',
+          'abc123',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws BadRequestException when the room has ended', async () => {
+      prisma.room.findUnique.mockResolvedValue({
+        ...baseRoom,
+        status: 'ended',
+      });
+
+      await expect(
+        service.saveGuestMessage(
+          'guest-1',
+          'Guest Name',
+          'Hi',
+          'room-1',
+          'abc123',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getMessages for a room-bound guest', () => {
+    it('hides foreign rooms behind the same not-found error', async () => {
+      prisma.room.findUnique.mockResolvedValue(baseRoom);
+
+      await expect(
+        service.getMessages('room-1', 1, 50, 'other-slug'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(prisma.message.findMany).not.toHaveBeenCalled();
     });
   });
 });

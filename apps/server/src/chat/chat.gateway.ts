@@ -19,8 +19,6 @@ import {
   resolveRoomSocketIdentity,
   RoomSocketIdentity,
 } from '../auth/helpers/room-socket-auth.helper';
-import { RoomService } from '../room/room.service';
-
 @SkipThrottle()
 @WebSocketGateway({
   cors: {
@@ -41,7 +39,6 @@ export class ChatGateway
     private readonly chatService: ChatService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    private readonly roomService: RoomService,
   ) {}
 
   afterInit(): void {
@@ -76,20 +73,13 @@ export class ChatGateway
       .identity as RoomSocketIdentity;
 
     if (identity.type === 'guest') {
-      const room = await this.roomService.findBySlug(identity.roomSlug);
-      if (!room || room.id !== payload.roomId) {
-        client.emit('chat:error', {
-          event: 'chat:send',
-          message: 'Forbidden',
-        });
-        return;
-      }
       try {
         const saved = await this.chatService.saveGuestMessage(
           identity.guestId,
           identity.displayName,
           payload.content,
           payload.roomId,
+          identity.roomSlug,
         );
         const message = {
           id: saved.id,
@@ -134,20 +124,13 @@ export class ChatGateway
   ) {
     const identity = (client.data as Record<string, unknown>)
       .identity as RoomSocketIdentity;
-
-    if (identity.type === 'guest') {
-      const room = await this.roomService.findBySlug(identity.roomSlug);
-      if (!room || room.id !== roomId) {
-        client.emit('chat:error', {
-          event: 'chat:history',
-          message: 'Forbidden',
-        });
-        return;
-      }
-    }
-
     try {
-      const result = await this.chatService.getMessages(roomId);
+      const result = await this.chatService.getMessages(
+        roomId,
+        1,
+        50,
+        identity.type === 'guest' ? identity.roomSlug : undefined,
+      );
       await client.join(roomId);
       return result;
     } catch (err) {

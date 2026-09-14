@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -43,15 +44,19 @@ export class ChatService {
     displayName: string,
     content: string,
     roomId: string,
+    /** Guest tokens are room-bound: the expected slug comes from the
+     * verified identity, never from the client payload. */
+    expectedSlug?: string,
   ) {
     const room = await this.prisma.room.findUnique({ where: { id: roomId } });
-    if (!room) {
-      throw new NotFoundException('Room not found');
+    // "Not found" and "not yours" are indistinguishable for guests, so
+    // existence probing cannot leak valid room ids.
+    if (!room || (expectedSlug !== undefined && room.slug !== expectedSlug)) {
+      throw new ForbiddenException('Forbidden');
     }
     if (room.status === 'ended') {
       throw new BadRequestException('Room has ended');
     }
-
     return this.prisma.message.create({
       data: {
         content,
@@ -68,11 +73,17 @@ export class ChatService {
     });
   }
 
-  async getMessages(roomId: string, page: number = 1, limit: number = 50) {
+  async getMessages(
+    roomId: string,
+    page: number = 1,
+    limit: number = 50,
+    /** Room-bound guest identity: same opaque-Forbidden rule as sending. */
+    expectedSlug?: string,
+  ) {
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
     });
-    if (!room) {
+    if (!room || (expectedSlug !== undefined && room.slug !== expectedSlug)) {
       throw new NotFoundException('Room not found');
     }
 
