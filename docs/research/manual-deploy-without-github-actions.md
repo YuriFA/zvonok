@@ -226,6 +226,17 @@
   [Prisma generators](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/generators))
   to the builder's arch; that is a real change to evaluate, not a free win.
 
+**Update (same day):** the emulated server-image build failed on the first run for a
+reason unrelated to emulation speed: mediasoup picks the prebuilt worker tarball by
+the build machine's kernel major (`os.release()` in its postinstall; kernel >= 6 is
+assumed for io_uring). Docker Desktop's VM now reports kernel 7.0 (`7.0.12-linuxkit`),
+while the mediasoup release publishes only `-kernel6` prebuilts, so the download 404s
+and the source-build fallback needs python3/pip + make/g++ that `node:22-slim` lacks.
+CI is unaffected (ubuntu-latest runners = kernel 6, prebuilt downloads). Fix: an
+intermediate `buildtools` stage (python3, python3-pip, make, g++) that only the build
+stages inherit, so the source fallback works and runtime images stay slim
+(`apps/server/Dockerfile`).
+
 ## GHCR auth for workstation pushes
 
 - Machine auth: GitHub Packages supports personal access tokens (classic); scopes:

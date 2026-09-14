@@ -7,11 +7,23 @@ ENV PATH="$PNPM_HOME:$PATH"
 
 RUN corepack enable
 
+# ── Stage 0: Native build tools ──────────────────────────────────────────────
+# mediasoup picks a prebuilt worker by the BUILD machine's kernel major
+# (os.release()); when no prebuilt matches (e.g. Docker Desktop VM on kernel 7
+# while releases publish kernel 6) it falls back to a source build that needs
+# python3/pip and a C++ toolchain. Only build stages inherit these; runtime
+# images stay on the slim base.
+FROM base AS buildtools
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-pip make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
 # ── Stage 1: Builder ──────────────────────────────────────────────────────────
 # Installs all deps (dev + prod), generates Prisma client, compiles NestJS,
 # then uses pnpm deploy to create a self-contained production node_modules
 # with only prod deps — no symlinks, no .pnpm store, compiled native addons intact.
-FROM base AS builder
+FROM buildtools AS builder
 
 WORKDIR /app
 
@@ -36,7 +48,7 @@ RUN pnpm -C apps/server exec prisma generate && \
 
 # ── Stage 2: Migrations runner ────────────────────────────────────────────────
 # Has prisma CLI + ts-node for prisma.config.ts; also seeds the DB.
-FROM base AS migrator
+FROM buildtools AS migrator
 
 WORKDIR /app
 
@@ -116,7 +128,7 @@ CMD ["node", "dist/src/main.js"]
 
 # ── Stage 4: Development image ────────────────────────────────────────────────
 # For local dev with hot reload — not used in production CI.
-FROM base AS development
+FROM buildtools AS development
 
 WORKDIR /app
 
