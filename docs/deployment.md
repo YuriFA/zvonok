@@ -479,16 +479,21 @@ docker compose down -v
 ## Monitoring
 
 The VPS runs a self-hosted observability stack (separate compose project in
-`~/monitoring`, files versioned in `monitoring/`): Prometheus + Grafana,
-node_exporter, cAdvisor, postgres_exporter, Uptime Kuma, and GlitchTip. It
-monitors the whole host, including other sites behind the shared Traefik
-gateway. Full runbook: `monitoring/README.md` in the repository root.
+`~/monitoring`, files versioned in `infra/monitoring/`): Prometheus + Grafana,
+node_exporter, postgres_exporter, Uptime Kuma (site checks + Docker
+container monitors), and GlitchTip. It monitors the whole host, including
+other sites behind the shared Traefik gateway (compose versioned in
+`infra/gateway/`). Full runbook: `infra/monitoring/README.md`. Note: no
+cAdvisor - Docker 28 on this host uses the containerd snapshotter, which
+cAdvisor cannot read; per-container liveness comes from Kuma's Docker
+monitors instead.
 
 ```
 Prometheus (host net) --scrapes--> 127.0.0.1:{3000 app /metrics, 9100 node,
-    8080 cadvisor, 9187 postgres, 8082 traefik}
+    9187 postgres, 8082 traefik}
 grafana.yurifa.site   <- Grafana dashboards + alerts (Telegram)
-status.yurifa.site    <- Uptime Kuma site checks (+ external UptimeRobot)
+status.yurifa.site    <- Uptime Kuma: site checks + Docker container
+                         monitors (with an external UptimeRobot pinger)
 errors.yurifa.site    <- GlitchTip (server error reporting via SENTRY_DSN)
 ```
 
@@ -497,7 +502,7 @@ App metrics (`GET /metrics` on the server, internal-only - no public route):
 `zvonok_sfu_open_transports`, plus default Node.js process metrics.
 
 One-time setup (swap file, gateway Traefik-metrics edit, DB roles, DNS,
-deploy) is walked through in `monitoring/README.md`.
+deploy) is walked through in `infra/monitoring/README.md`.
 Keep Prometheus (`9090`) off the public internet: if ufw is active, allow it
 only from Docker subnets, same as port 3000.
 

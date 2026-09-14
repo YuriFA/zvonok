@@ -1,0 +1,204 @@
+# Grafana alert rules, provisioned. Routing is a one-time UI step: create a
+# Telegram contact point (bot token from @BotFather + chat id) and set it as
+# the default notification policy - see README.md.
+#
+# Shape mirrors grafana/provisioning-alerting-examples: every query item
+# carries datasourceUid + relativeTimeRange; Prometheus queries are instant
+# (range: false) so threshold expressions receive scalars, not range
+# vectors; expression conditions carry the full evaluator/operator/query
+# triple.
+# Per-container liveness is NOT here: cAdvisor cannot read Docker 28
+# containerd-snapshotter layers, so container alarms live in Uptime Kuma
+# (Docker monitors) instead.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: zvonok-host
+    folder: Zvonok
+    interval: 1m
+    rules:
+      - uid: host-disk-warn
+        title: Disk usage above 80 percent
+        condition: C
+        for: 5m
+        annotations:
+          summary: Disk usage on the VPS is above 80 percent
+        labels:
+          severity: warning
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              editorMode: code
+              expr: |
+                1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                  / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.8]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+      - uid: host-disk-crit
+        title: Disk usage above 90 percent
+        condition: C
+        for: 5m
+        annotations:
+          summary: Disk usage on the VPS is above 90 percent
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              editorMode: code
+              expr: |
+                1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                  / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"})
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.9]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+      - uid: host-memory-crit
+        title: Memory usage above 90 percent
+        condition: C
+        for: 5m
+        annotations:
+          summary: RAM usage on the VPS is above 90 percent
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              editorMode: code
+              expr: |
+                1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.9]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+
+      - uid: scrape-target-down
+        title: Scrape target down for 5 minutes
+        condition: C
+        for: 5m
+        annotations:
+          summary: 'Prometheus cannot scrape {{ $labels.job }} ({{ $labels.instance }})'
+        labels:
+          severity: critical
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              editorMode: code
+              expr: up
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold

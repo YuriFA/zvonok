@@ -44,20 +44,23 @@ services:
       - /:/host:ro,rslave
     restart: unless-stopped
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
-    container_name: cadvisor
-    ports:
-      - 127.0.0.1:8080:8080
+  # NOTE: no cAdvisor - Docker 28 on this host stores layers via the
+  # containerd snapshotter, which cAdvisor cannot read (no per-container
+  # name labels). Container liveness is covered by Uptime Kuma's Docker
+  # monitors (socket below) instead.
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    devices:
-      - /dev/kmsg
-    privileged: true
+      - uptime-kuma-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [default, web]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kuma.rule=Host(`status.yurifa.site`)
+      - traefik.http.routers.kuma.entrypoints=websecure
+      - traefik.http.routers.kuma.tls.certresolver=le
+      - traefik.http.services.kuma.loadbalancer.server.port=3001
     restart: unless-stopped
 
   postgres-exporter:
@@ -94,29 +97,25 @@ services:
       - traefik.http.services.grafana.loadbalancer.server.port=3000
     restart: unless-stopped
 
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    container_name: uptime-kuma
-    volumes:
-      - uptime-kuma-data:/app/data
-    networks: [default, web]
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.kuma.rule=Host(`status.yurifa.site`)
-      - traefik.http.routers.kuma.entrypoints=websecure
-      - traefik.http.routers.kuma.tls.certresolver=le
-      - traefik.http.services.kuma.loadbalancer.server.port=3001
-    restart: unless-stopped
-
   glitchtip:
-    image: glitchtip/glitchtip:latest
+    # Official single-server pattern: SERVER_ROLE all_in_one runs the
+    # background worker inside the web process (docs: compose.sample.yml).
+    # Major version pinned; see https://glitchtip.com/blog for upgrades.
+    image: glitchtip/glitchtip:6
     container_name: glitchtip
-    depends_on:
-      - postgres-exporter
     environment:
       DATABASE_URL: postgres://${GLITCHTIP_DB_USER:?set in .env}:${GLITCHTIP_DB_PASSWORD:?set in .env}@postgres:5432/${GLITCHTIP_DB_NAME:?set in .env}
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set in .env}
+      SERVER_ROLE: all_in_one
+      # No Valkey container here: empty string switches the task queue,
+      # cache, and sessions to Postgres (per glitchtip install docs).
+      VALKEY_URL: ""
+      GLITCHTIP_DOMAIN: https://errors.yurifa.site
+      ALLOWED_HOSTS: errors.yurifa.site
+      EMAIL_URL: consolemail://
       PORT: 8080
+    volumes:
+      - glitchtip-uploads:/code/uploads
     networks: [default, web, zvonok]
     labels:
       - traefik.enable=true
@@ -126,20 +125,11 @@ services:
       - traefik.http.services.glitchtip.loadbalancer.server.port=8080
     restart: unless-stopped
 
-  glitchtip-worker:
-    image: glitchtip/glitchtip:latest
-    container_name: glitchtip-worker
-    command: ./manage.py process_tasks
-    environment:
-      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:?set in .env}:${GLITCHTIP_DB_PASSWORD:?set in .env}@postgres:5432/${GLITCHTIP_DB_NAME:?set in .env}
-      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set in .env}
-    networks: [zvonok]
-    restart: unless-stopped
-
 volumes:
   prometheus-data:
   grafana-data:
   uptime-kuma-data:
+  glitchtip-uploads:
 
 networks:
   web:

@@ -151,12 +151,6 @@
           "expr": "1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
           "legendFormat": "host memory",
           "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"zvonok.*|traefik|postgres-zvonok|cadvisor|node-exporter|postgres-exporter|grafana|uptime-kuma|glitchtip.*\"}[5m]))",
-          "legendFormat": "containers cpu",
-          "refId": "C"
         }
       ],
       "title": "Load",

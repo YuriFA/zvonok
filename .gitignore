@@ -45,3 +45,6 @@ certs/
 
 # Packed SDK tarballs
 *.tgz
+
+# Gateway TLS account keys live only on the VPS
+infra/gateway/acme.json
