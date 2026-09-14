@@ -35,7 +35,9 @@ services:
         max-file: "3"
     environment:
       PORT: ${PORT:-3000}
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      # Host network mode: container DNS is unavailable - postgres is reached
+      # via its loopback-only host publish below.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:5432/${POSTGRES_DB}?schema=public
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRES_IN_MINUTES: ${JWT_ACCESS_EXPIRES_IN_MINUTES:-15}
@@ -68,12 +70,15 @@ services:
       coturn:
         condition: service_started
     restart: unless-stopped
-    expose:
-      - "3000"
-    # RTC media ports must be published directly (Caddy cannot proxy UDP/RTP)
-    ports:
-      - "${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40099}:${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40099}/udp"
-      - "${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40099}:${RTC_MIN_PORT:-40000}-${RTC_MAX_PORT:-40099}/tcp"
+    # Host network: mediasoup binds the RTC port range (RTC_MIN_PORT..RTC_MAX_PORT)
+    # directly on the host. Publishing 100 ports (tcp+udp, IPv4+IPv6) through
+    # Docker spawns ~400 docker-proxy processes and puts a userland hop on
+    # every RTP packet. Container DNS is unavailable in host mode: postgres is
+    # reached via 127.0.0.1 (loopback publish below), Caddy via
+    # host.docker.internal (SERVER_UPSTREAM).
+    # Firewall: PORT (3000) binds directly on the host and must never be open
+    # to the internet - allow it only from Docker subnets (docs/deployment.md).
+    network_mode: host
     volumes:
       - egress_data:/data
 
@@ -100,6 +105,10 @@ services:
     restart: unless-stopped
     expose:
       - "5432"
+    # Loopback-only host publish: the host-networked server reaches the
+    # database via 127.0.0.1:5432. Not reachable from the internet.
+    ports:
+      - "127.0.0.1:5432:5432"
 
   # --- Caddy reverse proxy (with baked-in client assets) ---
   # Behind the shared Traefik gateway (~/gateway on the VPS): Traefik owns
@@ -116,6 +125,11 @@ services:
       - "80"
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      # The server runs in host network mode - reach it via the host, not
+      # container DNS (consumed by Caddyfile.routes).
+      SERVER_UPSTREAM: host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./Caddyfile.traefik:/etc/caddy/Caddyfile:ro
       - ./Caddyfile.routes:/etc/caddy/Caddyfile.routes:ro

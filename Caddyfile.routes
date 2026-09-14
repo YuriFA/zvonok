@@ -8,6 +8,11 @@
 # Contains only routing, headers, and logging — no TLS, no redirects;
 # those belong to the importing config.
 #
+# The NestJS upstream is env-driven: {$SERVER_UPSTREAM:server:3000}.
+# The default (server:3000, container DNS) fits the bridge-network dev
+# compose. Production sets SERVER_UPSTREAM=host.docker.internal:3000 because
+# the server runs in host network mode (docker-compose.prod.yml).
+#
 # Routing strategy:
 #   NestJS has no /api prefix. Backend routes (/auth, /users, /rooms, etc.)
 #   are proxied explicitly. Everything else is served as static files
@@ -25,43 +30,43 @@
 
 	# --- Backend API routes -> NestJS ---
 	handle /auth/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	handle /version {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	handle /users/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	handle /rooms {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	handle /rooms/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	# Public developer-platform API (API-key authenticated)
 	handle /v1/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	# Developer account/project/key management (dev-JWT authenticated)
 	handle /developers/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	# Egress HLS playback (playlists + segments served by NestJS)
 	handle /egress/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	# Socket.io transport (SFU WebSocket + polling fallback)
 	handle /socket.io/* {
-		reverse_proxy server:3000
+		reverse_proxy {$SERVER_UPSTREAM:server:3000}
 	}
 
 	# --- Static files + SPA fallback ---

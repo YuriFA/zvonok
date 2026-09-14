@@ -12,7 +12,7 @@ Internet
    │                  TLS + LE            ├── /socket.io/* ──▶ NestJS :3000 (WebSocket)
    │                  (prod only)         └── /* (fallback) ──▶ index.html (SPA routing)
    │
-   ├─ UDP/TCP (40000-40499) ──▶ NestJS (mediasoup RTC media) ──▶ directly exposed
+   ├─ UDP/TCP (40000-40499) ──▶ NestJS :3000 (host network mode — mediasoup binds ports directly)
    │
    └─ UDP/TCP (3478, 5349) ──▶ coturn (STUN/TURN relay)
      └─ UDP (49152-49252)     relay port range (host network mode)
@@ -42,6 +42,7 @@ Both files define the same five app services (the `docs` site service exists onl
 | Server `EGRESS_*` env vars | Defaults | `EGRESS_MEDIA_PORT_MIN/MAX`, `EGRESS_HLS_DIR`, `EGRESS_RECORDINGS_DIR` on the `egress_data` volume | HLS trees and recordings persist on a named volume instead of the container filesystem; the RTP ingest range stays disjoint from the mediasoup RTC range |
 | Caddy `certs` volume | `./certs:/srv/certs:ro` | Not mounted | Dev uses self-signed certs from `./certs`; prod terminates TLS at Traefik |
 | Caddy entrypoint | Host ports 80/443, `Caddyfile` | `expose: 80` behind Traefik, `Caddyfile.traefik` | Prod shares ports 80/443 with other sites via the gateway |
+| Server network | Bridge network, RTC `ports:` published | `network_mode: host` | mediasoup binds RTC ports directly on the host; publishing 100 ports (tcp+udp, IPv4+IPv6) spawns ~400 docker-proxy processes and puts a userland hop on every RTP packet |
 
 ## Traefik Gateway (Multi-Site Production)
 
@@ -118,6 +119,14 @@ The following ports must be open on the server firewall:
 
 > For local testing without a domain, `SITE_ADDRESS=localhost` uses Caddy's self-signed certificate.
 
+> **Port 3000 in production**: the `server` container runs in `network_mode: host`, so NestJS binds 3000 directly on the host. It must **not** be open to the internet - the edge (Traefik → Caddy) is the only public entry point. Allow it from Docker subnets only:
+>
+> ```bash
+> sudo ufw allow from 172.16.0.0/12 to any port 3000 proto tcp
+> ```
+>
+> The egress RTP ingest range (42000-42100) is internal FFmpeg ingest inside the server container and stays unreachable from the internet.
+
 ## Step 1: DNS & Domain Setup
 
 Before deploying, point your domain to the server:
@@ -161,6 +170,9 @@ sudo ufw allow 40000:40499/udp
 
 # coturn relay range
 sudo ufw allow 49152:49252/udp
+
+# NestJS API (prod: host network mode) - Docker subnets only, never public
+sudo ufw allow from 172.16.0.0/12 to any port 3000 proto tcp
 
 sudo ufw enable
 ```
@@ -225,7 +237,7 @@ All variables are set in the root `.env` file. Copy from `.env.production.exampl
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PORT` | No | `3000` | Internal port for NestJS (not exposed to host, Caddy proxies to it) |
+| `PORT` | No | `3000` | NestJS HTTP port. Caddy proxies to it; in production (host network mode) it binds directly on the host - keep it firewalled from the internet |
 | `CLIENT_URL` | Yes | `https://localhost` | Full URL of the client (used for CORS). E.g., `https://chat.example.com` |
 
 ### Database
@@ -350,6 +362,8 @@ The routes:
 - `/egress/*` → reverse proxy to `server:3000` (HLS playback: playlist and segments)
 - `/socket.io/*` → reverse proxy to `server:3000` (WebSocket + polling)
 - Everything else → `try_files` for static SPA with `index.html` fallback
+
+All API routes proxy to the env-driven upstream `{$SERVER_UPSTREAM:server:3000}`: `server:3000` (container DNS) in dev, `host.docker.internal:3000` in production where the server runs in host network mode.
 
 **Note**: Caddy's `handle /rooms/*` does NOT match the bare `/rooms` path. That's why there are separate `handle /rooms` and `handle /rooms/*` blocks.
 
