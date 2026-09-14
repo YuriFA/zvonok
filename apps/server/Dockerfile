@@ -47,10 +47,13 @@ COPY apps/server/package.json ./apps/server/
 # Do NOT use --ignore-scripts: bcrypt requires its postinstall to compile the native addon.
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
-# Copy Prisma schema, config, migrations, and seed
+# Copy Prisma schema, config, migrations, and seed.
+# seed.ts imports src/developer/api-key.helper.ts (self-contained: node:crypto
+# only) and the generated Prisma client - both must exist in the image.
 COPY apps/server/prisma ./apps/server/prisma
 COPY apps/server/prisma.config.ts ./apps/server/prisma.config.ts
 COPY apps/server/tsconfig.json ./apps/server/tsconfig.json
+COPY apps/server/src/developer/api-key.helper.ts ./apps/server/src/developer/api-key.helper.ts
 
 WORKDIR /app/apps/server
 
