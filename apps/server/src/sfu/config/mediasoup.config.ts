@@ -98,8 +98,10 @@ export const config = {
   worker: {
     logLevel: 'warn',
     logTags: ['info', 'ice', 'dtls', 'rtp', 'srtp', 'rtcp'],
+    // Default 500 ports (~250 concurrent transports incl. egress taps);
+    // must stay disjoint from EGRESS_MEDIA_PORT_MIN/MAX (42000-42100).
     rtcMinPort: parseInt(process.env.RTC_MIN_PORT || '40000', 10),
-    rtcMaxPort: parseInt(process.env.RTC_MAX_PORT || '40099', 10),
+    rtcMaxPort: parseInt(process.env.RTC_MAX_PORT || '40499', 10),
   } satisfies WorkerSettings,
 
   webRtcTransport: {
@@ -153,3 +155,19 @@ export const config = {
     ],
   } satisfies RouterOptions,
 };
+
+/**
+ * Production cannot work with loopback media addresses: remote clients get
+ * candidates they can never reach. Fail fast at boot instead of debugging
+ * one-way audio after deploy.
+ */
+export function assertProductionMediaConfig(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  const listenIp = process.env.MEDIASOUP_LISTEN_IP || '127.0.0.1';
+  const announcedIp = process.env.MEDIASOUP_ANNOUNCED_IP;
+  if (listenIp === '127.0.0.1' || !announcedIp) {
+    throw new Error(
+      'Production media config invalid: set MEDIASOUP_ANNOUNCED_IP to the server public IP and MEDIASOUP_LISTEN_IP to a non-loopback address',
+    );
+  }
+}

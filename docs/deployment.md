@@ -12,7 +12,7 @@ Internet
    │                  TLS + LE            ├── /socket.io/* ──▶ NestJS :3000 (WebSocket)
    │                  (prod only)         └── /* (fallback) ──▶ index.html (SPA routing)
    │
-   ├─ UDP/TCP (40000-40099) ──▶ NestJS (mediasoup RTC media) ──▶ directly exposed
+   ├─ UDP/TCP (40000-40499) ──▶ NestJS (mediasoup RTC media) ──▶ directly exposed
    │
    └─ UDP/TCP (3478, 5349) ──▶ coturn (STUN/TURN relay)
      └─ UDP (49152-49252)     relay port range (host network mode)
@@ -113,7 +113,7 @@ The following ports must be open on the server firewall:
 | 443 | TCP + UDP | Traefik (prod) / Caddy (dev) | HTTPS + HTTP/3 |
 | 3478 | UDP + TCP | coturn | STUN/TURN |
 | 5349 | UDP + TCP | coturn | TURNS (TLS) |
-| 40000–40099 | UDP + TCP | mediasoup | WebRTC media transport |
+| 40000–40499 | UDP + TCP | mediasoup | WebRTC media transport |
 | 49152–49252 | UDP | coturn | TURN relay range |
 
 > For local testing without a domain, `SITE_ADDRESS=localhost` uses Caddy's self-signed certificate.
@@ -156,8 +156,8 @@ sudo ufw allow 5349/tcp
 sudo ufw allow 5349/udp
 
 # mediasoup RTC media
-sudo ufw allow 40000:40099/tcp
-sudo ufw allow 40000:40099/udp
+sudo ufw allow 40000:40499/tcp
+sudo ufw allow 40000:40499/udp
 
 # coturn relay range
 sudo ufw allow 49152:49252/udp
@@ -265,7 +265,8 @@ All variables are set in the root `.env` file. Copy from `.env.production.exampl
 | `MEDIASOUP_LISTEN_IP` | No | `0.0.0.0` | IP to bind RTC transport sockets. `0.0.0.0` is correct for Docker. |
 | `MEDIASOUP_ANNOUNCED_IP` | **Yes** | `127.0.0.1` | **Your server's public IP address**. Remote clients use this IP to send/receive media. Must be set to the server's public IP for calls to work. |
 | `RTC_MIN_PORT` | No | `40000` | Start of the UDP/TCP port range for RTC media |
-| `RTC_MAX_PORT` | No | `40099` | End of the RTC port range. 100 ports supports ~50 simultaneous transports (each peer uses 2). |
+| `RTC_MAX_PORT` | No | `40499` | End of the RTC port range. 500 ports supports ~250 simultaneous transports (each peer uses 2). |
+| `MEDIASOUP_WORKERS` | No | cores - 1 | mediasoup Worker subprocess count. One worker uses one core; lower it to reserve cores for egress on small hosts. |
 
 **Important**: If `MEDIASOUP_ANNOUNCED_IP` is wrong, video/audio will not work for remote participants. Set it to the server's public IPv4 address. For local Docker testing, use your machine's LAN IP (not `127.0.0.1`, unless testing on the same machine).
 
@@ -322,7 +323,7 @@ VITE_SOCKET_URL=
 MEDIASOUP_LISTEN_IP=0.0.0.0
 MEDIASOUP_ANNOUNCED_IP=203.0.113.42
 RTC_MIN_PORT=40000
-RTC_MAX_PORT=40099
+RTC_MAX_PORT=40499
 
 # TURN (coturn; generate TURN_AUTH_SECRET with: openssl rand -base64 32)
 TURN_AUTH_SECRET=super-secret-turn-auth-secret-here
@@ -432,11 +433,23 @@ cat backup.sql | docker compose exec -T postgres psql -U $POSTGRES_USER -d $POST
 
 ### Scaling and Port Range
 
-The default 100-port range (40000–40099) supports approximately 50 concurrent participants (each participant uses a send + receive transport, each transport uses one port). To support more:
+The default 500-port range (40000–40499) supports approximately 250
+concurrent participants (each participant uses a send + receive transport,
+each transport uses one port). To support more:
 
-1. Increase `RTC_MAX_PORT` in `.env` (e.g., `40199` for ~100 participants)
+1. Increase `RTC_MAX_PORT` in `.env` (e.g., `40999` for ~500 participants);
+   the range must stay disjoint from `EGRESS_MEDIA_PORT_MIN/MAX`
 2. Open the additional ports on your firewall
 3. Rebuild: `make rebuild-server`
+
+### Worker Pool and Instance Boundary
+
+The server runs a pool of mediasoup Workers - one per CPU core by default
+(override with `MEDIASOUP_WORKERS`) - so media forwarding uses all cores.
+Room state (presence, chat delivery, egress pipelines) is process-local:
+run exactly one server instance per deployment. Scaling beyond one machine
+means sharding whole deployments per region/site, not load-balancing
+instances behind one hostname.
 
 ### Stopping
 
@@ -487,7 +500,7 @@ See [Step 2: Server Firewall](#step-2-server-firewall) for the full `ufw` comman
 ### Video/audio not working for remote participants
 
 1. Verify `MEDIASOUP_ANNOUNCED_IP` is set to the server's **public IP** (not `0.0.0.0` or `127.0.0.1`)
-2. Check that ports 40000–40099 (UDP+TCP) are open on the firewall
+2. Check that ports 40000–40499 (UDP+TCP) are open on the firewall
 3. Run `docker compose logs server | grep -i mediasoup` to check for errors
 4. Ensure the client can reach the server's public IP on the RTC port range
 

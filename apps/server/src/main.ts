@@ -3,8 +3,11 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
 import { VERSION } from './version';
+import { assertProductionMediaConfig } from './sfu/config/mediasoup.config';
 
 async function bootstrap() {
+  assertProductionMediaConfig();
+
   const app = await NestFactory.create(AppModule);
 
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
