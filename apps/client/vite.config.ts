@@ -36,20 +36,39 @@ export default defineConfig(async () => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            // Core framework — loaded on every page
-            "vendor-react": ["react", "react-dom", "react-router"],
-            // Data layer — loaded on every page (auth, queries)
-            "vendor-data": [
-              "@tanstack/react-query",
-              "react-hook-form",
-              "@hookform/resolvers",
-              "zod",
-            ],
-            // Room-specific heavy deps — only loaded with room chunk
-            "vendor-sfu": ["mediasoup-client", "socket.io-client"],
-            // Whiteboard canvas — 1 MB+, lazy-loaded with the board panel
-            "vendor-excalidraw": ["@excalidraw/excalidraw", "yjs"],
+          // Match by resolved path, not bare specifier: object-form
+          // manualChunks resolves package names from apps/client, where
+          // transitive deps of workspace packages (e.g. @excalidraw/excalidraw
+          // via @zvonok/whiteboard-react) are invisible under pnpm's strict
+          // node_modules - and the build fails.
+          manualChunks(id: string) {
+            if (!id.includes("/node_modules/")) return undefined;
+            const groups: Array<[chunk: string, packages: string[]]> = [
+              // Core framework — loaded on every page
+              ["vendor-react", ["react", "react-dom", "react-router"]],
+              // Data layer — loaded on every page (auth, queries)
+              [
+                "vendor-data",
+                [
+                  "@tanstack/react-query",
+                  "react-hook-form",
+                  "@hookform/resolvers",
+                  "zod",
+                ],
+              ],
+              // Room-specific heavy deps — only loaded with room chunk
+              ["vendor-sfu", ["mediasoup-client", "socket.io-client"]],
+              // Whiteboard canvas — 1 MB+, lazy-loaded with the board panel
+              ["vendor-excalidraw", ["@excalidraw/excalidraw", "yjs"]],
+            ];
+            for (const [chunk, packages] of groups) {
+              if (
+                packages.some((pkg) => id.includes(`/node_modules/${pkg}/`))
+              ) {
+                return chunk;
+              }
+            }
+            return undefined;
           },
         },
       },
