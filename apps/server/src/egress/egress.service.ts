@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
@@ -97,7 +98,7 @@ function isPrivateAddress(address: string): boolean {
 }
 
 @Injectable()
-export class EgressService implements OnModuleInit {
+export class EgressService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EgressService.name);
   private readonly sessions = new Map<string, ActiveSession>();
   private readonly portsInUse = new Set<number>();
@@ -110,9 +111,27 @@ export class EgressService implements OnModuleInit {
   ) {}
 
   /**
-   * Pipelines are in-process only: after a server restart nothing is running,
-   * so non-terminal rows are reconciled to a failed state.
+   * Graceful shutdown: finalize every live session as `stopped` so ffmpeg
+   * children die, recordings concatenate, and rows reach a terminal state -
+   * instead of orphaning pipelines (SIGTERM) that boot reconciliation would
+   * later mark `failed`.
    */
+  async onModuleDestroy(): Promise<void> {
+    const active = [...this.sessions.values()];
+    if (active.length === 0) return;
+    this.logger.log(`Stopping ${active.length} egress session(s) for shutdown`);
+    await Promise.allSettled(
+      active.map((session) =>
+        this.finalize(session, 'stopped').catch((error) =>
+          this.logger.error(
+            `Failed to stop egress ${session.id} during shutdown`,
+            error,
+          ),
+        ),
+      ),
+    );
+  }
+
   async onModuleInit(): Promise<void> {
     const { count } = await this.prisma.egress.updateMany({
       where: { status: { in: [...ACTIVE_STATUSES] } },
@@ -252,7 +271,6 @@ export class EgressService implements OnModuleInit {
       });
       return this.view(ended);
     }
-    void 0;
     await this.finalize(session, 'stopped');
     const ended = await this.prisma.egress.findUniqueOrThrow({
       where: { id: egressId },
