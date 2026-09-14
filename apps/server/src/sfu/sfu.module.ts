@@ -19,6 +19,12 @@ import { ROOM_PRESENCE } from './room-presence.port';
     RoomPresenceService,
     { provide: ROOM_PRESENCE, useExisting: RoomPresenceService },
   ],
-  exports: [SfuService, SfuGateway, RoomPresenceService, ROOM_PRESENCE],
+  exports: [
+    SfuService,
+    SfuGateway,
+    WorkerManager,
+    RoomPresenceService,
+    ROOM_PRESENCE,
+  ],
 })
 export class SfuModule {}

@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -70,7 +70,7 @@ export class MintRoomTokenDto {
     example: 'user-42',
   })
   @IsOptional()
-  @ValidateIf((o) => o.externalId !== undefined)
+  @ValidateIf((o: MintRoomTokenDto) => o.externalId !== undefined)
   @IsString()
   @Length(1, 64)
   externalId?: string;
@@ -82,7 +82,7 @@ export class MintRoomTokenDto {
       'Consumer-owned correlation data (JSON object, at most 2048 bytes serialized), carried verbatim',
     example: { tenant: 'acme', avatar: 'https://cdn.example.com/a.png' },
   })
-  @ValidateIf((o) => o.metadata !== undefined)
+  @ValidateIf((o: MintRoomTokenDto) => o.metadata !== undefined)
   @IsJsonObject()
   @MaxSerializedSize(2048)
   metadata?: Record<string, unknown>;

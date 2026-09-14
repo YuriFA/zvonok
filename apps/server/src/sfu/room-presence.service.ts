@@ -93,6 +93,11 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.peerDetachHandlers.clear();
   }
 
+  /** Observability seam: peers currently tracked across all rooms. */
+  peerCount(): number {
+    return this.records.size;
+  }
+
   async join(
     socket: Socket,
     payload: SfuJoinPayload,

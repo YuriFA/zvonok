@@ -8,8 +8,9 @@ import { ChatModule } from './chat/chat.module';
 import { SfuModule } from './sfu/sfu.module';
 import { PlatformModule } from './platform/platform.module';
 import { EgressModule } from './egress/egress.module';
-import { WhiteboardModule } from './whiteboard/whiteboard.module';
 import { DeveloperModule } from './developer/developer.module';
+import { WhiteboardModule } from './whiteboard/whiteboard.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { VersionController } from './version.controller';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -77,6 +78,7 @@ import { APP_GUARD } from '@nestjs/core';
     PlatformModule,
     EgressModule,
     WhiteboardModule,
+    ObservabilityModule,
   ],
   controllers: [VersionController],
   providers: [

@@ -192,6 +192,11 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
+  /** Observability seam: rooms whose router is alive on a pool worker. */
+  liveRouterCount(): number {
+    return this.routers.size;
+  }
+
   getRtpCapabilities(roomId: string): RtpCapabilities | null {
     const router = this.routers.get(roomId);
     if (!router) {

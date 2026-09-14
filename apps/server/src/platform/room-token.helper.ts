@@ -40,7 +40,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function isDecodedRoomToken(value: unknown): value is DecodedRoomToken {
   if (!isPlainObject(value)) return false;
-  const candidate = value as Record<string, unknown>;
+  const candidate = value;
   return (
     typeof candidate.sub === 'string' &&
     typeof candidate.projectId === 'string' &&

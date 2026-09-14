@@ -226,7 +226,7 @@ describe('PlatformService', () => {
       }),
     );
     // Absent means absent: no null placeholders for correlation fields.
-    const mintedClaims = (roomTokenHelper.mint as jest.Mock).mock.calls[0][0];
+    const mintedClaims = roomTokenHelper.mint.mock.calls[0][0];
     expect('externalId' in mintedClaims).toBe(false);
     expect('metadata' in mintedClaims).toBe(false);
   });

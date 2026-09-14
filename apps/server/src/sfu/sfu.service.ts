@@ -95,6 +95,16 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
     this.logger.log('SFU Service closed');
   }
 
+  /** Observability seam: WebRTC transports not yet closed, per joined socket. */
+  openTransportCount(): number {
+    let open = 0;
+    for (const media of this.media.values()) {
+      if (media.sendTransport && !media.sendTransport.closed) open += 1;
+      if (media.recvTransport && !media.recvTransport.closed) open += 1;
+    }
+    return open;
+  }
+
   /**
    * Media plane of the given rooms died with a worker. Presence, chat and
    * room lifetime are untouched: clear local media state (all transports
