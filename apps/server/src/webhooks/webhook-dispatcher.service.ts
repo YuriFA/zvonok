@@ -141,22 +141,21 @@ export class WebhookDispatcher {
   ): Promise<void> {
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
-      select: { slug: true, projectId: true },
+      select: {
+        slug: true,
+        project: {
+          select: { id: true, webhookUrl: true, webhookSecret: true },
+        },
+      },
     });
-    if (!room?.projectId) return;
-
-    const project = await this.prisma.project.findUnique({
-      where: { id: room.projectId },
-      select: { id: true, webhookUrl: true, webhookSecret: true },
-    });
+    const project = room?.project;
     if (!project?.webhookUrl || !project.webhookSecret) return;
-
     const body = JSON.stringify({
       type,
       timestamp: new Date().toISOString(),
       data: {
         roomId,
-        roomSlug: roomSlug ?? room.slug,
+        roomSlug: roomSlug ?? room?.slug,
         ...extra,
       },
     });

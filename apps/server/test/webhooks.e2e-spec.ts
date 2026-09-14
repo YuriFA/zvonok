@@ -284,6 +284,9 @@ describe('Project webhooks (e2e)', () => {
             ...record,
             createdAt: record.createdAt ?? new Date(),
             messages: db.messages.filter((m) => m.roomId === record.id),
+            // The dispatcher's single enqueue query folds the owning
+            // project (webhook config) into the room read.
+            project: db.projects.find((p) => p.id === record.projectId),
           };
         }),
         findFirst: jest.fn(({ where }) => {
@@ -357,6 +360,7 @@ describe('Project webhooks (e2e)', () => {
         })),
         getRouter: jest.fn(),
         closeRouter: jest.fn(),
+        onRoutersLost: jest.fn(() => jest.fn()),
       })
       .compile();
 

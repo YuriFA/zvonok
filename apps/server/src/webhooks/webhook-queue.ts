@@ -1,11 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 /**
- * Delays between delivery attempts: initial attempt plus up to 5 retries,
- * then the delivery is dropped.
+ * Delays between delivery attempts: initial attempt plus up to 5 retries
+ * (doubling), then the delivery is dropped. The whole curve stays under
+ * ~5.5 minutes so a dead endpoint cannot stall its project's delivery
+ * chain for long: deliveries of one project run strictly in enqueue
+ * order, so a retrying delivery blocks the ones behind it.
  */
 export const WEBHOOK_RETRY_DELAYS_MS = [
-  10_000, 30_000, 120_000, 600_000, 1_800_000,
+  10_000, 20_000, 40_000, 80_000, 160_000,
 ] as const;
 
 /**

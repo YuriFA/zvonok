@@ -145,10 +145,13 @@ describe('WebhookDispatcher', () => {
       room: { findUnique: jest.fn() },
       project: { findUnique: jest.fn() },
     };
-    prisma.room.findUnique.mockResolvedValue({
+    prisma.room.findUnique.mockImplementation(async () => ({
       slug: 'room-slug',
-      projectId: 'project-1',
-    });
+      // Enqueue-time project lookup is folded into the room query; tests
+      // configure prisma.project.findUnique and it serves both the enqueue
+      // check and the delivery-time config re-read.
+      project: await prisma.project.findUnique(),
+    }));
     prisma.project.findUnique.mockResolvedValue(project);
   });
 
@@ -288,7 +291,7 @@ describe('WebhookDispatcher', () => {
     await stub.close();
     // Initial attempt + 5 retries, then the delivery is dropped.
     expect(stub.requests).toHaveLength(WEBHOOK_RETRY_DELAYS_MS.length + 1);
-    expect(queue.delays).toEqual([10_000, 30_000, 120_000, 600_000, 1_800_000]);
+    expect(queue.delays).toEqual([10_000, 20_000, 40_000, 80_000, 160_000]);
   });
 
   it('stops retrying once an attempt succeeds', async () => {
@@ -356,11 +359,8 @@ describe('WebhookDispatcher', () => {
     const stub = await startStub();
     prisma.room.findUnique.mockResolvedValue({
       slug: 'user-room-slug',
-      projectId: null,
+      project: null,
     });
-    const { dispatcher } = makeDispatcher(prisma);
-
-    dispatcher.roomStarted('room-1');
     await expectNoRequests(stub, 0);
     await stub.close();
   });

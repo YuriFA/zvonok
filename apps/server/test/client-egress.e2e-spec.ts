@@ -224,7 +224,17 @@ describe('Client-initiated egress (e2e)', () => {
         room: {
           findUnique: jest.fn(({ where }: { where: { id: string } }) => {
             const room = rooms.get(where.id);
-            return room ? { ...room, messages: [] } : null;
+            if (!room) return null;
+            // The dispatcher's single enqueue query folds the owning
+            // project (webhook config) into the room read.
+            const project = projectWebhook
+              ? {
+                  id: 'project-e2e',
+                  webhookUrl: projectWebhook.url,
+                  webhookSecret: projectWebhook.secret,
+                }
+              : null;
+            return { ...room, messages: [], project };
           }),
           findFirst: jest.fn(
             ({ where }: { where: { id: string; projectId?: string } }) => {
@@ -362,6 +372,7 @@ describe('Client-initiated egress (e2e)', () => {
           }),
         })),
         closeRouter: jest.fn(),
+        onRoutersLost: jest.fn(() => jest.fn()),
       })
       .compile();
 
