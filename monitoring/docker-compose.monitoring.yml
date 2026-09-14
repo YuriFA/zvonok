@@ -1,0 +1,149 @@
+# Production monitoring stack for the zvonok VPS.
+#
+# Monitors the whole host (zvonok + wallet sites behind the shared Traefik
+# gateway). Runs as its own compose project (~/monitoring); no host ports are
+# published except loopback. See README.md for the one-time VPS steps.
+#
+# Topology notes:
+# - Prometheus, node_exporter, and postgres_exporter run in host network mode:
+#   the zvonok server binds host ports directly (host-network mode since
+#   542b60c) and postgres is loopback-published on 127.0.0.1:5432, so the
+#   scrapes all ride host loopback (see prometheus.yml).
+# - 127.0.0.1:8082 (Traefik metrics) and 127.0.0.1:8080 (cAdvisor) are
+#   published by their own services; nothing here publishes to 0.0.0.0.
+# - Grafana, Uptime Kuma, and GlitchTip sit on the shared `web` Docker
+#   network behind the Traefik gateway (subdomains, TLS by Traefik).
+# - GlitchTip reaches the existing zvonok postgres through the zvonok
+#   compose network (container DNS `postgres`), avoiding a host port.
+
+name: monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: prometheus
+    network_mode: host
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.listen-address=0.0.0.0:9090
+    restart: unless-stopped
+
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.8.2
+    container_name: node-exporter
+    network_mode: host
+    pid: host
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    ports:
+      - 127.0.0.1:8080:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    privileged: true
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    network_mode: host
+    environment:
+      DATA_SOURCE_URI: 127.0.0.1:5432/zvonok?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_EXPORTER_USER:?set in .env}
+      DATA_SOURCE_PASS: ${POSTGRES_EXPORTER_PASSWORD:?set in .env}
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:11.5.2
+    container_name: grafana
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set in .env}
+      GF_USERS_ALLOW_SIGN_UP: false
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    networks: [default, web]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.rule=Host(`grafana.yurifa.site`)
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.tls.certresolver=le
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+    restart: unless-stopped
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    volumes:
+      - uptime-kuma-data:/app/data
+    networks: [default, web]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kuma.rule=Host(`status.yurifa.site`)
+      - traefik.http.routers.kuma.entrypoints=websecure
+      - traefik.http.routers.kuma.tls.certresolver=le
+      - traefik.http.services.kuma.loadbalancer.server.port=3001
+    restart: unless-stopped
+
+  glitchtip:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip
+    depends_on:
+      - postgres-exporter
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:?set in .env}:${GLITCHTIP_DB_PASSWORD:?set in .env}@postgres:5432/${GLITCHTIP_DB_NAME:?set in .env}
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set in .env}
+      PORT: 8080
+    networks: [default, web, zvonok]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.glitchtip.rule=Host(`errors.yurifa.site`)
+      - traefik.http.routers.glitchtip.entrypoints=websecure
+      - traefik.http.routers.glitchtip.tls.certresolver=le
+      - traefik.http.services.glitchtip.loadbalancer.server.port=8080
+    restart: unless-stopped
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip-worker
+    command: ./manage.py process_tasks
+    environment:
+      DATABASE_URL: postgres://${GLITCHTIP_DB_USER:?set in .env}:${GLITCHTIP_DB_PASSWORD:?set in .env}@postgres:5432/${GLITCHTIP_DB_NAME:?set in .env}
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set in .env}
+    networks: [zvonok]
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  uptime-kuma-data:
+
+networks:
+  web:
+    external: true
+  zvonok:
+    external: true
+    name: ${ZVONOK_NETWORK:-zvonok_default}

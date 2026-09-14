@@ -62,6 +62,8 @@ services:
       EGRESS_MEDIA_PORT_MAX: ${EGRESS_MEDIA_PORT_MAX:-42100}
       EGRESS_HLS_DIR: ${EGRESS_HLS_DIR:-/data/egress-hls}
       EGRESS_RECORDINGS_DIR: ${EGRESS_RECORDINGS_DIR:-/data/egress-recordings}
+      # Error reporting (GlitchTip); unset or empty disables it entirely
+      SENTRY_DSN: ${SENTRY_DSN:-}
     depends_on:
       postgres:
         condition: service_healthy
