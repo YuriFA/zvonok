@@ -92,7 +92,7 @@ Quick version:
 ```bash
 make setup          # create .env from template
 $EDITOR .env        # edit with real secrets and your domain/IP
-make deploy         # build and start all services
+make deploy-local    # build and start all services on this machine
 ```
 
 This starts 5 services: PostgreSQL, migrations, NestJS server, Caddy (with baked-in client assets), and coturn TURN.
@@ -145,16 +145,13 @@ zvonok/
 |---------|-------------|
 | `make help` | Show all available targets |
 | `make setup` | Create `.env` from template |
-| `make deploy` | Build images and start all services |
+| `make deploy` | Workstation deploy: build amd64 images, push to GHCR, deploy to the VPS (mirrors `deploy.yml`, no GitHub Actions) |
+| `make rollback TAG=` | Redeploy a pushed version (`v2026.09.14` deploy tag or `sha-<short>`) |
+| `make deploy-local` | Build images and start all services on this machine (local stack) |
 | `make down` | Stop all services |
-| `make restart` | Restart all services |
-| `make rebuild-server` | Rebuild and restart only the server |
-| `make rebuild-client` | Rebuild client and restart Caddy |
 | `make migrate` | Run database migrations |
 | `make logs` | Follow logs for all services |
-| `make status` | Show service status and health |
-| `make clean` | Stop and remove containers/networks |
-| `make clean-all` | Remove everything (volumes, images) |
+| `make status` | Show local stack status and health |
 
 ### Root
 

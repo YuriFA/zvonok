@@ -203,7 +203,7 @@ Key values to change:
 
 ```bash
 # Build and start all services
-make deploy    # equivalent to: docker compose up -d --build
+make deploy-local    # equivalent to: docker compose up -d --build
 
 # Check all services are healthy
 make status    # equivalent to: docker compose ps -a
@@ -222,6 +222,30 @@ Expected output of `make status`: `postgres` should show "healthy", `migrate` sh
 5. **Test TURN relay**: To specifically verify TURN is working, use [Trickle ICE](https://webrtc.github.io/samples/src/content/peerconnection/trickle-ice/) with your TURN server credentials, or test from a restrictive network (e.g., mobile hotspot)
 
 If media doesn't flow, see the [Troubleshooting](#troubleshooting) section.
+
+## Deploying from your workstation (without GitHub Actions)
+
+The primary deploy path is the `Deploy` workflow (`.github/workflows/deploy.yml`). The root Makefile carries an equivalent manual path for when Actions minutes are exhausted or you need to ship without CI. Both build the same four images (`server`, `migrator`, `caddy`, `docs`), push them to GHCR as `sha-<short>` + `latest`, and run the identical VPS-side sequence (copy compose files, `pull`, `up -d --remove-orphans`, prune) - whichever path deployed last wins.
+
+One-time setup on the workstation:
+
+```bash
+echo 'SSH_TARGET=deploy@203.0.113.10' > .deploy.env   # gitignored; or an ~/.ssh/config alias
+docker login ghcr.io -u <github-user>                 # PAT with write:packages
+gh auth login                                         # deploy tagging publishes a GitHub Release
+```
+
+Deploy and roll back:
+
+```bash
+make deploy                    # build amd64, push, deploy current HEAD, tag it (vYYYY.MM.DD + release)
+make rollback TAG=v2026.09.14  # redeploy an already-pushed deploy tag or sha-<short> (no rebuild)
+```
+
+Notes:
+- The VPS needs its stored GHCR login (`scripts/setup-vps.sh`, step 4) to pull; on-box operation is plain `docker compose -f docker-compose.prod.yml ...` (see the setup script output).
+- Builds run under amd64 emulation on Apple Silicon; enable Rosetta in Docker Desktop (Settings > General > "Use Rosetta for x86_64/amd64 emulation") for acceptable speed.
+- Full analysis of the surveyed alternatives: [docs/research/manual-deploy-without-github-actions.md](research/manual-deploy-without-github-actions.md).
 
 ## Environment Variables
 
@@ -403,23 +427,21 @@ The default `SITE_ADDRESS=localhost` makes Caddy use a self-signed certificate. 
 make logs
 
 # Specific service
-make logs-server
-make logs-caddy
-make logs-postgres
+docker compose logs -f server    # or caddy, postgres, coturn
 ```
 
 ### Rebuilding After Code Changes
 
 ```bash
 # Rebuild everything
-make deploy
+make deploy-local
 
 # Rebuild only the server
-make rebuild-server
+docker compose up -d --build --no-deps server
 
 # Rebuild only the client (e.g., after changing VITE_* vars)
 # This also restarts Caddy to pick up new static files
-make rebuild-client
+docker compose up -d --build --no-deps caddy
 ```
 
 ### Reloading Caddy Config
@@ -455,7 +477,7 @@ each transport uses one port). To support more:
 1. Increase `RTC_MAX_PORT` in `.env` (e.g., `40999` for ~500 participants);
    the range must stay disjoint from `EGRESS_MEDIA_PORT_MIN/MAX`
 2. Open the additional ports on your firewall
-3. Rebuild: `make rebuild-server`
+3. Rebuild: `docker compose up -d --build --no-deps server`
 
 ### Worker Pool and Instance Boundary
 
@@ -515,7 +537,7 @@ To update the application after pulling new code:
 git pull
 
 # Rebuild and restart (migrations run automatically)
-make deploy    # docker compose up -d --build
+make deploy-local    # docker compose up -d --build
 
 # Verify all services restarted correctly
 make status
@@ -528,10 +550,10 @@ For partial updates:
 
 ```bash
 # Server-only update (no client rebuild)
-make rebuild-server
+docker compose up -d --build --no-deps server
 
 # Client-only update (rebuilds static files + restarts Caddy)
-make rebuild-client
+docker compose up -d --build --no-deps caddy
 ```
 
 > Database migrations run automatically via the `migrate` init container on every `docker compose up`. No manual migration step is needed.

@@ -48,3 +48,6 @@ certs/
 
 # Gateway TLS account keys live only on the VPS
 infra/gateway/acme.json
+
+# Workstation deploy target (Makefile deploy path)
+.deploy.env
