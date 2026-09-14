@@ -199,6 +199,7 @@ describe('Meeting history (e2e)', () => {
         createRouter: jest.fn(),
         getRouter: jest.fn(),
         closeRouter: jest.fn(),
+        onRoutersLost: jest.fn(() => jest.fn()),
         getRtpCapabilities: jest.fn(() => ({
           codecs: [],
           headerExtensions: [],

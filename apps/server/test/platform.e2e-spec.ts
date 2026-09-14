@@ -240,6 +240,7 @@ describe('Developer platform (e2e)', () => {
         })),
         getRouter: jest.fn(),
         closeRouter: jest.fn(),
+        onRoutersLost: jest.fn(() => jest.fn()),
       })
       .compile();
 

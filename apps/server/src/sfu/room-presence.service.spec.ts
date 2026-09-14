@@ -41,6 +41,8 @@ describe('RoomPresenceService', () => {
     ({
       id,
       emit: jest.fn(),
+      join: jest.fn(),
+      leave: jest.fn(),
       disconnect: jest.fn(),
       handshake: {
         auth: opts.token ? { token: opts.token } : {},

@@ -18,6 +18,7 @@ describe("SfuEventRouter", () => {
       onJoined: vi.fn().mockResolvedValue(undefined),
       onTransportCreated: vi.fn().mockResolvedValue(undefined),
       onTransportConnected: vi.fn(),
+      onKicked: vi.fn(),
       onProducerCreated: vi.fn(),
       onProduceError: vi.fn(),
       onParticipantJoined: vi.fn(),
@@ -28,9 +29,9 @@ describe("SfuEventRouter", () => {
       onProducerStateChanged: vi.fn(),
       onParticipantLeft: vi.fn(),
       onPeerMediaDetached: vi.fn(),
-      onKicked: vi.fn(),
-      onJoinError: vi.fn(),
       onRoomEnded: vi.fn(),
+      onRoomMediaReset: vi.fn().mockResolvedValue(undefined),
+      onJoinError: vi.fn(),
       onReconnectFailed: vi.fn(),
       onScreenShareStarted: vi.fn(),
       onScreenShareStopped: vi.fn(),
@@ -79,12 +80,12 @@ describe("SfuEventRouter", () => {
     expect(events).toContain("sfu:room-ended");
     expect(events).toContain("reconnect_failed");
     expect(events).toContain("sfu:produce-error");
-    expect(events).toContain("sfu:screen-share-started");
+    expect(events).toContain("sfu:room-media-reset");
     expect(events).toContain("sfu:screen-share-stopped");
     expect(events).toContain("sfu:guest-join-request");
     expect(events).toContain("sfu:join-error");
     expect(events).toContain("egress:status");
-    expect(events).toHaveLength(24);
+    expect(events).toHaveLength(25);
   });
 
   it("routes connect event to onConnected", () => {
@@ -113,6 +114,16 @@ describe("SfuEventRouter", () => {
     )?.[1] as (p: unknown) => void;
     handler(payload);
     expect(handlers.onJoined).toHaveBeenCalledWith(payload);
+  });
+
+  it("routes sfu:room-media-reset event to onRoomMediaReset", () => {
+    router.setup();
+    const payload = { roomId: "room-1", routerRtpCapabilities: { codecs: [] } };
+    const handler = socket.on.mock.calls.find(
+      (call: [string, ...unknown[]]) => call[0] === "sfu:room-media-reset",
+    )?.[1] as (p: unknown) => void;
+    handler(payload);
+    expect(handlers.onRoomMediaReset).toHaveBeenCalledWith(payload);
   });
 
   it("routes sfu:peer-left event to onParticipantLeft", () => {

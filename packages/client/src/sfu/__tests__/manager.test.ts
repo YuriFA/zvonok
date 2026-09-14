@@ -1158,3 +1158,103 @@ describe("SfuManager", () => {
     });
   });
 });
+
+describe("SfuManager room media reset", () => {
+  let manager: SfuManager;
+
+  beforeEach(() => {
+    testContext.reset();
+    manager = new SfuManager();
+  });
+
+  afterEach(() => {
+    manager.disconnect();
+  });
+
+  const establishSession = async () => {
+    manager.connect();
+    testContext.mockSocket.connected = true;
+    await testContext.emitSocketEvent("connect");
+    await manager.joinRoom({ roomId: "room-1" });
+    await testContext.emitSocketEvent("sfu:joined", {
+      routerRtpCapabilities: { codecs: [] },
+    });
+    await testContext.emitSocketEvent("sfu:transport-created", {
+      ...transportPayload,
+      direction: "send",
+      transportId: "send-transport",
+    });
+    await testContext.emitSocketEvent("sfu:transport-created", {
+      ...transportPayload,
+      direction: "recv",
+      transportId: "recv-transport",
+    });
+  };
+
+  it("rebuilds media without a new join and re-publishes retained tracks", async () => {
+    await establishSession();
+
+    testContext.mockProducer.track = {
+      readyState: "live",
+    } as unknown as MediaStreamTrack;
+    await manager.produce(testContext.mockProducer.track);
+    expect(testContext.mockSendTransport.produce).toHaveBeenCalledTimes(1);
+
+    // Baseline: ignore signalling from the initial join below.
+    testContext.mockSocket.emit.mockClear();
+
+    const onMediaReset = vi.fn();
+    manager.onRoomMediaReset(onMediaReset);
+
+    await testContext.emitSocketEvent("sfu:room-media-reset", {
+      roomId: "room-1",
+      routerRtpCapabilities: { codecs: ["vp9"] },
+    });
+
+    await waitFor(() => {
+      expect(testContext.mockDeviceLoad).toHaveBeenLastCalledWith({
+        routerRtpCapabilities: { codecs: ["vp9"] },
+      });
+    });
+
+    // The server answers the create-transport requests from the rebuilt
+    // device; the recv transport creation re-announces room producers.
+    await testContext.emitSocketEvent("sfu:transport-created", {
+      ...transportPayload,
+      direction: "send",
+      transportId: "send-transport",
+    });
+    await testContext.emitSocketEvent("sfu:transport-created", {
+      ...transportPayload,
+      direction: "recv",
+      transportId: "recv-transport",
+    });
+
+    // No new join round-trip: presence and room lifetime are untouched.
+    expect(testContext.mockSocket.emit).not.toHaveBeenCalledWith(
+      "sfu:join",
+      expect.anything(),
+    );
+    // Both transports re-created against the replacement router.
+    expect(testContext.mockCreateSendTransport).toHaveBeenCalledTimes(2);
+    expect(testContext.mockCreateRecvTransport).toHaveBeenCalledTimes(2);
+    // The live local track was retained and re-published.
+    await waitFor(() => {
+      expect(testContext.mockSendTransport.produce).toHaveBeenCalledTimes(2);
+    });
+    expect(onMediaReset).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: "room-1" }),
+    );
+  });
+
+  it("ignores a reset that arrives before a session is established", async () => {
+    manager.connect();
+
+    await testContext.emitSocketEvent("sfu:room-media-reset", {
+      roomId: "room-1",
+      routerRtpCapabilities: { codecs: [] },
+    });
+
+    expect(testContext.mockDeviceLoad).not.toHaveBeenCalled();
+  });
+});

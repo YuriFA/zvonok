@@ -14,9 +14,6 @@ import type {
 import type { Socket } from 'socket.io';
 import { WorkerManager } from './worker-manager';
 import type {
-  SfuBroadcastAck,
-  SfuBroadcastMessage,
-  SfuBroadcastPayload,
   SfuConsumePayload,
   SfuHostActionAck,
   SfuJoinPayload,
@@ -37,9 +34,6 @@ import type {
 } from './room-media-source.port';
 import { ROOM_PRESENCE } from './room-presence.port';
 import type { PeerContext, RoomPresence } from './room-presence.port';
-
-/** Serialized data-channel payload cap, measured on the wire. */
-const BROADCAST_PAYLOAD_MAX_BYTES = 8192;
 
 /**
  * PlainTransport options for media taps: RTP over UDP to a consumer-side
@@ -78,11 +72,16 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
   > = new Map();
   /** Rooms with a live router-close subscription on presence. */
   private readonly routerRooms = new Set<string>();
-
   constructor(
     private readonly workerManager: WorkerManager,
     @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
-  ) {}
+  ) {
+    // Workers own the routers; when one dies, its rooms keep presence state
+    // but their media plane is gone. The reset flow rebuilds it in place.
+    this.workerManager.onRoutersLost((roomIds) =>
+      this.handleRoutersLost(roomIds),
+    );
+  }
 
   onModuleDestroy(): void {
     this.logger.log('Closing SFU Service...');
@@ -96,6 +95,32 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
     this.logger.log('SFU Service closed');
   }
 
+  /**
+   * Media plane of the given rooms died with a worker. Presence, chat and
+   * room lifetime are untouched: clear local media state (all transports
+   * and producers died with the worker process), drop screen-share locks,
+   * and tell participants to rebuild against the replacement router.
+   */
+  private handleRoutersLost(roomIds: string[]): void {
+    for (const roomId of roomIds) {
+      for (const socketId of this.presence.listPeerSockets(roomId)) {
+        const media = this.media.get(socketId);
+        if (!media) continue;
+        media.sendTransport?.close();
+        media.recvTransport?.close();
+        this.media.delete(socketId);
+      }
+      this.roomScreenShare.delete(roomId);
+      const routerRtpCapabilities =
+        this.workerManager.getRtpCapabilities(roomId);
+      if (!routerRtpCapabilities) continue;
+      this.presence.broadcastToRoom(roomId, 'sfu:room-media-reset', {
+        roomId,
+        routerRtpCapabilities,
+      });
+      this.logger.warn(`Media reset for room ${roomId} after worker death`);
+    }
+  }
   async joinRoom(socket: Socket, payload: SfuJoinPayload): Promise<void> {
     const outcome = await this.presence.join(socket, payload);
     if (!outcome) {
@@ -114,8 +139,17 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
       const roomId = outcome.roomId;
       this.presence.onRoomClosed(roomId, () => this.closeRoomMedia(roomId));
     }
-
-    await this.workerManager.createRouter(outcome.roomId);
+    try {
+      await this.workerManager.createRouter(outcome.roomId);
+    } catch (error) {
+      // A worker replacement gap (crash recovery) or router failure: the
+      // client sees no join ack and its own join timeout/retry handles it.
+      this.logger.error(
+        `Router creation failed for room ${outcome.roomId}`,
+        error,
+      );
+      return;
+    }
     const routerRtpCapabilities = this.workerManager.getRtpCapabilities(
       outcome.roomId,
     );
@@ -130,7 +164,6 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
       capabilities: outcome.capabilities,
     });
   }
-
   /**
    * Room teardown on presence's room-closed notification. Member media goes
    * synchronously; the router closes on a microtask so the other room-closed
@@ -169,12 +202,23 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
       return;
     }
 
-    const transport = await router.createWebRtcTransport({
-      listenIps: config.webRtcTransport.listenIps,
-      enableUdp: config.webRtcTransport.enableUdp,
-      enableTcp: config.webRtcTransport.enableTcp,
-      preferUdp: config.webRtcTransport.preferUdp,
-    });
+    let transport: WebRtcTransport;
+    try {
+      transport = await router.createWebRtcTransport({
+        listenIps: config.webRtcTransport.listenIps,
+        enableUdp: config.webRtcTransport.enableUdp,
+        enableTcp: config.webRtcTransport.enableTcp,
+        preferUdp: config.webRtcTransport.preferUdp,
+      });
+    } catch (error) {
+      // Router lost mid-request (worker replacement): client retries on the
+      // rebuilt router after sfu:room-media-reset.
+      this.logger.error(
+        `Send transport creation failed for ${socket.id}`,
+        error,
+      );
+      return;
+    }
     peer.sendTransport = transport;
 
     this.emitTransportCreated(socket, 'send', transport);
@@ -192,12 +236,21 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
       return;
     }
 
-    const transport = await router.createWebRtcTransport({
-      listenIps: config.webRtcTransport.listenIps,
-      enableUdp: config.webRtcTransport.enableUdp,
-      enableTcp: config.webRtcTransport.enableTcp,
-      preferUdp: config.webRtcTransport.preferUdp,
-    });
+    let transport: WebRtcTransport;
+    try {
+      transport = await router.createWebRtcTransport({
+        listenIps: config.webRtcTransport.listenIps,
+        enableUdp: config.webRtcTransport.enableUdp,
+        enableTcp: config.webRtcTransport.enableTcp,
+        preferUdp: config.webRtcTransport.preferUdp,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Recv transport creation failed for ${socket.id}`,
+        error,
+      );
+      return;
+    }
     peer.recvTransport = transport;
 
     this.emitTransportCreated(socket, 'recv', transport);
@@ -451,17 +504,18 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
       this.logger.error(`Producer ${producerId} not found`);
       return;
     }
-
-    if (!router.canConsume({ producerId, rtpCapabilities })) {
-      this.logger.error('Cannot consume: RTP capabilities mismatch');
+    let consumer: Consumer;
+    try {
+      consumer = await peer.recvTransport.consume({
+        producerId,
+        rtpCapabilities,
+        paused: true,
+      });
+    } catch (error) {
+      // Transport closed mid-request (peer detach or media reset race).
+      this.logger.error(`Consumer creation failed for ${socket.id}`, error);
       return;
     }
-
-    const consumer = await peer.recvTransport.consume({
-      producerId,
-      rtpCapabilities,
-      paused: true,
-    });
     peer.consumers.set(consumer.id, consumer);
 
     socket.emit('sfu:consumer-created', {
@@ -515,13 +569,6 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
     this.notifyProducerStateChanged(socket, producer, ctx, false);
   }
 
-  async kickPeer(
-    socket: Socket,
-    targetUserId: string,
-  ): Promise<SfuHostActionAck> {
-    return this.presence.kick(socket.id, targetUserId);
-  }
-
   async mutePeer(
     socket: Socket,
     targetUserId: string,
@@ -550,85 +597,28 @@ export class SfuService implements OnModuleDestroy, RoomMediaSource {
     const denial = this.denyHostAction(socket, 'mute-users', 'mute-all');
     if (denial) return denial;
     const ctx = this.presence.contextOf(socket.id)!;
-
     // Snapshot of the current publishers: peers that start publishing after
-    // mute-all stay unmuted, and the requesting host is never muted.
-    for (const socketId of this.presence.listPeerSockets(ctx.roomId)) {
-      if (socketId === socket.id) continue;
-      const target = this.media.get(socketId);
-      if (!target || target.producers.size === 0) continue;
-      const targetUserId = this.presence.contextOf(socketId)?.userId;
-      if (!targetUserId) continue;
-      await this.muteRoomPeer(ctx.roomId, socketId, targetUserId);
-    }
-    return { ok: true };
-  }
-
-  async lockRoom(socket: Socket, locked: boolean): Promise<SfuHostActionAck> {
-    return this.presence.lockRoom(socket.id, locked);
-  }
-
-  /**
-   * Data channel broadcast: validates capability, topic, and serialized
-   * payload size, acknowledges on the requesting socket, and relays the
-   * message to every other participant in the room. Ephemeral: nothing is
-   * persisted and the sender never receives their own message back.
-   */
-  broadcast(socket: Socket, payload: SfuBroadcastPayload): SfuBroadcastAck {
-    const ctx = this.presence.contextOf(socket.id);
-
-    if (!ctx) {
-      this.logger.warn(`Broadcast request from unknown peer ${socket.id}`);
-      return {
-        ok: false,
-        code: 'NOT_IN_ROOM',
-        message: 'Join the room before broadcasting',
-      };
-    }
-
-    if (!ctx.capabilities.includes('send-data-message')) {
-      this.logger.warn(
-        `Unauthorized broadcast request from ${ctx.userId} in room ${ctx.roomId}`,
+    // mute-all stay unmuted, and the requesting host is never muted. Pauses
+    // fan out in parallel - each is a worker round-trip.
+    const targets = this.presence
+      .listPeerSockets(ctx.roomId)
+      .filter((socketId) => socketId !== socket.id)
+      .map((socketId) => ({
+        socketId,
+        target: this.media.get(socketId),
+        targetUserId: this.presence.contextOf(socketId)?.userId,
+      }))
+      .filter(
+        ({ target, targetUserId }) =>
+          target !== undefined &&
+          target.producers.size > 0 &&
+          targetUserId !== undefined,
       );
-      return {
-        ok: false,
-        code: 'MISSING_CAPABILITY',
-        message: 'Missing send-data-message capability',
-      };
-    }
-
-    if (
-      typeof payload?.topic !== 'string' ||
-      !/^[A-Za-z0-9._-]{1,64}$/.test(payload.topic)
-    ) {
-      return {
-        ok: false,
-        code: 'INVALID_TOPIC',
-        message: 'topic must be 1-64 characters of [A-Za-z0-9._-]',
-      };
-    }
-
-    const serialized = JSON.stringify(payload?.payload);
-    if (
-      serialized === undefined ||
-      Buffer.byteLength(serialized, 'utf8') > BROADCAST_PAYLOAD_MAX_BYTES
-    ) {
-      return {
-        ok: false,
-        code: 'PAYLOAD_TOO_LARGE',
-        message: `payload must serialize to at most ${BROADCAST_PAYLOAD_MAX_BYTES} bytes`,
-      };
-    }
-
-    const message: SfuBroadcastMessage = {
-      senderId: ctx.userId,
-      topic: payload.topic,
-      payload: payload.payload,
-      timestamp: new Date().toISOString(),
-    };
-    this.presence.broadcastToRoom(ctx.roomId, 'sfu:broadcast', message, {
-      excludeSocketId: socket.id,
-    });
+    await Promise.all(
+      targets.map(({ socketId, targetUserId }) =>
+        this.muteRoomPeer(ctx.roomId, socketId, targetUserId as string),
+      ),
+    );
     return { ok: true };
   }
 

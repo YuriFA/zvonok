@@ -350,6 +350,17 @@ export interface SfuRoomEndedPayload {
   roomId: string;
 }
 
+/**
+ * Emitted when the server-side media plane for the room was lost (SFU
+ * worker crash) and rebuilt: prior transports/producers/consumers are
+ * gone, so the SDK rebuilds its media session against the new router
+ * without a new join.
+ */
+export interface SfuRoomMediaResetPayload {
+  roomId: string;
+  routerRtpCapabilities: RtpCapabilities;
+}
+
 export interface SfuGuestJoinRequestPayload {
   requestId: string;
   displayName: string;

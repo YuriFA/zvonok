@@ -175,6 +175,7 @@ describe('SFU host controls (e2e)', () => {
         })),
         getRouter: jest.fn(),
         closeRouter: jest.fn(),
+        onRoutersLost: jest.fn(() => jest.fn()),
       })
       .compile();
 

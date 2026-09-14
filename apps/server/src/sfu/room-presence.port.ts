@@ -1,4 +1,4 @@
-import type { Socket } from 'socket.io';
+import type { Server, Socket } from 'socket.io';
 import type { CapabilityId } from './capabilities';
 import type {
   SfuHostActionAck,
@@ -118,6 +118,13 @@ export interface RoomPresence {
    * function.
    */
   onRoomClosed(roomId: string, handler: () => void): () => void;
+
+  /**
+   * Advisory wiring of the gateway namespace: when set, room broadcasts ride
+   * the socket.io adapter (io.to(room)/except) instead of per-record socket
+   * loops. Implementations without a server keep the loop fallback.
+   */
+  attachServer(server: Server): void;
 
   /** Grace window before a dropped peer's departure flow runs. */
   rejoinGraceMs: number;

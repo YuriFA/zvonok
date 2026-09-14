@@ -14,6 +14,7 @@ import type {
   SfuParticipantJoinedPayload,
   SfuKickedPayload,
   SfuRoomEndedPayload,
+  SfuRoomMediaResetPayload,
   SfuProducerStateChangedPayload,
   SfuProduceErrorPayload,
   SfuScreenShareStartedPayload,
@@ -49,6 +50,7 @@ export interface SfuEventHandlers {
   onPeerMediaDetached(payload: SfuPeerMediaDetachedPayload): void;
   onKicked(payload: SfuKickedPayload): void;
   onRoomEnded(payload: SfuRoomEndedPayload): void;
+  onRoomMediaReset(payload: SfuRoomMediaResetPayload): Promise<void>;
   onReconnectFailed(): void;
   onScreenShareStarted(payload: SfuScreenShareStartedPayload): void;
   onGuestJoinRequest(payload: SfuGuestJoinRequestPayload): void;
@@ -146,6 +148,9 @@ export class SfuEventRouter {
     );
     register("sfu:room-ended", (payload: unknown) =>
       this.handlers.onRoomEnded(payload as SfuRoomEndedPayload),
+    );
+    register("sfu:room-media-reset", (payload: unknown) =>
+      this.handlers.onRoomMediaReset(payload as SfuRoomMediaResetPayload),
     );
     register("sfu:screen-share-started", (payload: unknown) =>
       this.handlers.onScreenShareStarted(

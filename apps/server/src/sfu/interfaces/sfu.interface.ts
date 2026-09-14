@@ -1,9 +1,4 @@
-import type { Socket } from 'socket.io';
 import type {
-  Router,
-  WebRtcTransport,
-  Producer,
-  Consumer,
   RtpCapabilities,
   RtpParameters,
   DtlsParameters,
@@ -12,31 +7,6 @@ import type {
 } from 'mediasoup/types';
 import type { IceServerConfig } from '../config/mediasoup.config';
 import type { CapabilityId } from '../capabilities';
-
-export interface Peer {
-  id: string;
-  userId: string;
-  username: string;
-  /** Token-carried consumer correlation fields; absent on non-token paths. */
-  externalId?: string;
-  metadata?: Record<string, unknown>;
-  socket: Socket;
-  sendTransport?: WebRtcTransport;
-  recvTransport?: WebRtcTransport;
-  producers: Map<string, Producer>;
-  consumers: Map<string, Consumer>;
-  /** Effective capabilities resolved by the server from the verified
-   * credential path; never read from client-supplied payload fields. */
-  capabilities: CapabilityId[];
-  /** Set only when a verified identity matches the DB room owner. */
-  ownsRoom?: boolean;
-}
-
-export interface Room {
-  id: string;
-  router: Router;
-  peers: Map<string, Peer>;
-}
 
 export interface SfuJoinPayload {
   roomId: string;
@@ -69,6 +39,16 @@ export interface SfuJoinedPayload {
   /** The participant's effective capabilities from the verified
    * credential path (single source of truth; clients never decode tokens). */
   capabilities: CapabilityId[];
+}
+
+/**
+ * Emitted after a crashed worker's replacement recreated the room's router:
+ * all prior transports/producers/consumers are gone; participants rebuild
+ * their media session against the carried capabilities. No re-join needed.
+ */
+export interface SfuRoomMediaResetPayload {
+  roomId: string;
+  routerRtpCapabilities: RtpCapabilities;
 }
 export type SfuTransportDirection = 'send' | 'recv';
 

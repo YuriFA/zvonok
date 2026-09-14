@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SfuService } from './sfu.service';
+import { SfuBroadcastService } from './sfu-broadcast.service';
 import { SfuGateway } from './sfu.gateway';
 import { WorkerManager } from './worker-manager';
 import { RoomTokenHelper } from '../platform/room-token.helper';
@@ -11,6 +12,7 @@ import { ROOM_PRESENCE } from './room-presence.port';
   imports: [WebhooksModule],
   providers: [
     SfuService,
+    SfuBroadcastService,
     SfuGateway,
     WorkerManager,
     RoomTokenHelper,

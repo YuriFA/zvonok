@@ -1,10 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import type { Socket } from 'socket.io';
+import type { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { WebhookDispatcher } from '../webhooks/webhook-dispatcher.service';
-import type { WebhookLeaveReason } from '../webhooks/webhook-dispatcher.service';
 import { RoomTokenHelper } from '../platform/room-token.helper';
 import { resolveRoomSocketIdentity } from '../auth/helpers/room-socket-auth.helper';
 import { capabilitiesForRole } from './capabilities';
@@ -54,8 +53,13 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
   private readonly roomOwners = new Map<string, string>();
   private readonly roomLocks = new Map<string, boolean>();
   private readonly slugToRoomId = new Map<string, string>();
+  /** Reverse index of slugToRoomId: roomId -> its slugs. */
+  private readonly roomIdToSlugs = new Map<string, Set<string>>();
+  /** Reverse index of heldSeats: roomId -> seat keys held for it. */
+  private readonly heldSeatsByRoom = new Map<string, Set<string>>();
   private readonly heldSeats = new Map<string, HeldSeat>();
-  /** Kicked participants are unrestorable for the room's lifetime. */
+  /** Gateway namespace, when attached: enables adapter-based fan-out. */
+  private io: Server | null = null;
   private readonly kickedUsers = new Map<string, Set<string>>();
   private readonly roomClosedHandlers = new Map<string, Set<() => void>>();
   private readonly peerDetachHandlers = new Map<string, Set<() => void>>();
@@ -80,8 +84,10 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.records.clear();
     this.rooms.clear();
     this.roomOwners.clear();
-    this.roomLocks.clear();
     this.slugToRoomId.clear();
+    this.roomIdToSlugs.clear();
+    this.heldSeatsByRoom.clear();
+    this.io = null;
     this.kickedUsers.clear();
     this.roomClosedHandlers.clear();
     this.peerDetachHandlers.clear();
@@ -122,6 +128,7 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     if (restoredSeat) {
       clearTimeout(restoredSeat.timer);
       this.heldSeats.delete(`${roomId}:${record.userId}`);
+      this.unindexHeldSeat(roomId, `${roomId}:${record.userId}`);
     }
 
     this.records.set(record.socketId, record);
@@ -143,9 +150,17 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     }
     if (roomSlug) {
       this.slugToRoomId.set(roomSlug, roomId);
+      const slugs = this.roomIdToSlugs.get(roomId);
+      if (slugs) {
+        slugs.add(roomSlug);
+      } else {
+        this.roomIdToSlugs.set(roomId, new Set([roomSlug]));
+      }
     }
     this.logger.log(`Peer ${record.socketId} joined SFU room ${roomId}`);
-
+    // Adapter rooms drive room fan-out (see broadcastToRoom); per-namespace,
+    // so the /sfu and /chat rooms with the same id never collide.
+    socket.join(roomId);
     // Notify existing peers about the new peer - never for a silent restore
     if (!restoredSeat) {
       this.broadcastToRoom(
@@ -239,6 +254,7 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.logger.log(
       `Peer ${socketId} disconnected from room ${roomId}; seat held for ${this.rejoinGraceMs}ms`,
     );
+    this.indexHeldSeat(roomId, key);
   }
 
   async kick(
@@ -333,12 +349,12 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.roomLocks.delete(roomId);
     // The room's lifetime ends: grace seats lapse immediately and kicked
     // users stop being terminal (a recreated room is a fresh lifetime).
-    for (const [key, seat] of Array.from(this.heldSeats)) {
-      if (seat.roomId === roomId) {
-        clearTimeout(seat.timer);
-        this.heldSeats.delete(key);
-      }
+    for (const key of this.heldSeatsByRoom.get(roomId) ?? []) {
+      const seat = this.heldSeats.get(key);
+      if (seat) clearTimeout(seat.timer);
+      this.heldSeats.delete(key);
     }
+    this.heldSeatsByRoom.delete(roomId);
     this.kickedUsers.delete(roomId);
     // Fire room-closed handlers up front so egress pipelines stop before any
     // teardown; depart()'s empty branch is a no-op afterwards.
@@ -352,10 +368,7 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     }
 
     // Notify every peer that the room has ended before tearing peers down.
-    for (const socketId of Array.from(roomPeerIds)) {
-      this.emitToPeer(socketId, 'sfu:room-ended', { roomId });
-    }
-
+    this.broadcastToRoom(roomId, 'sfu:room-ended', { roomId });
     // Tear each peer down through the shared depart funnel so detach
     // handlers stay consistent with departures, and webhook
     // participant.left(room-end) events keep their emission order.
@@ -369,10 +382,9 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
 
   contextOf(socketId: string): PeerContext | null {
     const record = this.records.get(socketId);
-    const roomId = this.roomIdOf(socketId);
-    if (!record || !roomId) return null;
+    if (!record) return null;
     return {
-      roomId,
+      roomId: record.roomId,
       userId: record.userId,
       username: record.username,
       externalId: record.externalId,
@@ -418,6 +430,17 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     payload: unknown,
     opts?: { excludeSocketId?: string },
   ): void {
+    // Adapter fan-out when the namespace is attached (socket.io rooms are
+    // joined at admission and left at detach); per-record loop otherwise.
+    if (this.io) {
+      const channel = this.io.to(roomId);
+      if (opts?.excludeSocketId) {
+        channel.except(opts.excludeSocketId).emit(event, payload);
+      } else {
+        channel.emit(event, payload);
+      }
+      return;
+    }
     for (const socketId of this.listPeerSockets(roomId)) {
       if (socketId === opts?.excludeSocketId) continue;
       this.records.get(socketId)?.socket.emit(event, payload);
@@ -501,10 +524,12 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
         handler();
       }
     }
+    const record = this.records.get(socketId);
+    const roomId = record?.roomId;
     this.records.delete(socketId);
-    const roomId = this.roomIdOf(socketId);
-    if (roomId) {
+    if (record && roomId) {
       this.rooms.get(roomId)?.delete(socketId);
+      record.socket.leave(roomId);
     }
   }
 
@@ -515,6 +540,7 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
       return;
     }
     this.heldSeats.delete(key);
+    this.unindexHeldSeat(seat.roomId, key);
 
     // The room may have ended (e.g. DELETE /v1) while the seat was held:
     // its lifetime already ran the leave flow for everyone.
@@ -545,30 +571,46 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.roomLocks.delete(roomId);
     // The room's lifetime ends here, so kicked-users terminality ends with it.
     this.kickedUsers.delete(roomId);
-    for (const [slug, rid] of this.slugToRoomId) {
-      if (rid === roomId) this.slugToRoomId.delete(slug);
+    for (const slug of this.roomIdToSlugs.get(roomId) ?? []) {
+      this.slugToRoomId.delete(slug);
     }
+    this.roomIdToSlugs.delete(roomId);
   }
 
   private roomHasHeldSeat(roomId: string): boolean {
-    for (const seat of this.heldSeats.values()) {
-      if (seat.roomId === roomId) return true;
+    return (this.heldSeatsByRoom.get(roomId)?.size ?? 0) > 0;
+  }
+
+  private indexHeldSeat(roomId: string, key: string): void {
+    const keys = this.heldSeatsByRoom.get(roomId);
+    if (keys) {
+      keys.add(key);
+    } else {
+      this.heldSeatsByRoom.set(roomId, new Set([key]));
     }
-    return false;
+  }
+
+  private unindexHeldSeat(roomId: string, key: string): void {
+    const keys = this.heldSeatsByRoom.get(roomId);
+    if (!keys) return;
+    keys.delete(key);
+    if (keys.size === 0) this.heldSeatsByRoom.delete(roomId);
   }
 
   private roomIdOf(socketId: string): string | undefined {
-    for (const [roomId, peers] of this.rooms) {
-      if (peers.has(socketId)) return roomId;
-    }
-    return undefined;
+    // Records carry roomId. Post-detach lookups must capture the room
+    // before the record is deleted; this getter never scans the rooms map.
+    return this.records.get(socketId)?.roomId;
   }
 
   private findRoomSlug(roomId: string): string | undefined {
-    for (const [slug, rid] of this.slugToRoomId) {
-      if (rid === roomId) return slug;
-    }
+    for (const slug of this.roomIdToSlugs.get(roomId) ?? []) return slug;
     return undefined;
+  }
+
+  /** {@inheritdoc RoomPresence.attachServer} */
+  attachServer(server: Server): void {
+    this.io = server;
   }
 
   private notifyRoomClosed(roomId: string): void {

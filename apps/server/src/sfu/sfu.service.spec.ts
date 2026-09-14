@@ -22,7 +22,25 @@ import { ROOM_PRESENCE } from './room-presence.port';
 import { capabilitiesForRole, type ParticipantRole } from './capabilities';
 import type { Producer } from 'mediasoup/types';
 import { WorkerManager } from './worker-manager';
-import type { Peer, SfuJoinPayload } from './interfaces/sfu.interface';
+import type { SfuJoinPayload } from './interfaces/sfu.interface';
+import type { Consumer } from 'mediasoup/types';
+
+/**
+ * Legacy merged peer shape used as the view type for the injected test
+ * state below: media fields plus the identity fields presence owns.
+ */
+type Peer = {
+  id: string;
+  userId: string;
+  username: string;
+  socket: Socket;
+  sendTransport?: WebRtcTransport;
+  recvTransport?: WebRtcTransport;
+  producers: Map<string, Producer>;
+  consumers: Map<string, Consumer>;
+  capabilities: string[];
+  ownsRoom?: boolean;
+};
 import { RoomTokenHelper } from '../platform/room-token.helper';
 import { PrismaService } from 'src/prisma/prisma.service';
 import type {
@@ -32,8 +50,10 @@ import type {
 import { WebhookDispatcher } from '../webhooks/webhook-dispatcher.service';
 import { config as mediasoupConfig } from './config/mediasoup.config';
 import type { RoomTapDescriptor } from './room-media-source.port';
+import { SfuBroadcastService } from './sfu-broadcast.service';
 
 let presence: RoomPresenceService;
+let broadcastService: SfuBroadcastService;
 
 type PresenceHarness = {
   records: Map<string, Record<string, unknown>>;
@@ -150,12 +170,16 @@ let webhooks: {
 const socket = {
   id: 'socket-1',
   emit: jest.fn(),
+  join: jest.fn(),
+  leave: jest.fn(),
   handshake: { auth: {}, headers: {} },
 } as unknown as Socket;
 const createSocket = (id: string) =>
   ({
     id,
     emit: jest.fn(),
+    join: jest.fn(),
+    leave: jest.fn(),
     disconnect: jest.fn(),
     handshake: { auth: { token: 'access-jwt' }, headers: {} },
   }) as unknown as Socket;
@@ -200,6 +224,7 @@ beforeEach(async () => {
           getRtpCapabilities: jest.fn(),
           getRouter: jest.fn(),
           closeRouter: jest.fn(),
+          onRoutersLost: jest.fn().mockReturnValue(jest.fn()),
         },
       },
       { provide: RoomTokenHelper, useValue: roomTokenHelper },
@@ -208,12 +233,14 @@ beforeEach(async () => {
       { provide: JwtService, useValue: jwtService },
       { provide: ConfigService, useValue: config },
       { provide: ROOM_PRESENCE, useExisting: RoomPresenceService },
+      SfuBroadcastService,
     ],
   }).compile();
 
   service = module.get<SfuService>(SfuService);
   workerManager = module.get(WorkerManager);
   presence = module.get(RoomPresenceService);
+  broadcastService = module.get<SfuBroadcastService>(SfuBroadcastService);
   attachSplitState(service, presence);
   (socket.emit as jest.Mock).mockReset();
   socket.handshake.auth = { token: 'access-jwt' };
@@ -496,7 +523,7 @@ it('allows the room owner to kick another peer', async () => {
   serviceState.rooms.set('room-1', new Set([ownerSocket.id, targetSocket.id]));
   serviceState.roomOwners.set('room-1', 'user-1');
 
-  await service.kickPeer(ownerSocket, 'user-2');
+  await presence.kick(ownerSocket.id, 'user-2');
 
   expect(targetSocket.emit).toHaveBeenCalledWith('sfu:kicked', {
     roomId: 'room-1',
@@ -807,7 +834,7 @@ describe('screen share', () => {
     state.roomOwners.set('room-1', 'user-1');
     state.roomScreenShare.set('room-1', targetSocket.id);
 
-    await service.kickPeer(ownerSocket, 'user-2');
+    await presence.kick(ownerSocket.id, 'user-2');
 
     expect(state.roomScreenShare.has('room-1')).toBe(false);
     expect(ownerSocket.emit).toHaveBeenCalledWith('sfu:screen-share-stopped', {
@@ -1146,7 +1173,7 @@ describe('room-token join', () => {
     });
 
     // The plain join resolves to the default verified user (user-1).
-    const ack = await service.kickPeer(adminSocket, 'user-1');
+    const ack = await presence.kick(adminSocket.id, 'user-1');
 
     expect(ack).toEqual({ ok: true });
     expect(targetSocket.emit).toHaveBeenCalledWith('sfu:kicked', {
@@ -1403,7 +1430,7 @@ describe('host controls', () => {
     const plainToken = createSocket('socket-token');
     await joinTokenPeer(plainToken, { role: 'participant' });
 
-    const ack = await service.lockRoom(plainToken, true);
+    const ack = await presence.lockRoom(plainToken.id, true);
 
     expect(ack).toEqual({
       ok: false,
@@ -1435,7 +1462,7 @@ describe('host controls', () => {
       userId: 'user-2',
     });
 
-    const lockAck = await service.lockRoom(adminSocket, true);
+    const lockAck = await presence.lockRoom(adminSocket.id, true);
 
     expect(lockAck).toEqual({ ok: true });
     expect(adminSocket.emit).toHaveBeenCalledWith('sfu:room-locked', {
@@ -1489,7 +1516,7 @@ describe('host controls', () => {
     const ownerSocket = createSocket('socket-owner');
     seedPeer(ownerSocket, 'user-1', 'room-1', { ownerId: 'user-1' });
 
-    await service.lockRoom(ownerSocket, true);
+    await presence.lockRoom(ownerSocket.id, true);
 
     expect(ownerSocket.emit).toHaveBeenCalledWith('sfu:room-locked', {
       locked: true,
@@ -1524,7 +1551,7 @@ describe('host controls', () => {
     seedPeer(ownerSocket, 'user-1', 'room-1', { ownerId: 'user-1' });
     seedPeer(otherSocket, 'user-2', 'room-1');
 
-    await service.lockRoom(ownerSocket, true);
+    await presence.lockRoom(ownerSocket.id, true);
     expect(otherSocket.emit).toHaveBeenCalledWith('sfu:room-locked', {
       locked: true,
     });
@@ -1532,17 +1559,17 @@ describe('host controls', () => {
     (ownerSocket.emit as jest.Mock).mockClear();
     (otherSocket.emit as jest.Mock).mockClear();
 
-    await service.lockRoom(ownerSocket, true);
+    await presence.lockRoom(ownerSocket.id, true);
     expect(ownerSocket.emit).not.toHaveBeenCalled();
     expect(otherSocket.emit).not.toHaveBeenCalled();
 
-    await service.lockRoom(ownerSocket, false);
+    await presence.lockRoom(ownerSocket.id, false);
     expect(otherSocket.emit).toHaveBeenCalledWith('sfu:room-locked', {
       locked: false,
     });
 
     (otherSocket.emit as jest.Mock).mockClear();
-    await service.lockRoom(ownerSocket, false);
+    await presence.lockRoom(ownerSocket.id, false);
     expect(otherSocket.emit).not.toHaveBeenCalled();
     expect(state().roomLocks.get('room-1')).toBe(false);
   });
@@ -1550,7 +1577,7 @@ describe('host controls', () => {
   it('clears the lock when the room ends so it can be joined again', async () => {
     const ownerSocket = createSocket('socket-owner');
     seedPeer(ownerSocket, 'user-1', 'room-1', { ownerId: 'user-1' });
-    await service.lockRoom(ownerSocket, true);
+    await presence.lockRoom(ownerSocket.id, true);
 
     await service.endRoom('room-1');
 
@@ -1573,7 +1600,7 @@ describe('host controls', () => {
   it('clears the lock when the last peer leaves the room', async () => {
     const ownerSocket = createSocket('socket-owner');
     seedPeer(ownerSocket, 'user-1', 'room-1', { ownerId: 'user-1' });
-    await service.lockRoom(ownerSocket, true);
+    await presence.lockRoom(ownerSocket.id, true);
     expect(state().roomLocks.get('room-1')).toBe(true);
 
     await service.leaveRoom(ownerSocket);
@@ -1597,7 +1624,7 @@ describe('host controls', () => {
       const other = createSocket('socket-other');
       seedPeer(other, 'user-2', 'room-1');
 
-      const ack = service.broadcast(sender, {
+      const ack = broadcastService.broadcast(sender, {
         topic: 'reactions',
         payload: { emoji: 'wave' },
       });
@@ -1621,7 +1648,7 @@ describe('host controls', () => {
       const other = createSocket('socket-other-v');
       seedPeer(other, 'user-2', 'room-1');
 
-      const ack = service.broadcast(sender, {
+      const ack = broadcastService.broadcast(sender, {
         topic: 'reactions',
         payload: 1,
       });
@@ -1643,7 +1670,7 @@ describe('host controls', () => {
       const other = createSocket('socket-other-big');
       seedPeer(other, 'user-2', 'room-1');
 
-      const ack = service.broadcast(sender, {
+      const ack = broadcastService.broadcast(sender, {
         topic: 'blob',
         payload: { data: 'x'.repeat(8193) },
       });
@@ -1665,7 +1692,7 @@ describe('host controls', () => {
 
       // {"data":"xxxx..."} serializes to exactly 8192 bytes.
       const filler = 'x'.repeat(8192 - '{"data":""}'.length);
-      const ack = service.broadcast(sender, {
+      const ack = broadcastService.broadcast(sender, {
         topic: 'blob',
         payload: { data: filler },
       });
@@ -1681,7 +1708,7 @@ describe('host controls', () => {
         const other = createSocket('socket-other-topic');
         seedPeer(other, 'user-2', 'room-1');
 
-        const ack = service.broadcast(sender, { topic, payload: 1 });
+        const ack = broadcastService.broadcast(sender, { topic, payload: 1 });
 
         expect(ack).toEqual({
           ok: false,
@@ -1696,7 +1723,7 @@ describe('host controls', () => {
     );
 
     it('answers NOT_IN_ROOM for an unjoined socket', () => {
-      const ack = service.broadcast(createSocket('socket-stray'), {
+      const ack = broadcastService.broadcast(createSocket('socket-stray'), {
         topic: 'reactions',
         payload: 1,
       });
@@ -1834,7 +1861,7 @@ describe('webhook emissions', () => {
     seedPeer(ownerSocket, 'user-1', 'room-1', { ownerId: 'user-1' });
     seedPeer(createSocket('socket-target'), 'user-2', 'room-1');
 
-    await service.kickPeer(ownerSocket, 'user-2');
+    await presence.kick(ownerSocket.id, 'user-2');
 
     expect(webhooks.participantLeft).toHaveBeenCalledWith(
       'room-1',
@@ -2078,7 +2105,10 @@ describe('rejoin grace', () => {
       (call: unknown[]) => call[0] === 'sfu:peer-media-detached',
     );
     expect(detachEvents).toHaveLength(1);
-    expect(detachEvents[0]).toEqual(['sfu:peer-media-detached', { userId: 'user-2' }]);
+    expect(detachEvents[0]).toEqual([
+      'sfu:peer-media-detached',
+      { userId: 'user-2' },
+    ]);
     expect((alice.emit as jest.Mock).mock.calls).not.toContainEqual([
       'sfu:peer-left',
       { userId: 'user-2' },
@@ -2091,7 +2121,7 @@ describe('rejoin grace', () => {
     seed(owner, 'user-1', 'room-1', { ownerId: 'user-1' });
     seed(target, 'user-2', 'room-1');
 
-    await service.kickPeer(owner, 'user-2');
+    await presence.kick(owner.id, 'user-2');
     const rejoiner = createSocket('socket-target-2');
     await joinViaUser(rejoiner, 'user-2');
 
@@ -2111,7 +2141,7 @@ describe('rejoin grace', () => {
     seed(owner, 'user-1', 'room-1', { ownerId: 'user-1' });
     seed(target, 'user-2', 'room-1');
 
-    await service.kickPeer(owner, 'user-2');
+    await presence.kick(owner.id, 'user-2');
     await service.leaveRoom(owner);
     workerManager.closeRouter.mockResolvedValue(undefined);
 

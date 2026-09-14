@@ -33,6 +33,7 @@ import type {
   SfuJoinPayload,
   SfuKickedPayload,
   SfuRoomEndedPayload,
+  SfuRoomMediaResetPayload,
   SfuParticipantInfo,
   SfuParticipantJoinedPayload,
   SfuExistingParticipantsPayload,
@@ -194,6 +195,9 @@ export class SfuManager {
   private broadcastCallbacks = new Set<
     (message: SfuBroadcastMessage) => void
   >();
+  private roomMediaResetCallbacks = new Set<
+    (payload: SfuRoomMediaResetPayload) => void
+  >();
   private reconnectErrorCallbacks = new Set<
     (error: SfuReconnectError) => void
   >();
@@ -253,10 +257,46 @@ export class SfuManager {
       onRoomEnded: (p) => this.handleRoomEnded(p),
       onScreenShareStarted: (p) => this.handleScreenShareStarted(p),
       onScreenShareStopped: (p) => this.handleScreenShareStopped(p),
+      onRoomMediaReset: (p) => this.handleRoomMediaReset(p),
       onGuestJoinRequest: (p) => this.handleGuestJoinRequest(p),
       onEgressStatus: (p) => this.handleEgressStatus(p),
       onBroadcast: (p) => this.handleBroadcast(p),
     };
+  }
+
+  onRoomMediaReset(
+    callback: (payload: SfuRoomMediaResetPayload) => void,
+  ): () => void {
+    this.roomMediaResetCallbacks.add(callback);
+    return () => this.roomMediaResetCallbacks.delete(callback);
+  }
+
+  /**
+   * Server-side media plane was lost (SFU worker crash) and rebuilt:
+   * rebuild this side without a new join. Live local tracks are retained
+   * and re-published, producers announced on the rebuilt recv transport
+   * are re-consumed, and presence/chat/room state is untouched.
+   */
+  private async handleRoomMediaReset(
+    payload: SfuRoomMediaResetPayload,
+  ): Promise<void> {
+    // Pre-join reset: the join flow builds media from scratch anyway.
+    if (!this.sessionEstablished || !this.lastJoinPayload) return;
+
+    this.log.warn("[SFU] Room media reset - rebuilding media session");
+    for (const callback of this.roomMediaResetCallbacks) {
+      callback(payload);
+    }
+
+    this.retainLocalProduces();
+    this.closeAll();
+    this.device = null;
+    this.pendingNewProducers = [];
+    // loadDevice emits create-send/recv-transport. The new recv transport
+    // triggers the server to re-announce the room's producers as they
+    // re-publish; retained local tracks replay through the produce path.
+    await this.loadDevice(payload.routerRtpCapabilities);
+    this.replayRetainedProduces();
   }
 
   // ISfuConnection

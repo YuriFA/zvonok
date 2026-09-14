@@ -29,6 +29,7 @@ import type {
   SfuBroadcastPayload,
 } from './interfaces/sfu.interface';
 import { OnGatewayInit } from '@nestjs/websockets';
+import { SfuBroadcastService } from './sfu-broadcast.service';
 
 @SkipThrottle()
 @WebSocketGateway({
@@ -53,19 +54,23 @@ export class SfuGateway
 
   constructor(
     private readonly sfuService: SfuService,
+    private readonly broadcastService: SfuBroadcastService,
     @Inject(ROOM_PRESENCE) private readonly presence: RoomPresence,
   ) {}
 
   afterInit(): void {
     this.logger.log('SFU Gateway initialized');
+    // Hand the namespace to presence so room fan-out rides the socket.io
+    // adapter (io.to(room)/except) instead of per-record socket loops.
+    this.presence.attachServer(this.server);
   }
 
   handleConnection(client: Socket): void {
-    this.logger.log(`SFU client connected: ${client.id}`);
+    this.logger.verbose(`SFU client connected: ${client.id}`);
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
-    this.logger.log(`SFU client disconnected: ${client.id}`);
+    this.logger.verbose(`SFU client disconnected: ${client.id}`);
     await this.sfuService.closePeer(client);
   }
 
@@ -74,13 +79,13 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuJoinPayload,
   ): Promise<void> {
-    this.logger.log(`SFU join request from ${client.id}`, { payload });
+    this.logger.verbose(`SFU join request from ${client.id}`, { payload });
     await this.sfuService.joinRoom(client, payload);
   }
 
   @SubscribeMessage('sfu:leave')
   async handleLeave(@ConnectedSocket() client: Socket): Promise<void> {
-    this.logger.log(`SFU leave request from ${client.id}`);
+    this.logger.verbose(`SFU leave request from ${client.id}`);
     await this.sfuService.leaveRoom(client);
   }
 
@@ -88,7 +93,7 @@ export class SfuGateway
   async handleCreateSendTransport(
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    this.logger.log(`Creating send transport for ${client.id}`);
+    this.logger.verbose(`Creating send transport for ${client.id}`);
     await this.sfuService.createSendTransport(client);
   }
 
@@ -96,7 +101,7 @@ export class SfuGateway
   async handleCreateRecvTransport(
     @ConnectedSocket() client: Socket,
   ): Promise<void> {
-    this.logger.log(`Creating recv transport for ${client.id}`);
+    this.logger.verbose(`Creating recv transport for ${client.id}`);
     await this.sfuService.createRecvTransport(client);
   }
 
@@ -105,7 +110,7 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuTransportConnectPayload,
   ): Promise<void> {
-    this.logger.log(
+    this.logger.verbose(
       `Connecting transport ${payload.transportId} for ${client.id}`,
     );
     await this.sfuService.connectTransport(client, payload);
@@ -116,7 +121,7 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuProducePayload,
   ): Promise<void> {
-    this.logger.log(`Creating producer for ${client.id}`);
+    this.logger.verbose(`Creating producer for ${client.id}`);
     await this.sfuService.createProducer(client, payload);
   }
 
@@ -125,7 +130,7 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuConsumePayload,
   ): Promise<void> {
-    this.logger.log(`Creating consumer for ${client.id}`);
+    this.logger.verbose(`Creating consumer for ${client.id}`);
     await this.sfuService.createConsumer(client, payload);
   }
 
@@ -134,7 +139,9 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuResumeConsumerPayload,
   ): Promise<void> {
-    this.logger.log(`Resuming consumer ${payload.consumerId} for ${client.id}`);
+    this.logger.verbose(
+      `Resuming consumer ${payload.consumerId} for ${client.id}`,
+    );
     await this.sfuService.resumeConsumer(client, payload.consumerId);
   }
 
@@ -143,7 +150,9 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { producerId: string },
   ): Promise<void> {
-    this.logger.log(`Pausing producer ${payload.producerId} for ${client.id}`);
+    this.logger.verbose(
+      `Pausing producer ${payload.producerId} for ${client.id}`,
+    );
     await this.sfuService.pauseProducer(client, payload.producerId);
   }
 
@@ -152,7 +161,9 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: { producerId: string },
   ): Promise<void> {
-    this.logger.log(`Resuming producer ${payload.producerId} for ${client.id}`);
+    this.logger.verbose(
+      `Resuming producer ${payload.producerId} for ${client.id}`,
+    );
     await this.sfuService.resumeProducer(client, payload.producerId);
   }
 
@@ -161,8 +172,10 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuKickPeerPayload,
   ): Promise<SfuHostActionAck> {
-    this.logger.log(`Kick peer ${payload.userId} requested by ${client.id}`);
-    return this.sfuService.kickPeer(client, payload.userId);
+    this.logger.verbose(
+      `Kick peer ${payload.userId} requested by ${client.id}`,
+    );
+    return this.presence.kick(client.id, payload.userId);
   }
 
   @SubscribeMessage('sfu:mute-peer')
@@ -170,7 +183,9 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuMutePeerPayload,
   ): Promise<SfuHostActionAck> {
-    this.logger.log(`Mute peer ${payload.userId} requested by ${client.id}`);
+    this.logger.verbose(
+      `Mute peer ${payload.userId} requested by ${client.id}`,
+    );
     return this.sfuService.mutePeer(client, payload.userId);
   }
 
@@ -178,7 +193,7 @@ export class SfuGateway
   async handleMuteAll(
     @ConnectedSocket() client: Socket,
   ): Promise<SfuHostActionAck> {
-    this.logger.log(`Mute all requested by ${client.id}`);
+    this.logger.verbose(`Mute all requested by ${client.id}`);
     return this.sfuService.muteAll(client);
   }
 
@@ -187,8 +202,10 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuLockRoomPayload,
   ): Promise<SfuHostActionAck> {
-    this.logger.log(`Lock room ${payload.locked} requested by ${client.id}`);
-    return this.sfuService.lockRoom(client, payload.locked);
+    this.logger.verbose(
+      `Lock room ${payload.locked} requested by ${client.id}`,
+    );
+    return this.presence.lockRoom(client.id, payload.locked);
   }
 
   @SubscribeMessage('sfu:broadcast')
@@ -196,10 +213,10 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuBroadcastPayload,
   ): SfuBroadcastAck {
-    this.logger.log(
+    this.logger.verbose(
       `Broadcast on topic ${payload?.topic} requested by ${client.id}`,
     );
-    return this.sfuService.broadcast(client, payload);
+    return this.broadcastService.broadcast(client, payload);
   }
 
   @SubscribeMessage('sfu:set-preferred-layers')
@@ -207,7 +224,7 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuSetPreferredLayersPayload,
   ): Promise<void> {
-    this.logger.log(
+    this.logger.verbose(
       `Set preferred layers for consumer ${payload.consumerId} to spatial ${payload.spatialLayer} by ${client.id}`,
     );
     await this.sfuService.setPreferredLayers(
@@ -222,7 +239,9 @@ export class SfuGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: SfuCloseProducerPayload,
   ): void {
-    this.logger.log(`Closing producer ${payload.producerId} for ${client.id}`);
+    this.logger.verbose(
+      `Closing producer ${payload.producerId} for ${client.id}`,
+    );
     this.sfuService.closeProducer(client.id, payload.producerId);
   }
 
