@@ -48,22 +48,23 @@ so mint a fresh one per session.
 
 ## 3. Join the room from React
 
-Two ways to render the room: the drop-in `ZvonokRoom` component (next), or
-the headless hooks (the rest of this section) when you want full control of
-the UI.
+Two ways to render the room: the embedded entry (next), or the headless
+hooks (the rest of this section) when you want full control of the UI.
 
-### Drop-in: ZvonokRoom
+### Embedded: ZvonokEmbeddedRoom
 
 `main.jsx`:
 
 ```jsx
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ZvonokRoom } from "@zvonok/react";
+import "@zvonok/react/css/component-kit.css";
+import "@zvonok/react/css/embedded.css";
+import { ZvonokEmbeddedRoom } from "@zvonok/react/embedded";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <ZvonokRoom
+    <ZvonokEmbeddedRoom
       serverUrl="https://your-zvonok-server.example"
       roomSlug="<slug from step 2>"
       token="<token from step 2>"
@@ -75,36 +76,43 @@ createRoot(document.getElementById("root")).render(
 That is the whole app: pre-join card, video grid, and mic, camera, screen
 share, and leave controls. Pass `displayName` to skip the pre-join card,
 `onLeft` to react to leaving, and `onError` to observe typed join failures.
-The widget imports its own stylesheet (`zvonok.css`, all classes `zvk-`
-prefixed); for manual stylesheet control it is also exported as
-`@zvonok/react/zvonok.css`.
+`layout="spotlight"` switches the stage to a derivation-driven spotlight
+arrangement, and `children` render alongside the stage.
 
-### Theming the prebuilt
+The widget needs its two stylesheets imported once
+(`@zvonok/react/css/component-kit.css` and
+`@zvonok/react/css/embedded.css`); it puts the `zk` namespace class on its
+roots itself.
 
-`ZvonokRoom` reads a small set of CSS custom properties. Define them on any
-ancestor of the widget (or on `:root`) to brand it - no JavaScript, no props:
+### Theming the embedded room
+
+The styling contract is token-first: every color, radius, and font parameter
+is a `--zk-*` CSS custom property defined on the `.zk` namespace class.
+Override the tokens on any ancestor of the widget (or on `:root`) to brand
+it - no JavaScript, no props:
 
 ```css
 :root {
-  --zvonok-accent-color: #4f46e5;
-  --zvonok-background-color: #0b0d12;
-  --zvonok-text-color: #f4f4f5;
-  --zvonok-radius: 14px;
-  --zvonok-font-family: "Inter", system-ui, sans-serif;
+  --zk-color-accent: #4f46e5;
+  --zk-color-background: #0b0d12;
+  --zk-color-text: #f4f4f5;
+  --zk-radius: 14px;
+  --zk-font-family: "Inter", system-ui, sans-serif;
 }
 ```
 
-| Variable | Default | Controls |
+| Token | Default | Controls |
 | --- | --- | --- |
-| `--zvonok-accent-color` | `#2f6f4f` | Join button, input focus ring |
-| `--zvonok-background-color` | `#16181d` | Room and input background |
-| `--zvonok-text-color` | `#e6e8eb` | Text and button labels |
-| `--zvonok-radius` | `10px` | Corner radius (tiles scale with it) |
-| `--zvonok-font-family` | `system-ui, ...` | Widget font |
+| `--zk-color-accent` | `#2f6f4f` | Join button, input focus ring |
+| `--zk-color-background` | `#16181d` | Room and input background |
+| `--zk-color-text` | `#e6e8eb` | Text and button labels |
+| `--zk-radius` | `10px` | Corner radius (tiles scale with it) |
+| `--zk-font-family` | `system-ui, ...` | Widget font |
 
-Without overrides the widget renders with its built-in defaults; the
-variables only ever read, never leak globally. Renaming a variable is a
-breaking change.
+The full token set lives at the top of `component-kit.css`. Without
+overrides the widget renders with its built-in defaults. The stable
+contract: the exports map, props, hooks, and token names - the preset's
+class names and DOM are not and may change in any release.
 
 ### Headless: provider + hooks
 
@@ -258,8 +266,9 @@ Without a provider, an expired-token rejoin surfaces as a typed
 ## What the SDK exposes
 
 - `ZvonokProvider` - carries the server URL and the shared media manager
-- `ZvonokRoom` - drop-in meeting room component (see the drop-in variant
-  in step 3); renders its own provider from a `serverUrl` prop
+- `ZvonokEmbeddedRoom` - embedded meeting room (see the embedded variant
+  in step 3); import from `@zvonok/react/embedded`; renders its own
+  provider from a `serverUrl` prop
 - `useZvonokConnection({ roomSlug, token })` - join lifecycle plus publishing
   controls (`produceTrack`, `pauseProducer`, `resumeProducer`, `replaceTrack`)
   and the underlying `manager` for advanced use

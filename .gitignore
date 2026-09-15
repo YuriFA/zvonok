@@ -29,6 +29,7 @@ opencode.json
 *.njsproj
 *.sln
 *.sw?
+docs/research/
 
 # Playwright
 playwright-report/
