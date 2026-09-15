@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const reactHarness = vi.hoisted(() => ({
   permissions: { video: "unknown", audio: "unknown" } as Record<string, string>,
-  mediaManager: {},
+  deviceControls: null as Record<string, unknown> | null,
 }));
 
 vi.mock("@zvonok/react", () => ({
-  useZvonokSession: () => ({ mediaManager: reactHarness.mediaManager }),
   useDevicePermissions: (kind: "video" | "audio") => reactHarness.permissions[kind],
+  useDeviceControls: () => reactHarness.deviceControls,
   useVideoStream: vi.fn(),
 }));
 
@@ -25,29 +25,25 @@ vi.mock("@/features/media/hooks/use-media-controls", () => ({
     getAudioCaptureState: vi.fn(() => "active"),
   }),
 }));
-vi.mock("@/features/media/hooks/use-device-switching", () => ({
-  useDeviceSwitching: () => ({
-    switchVideoDevice: vi.fn(async () => true),
-    switchAudioDevice: vi.fn(async () => true),
-  }),
-}));
-vi.mock("@/features/media/hooks/use-media-devices", () => ({
-  useMediaDevices: () => ({
-    videoDevices: [{ deviceId: "cam-1", label: "Cam" }],
-    audioDevices: [{ deviceId: "mic-1", label: "Mic" }],
-    speakerDevices: [],
-    selectedDevices: { videoDeviceId: "cam-1", audioDeviceId: "mic-1", speakerDeviceId: "" },
-    setSelectedVideoDevice: vi.fn(),
-    setSelectedAudioDevice: vi.fn(),
-    setSelectedSpeakerDevice: vi.fn(),
-  }),
-}));
+
+function deviceInfo(deviceId: string, label: string, kind: string) {
+  return { deviceId, kind, label, groupId: "", toJSON: () => ({}) };
+}
 
 import { DeviceSelector } from "../device-selector";
 
 describe("DeviceSelector permission surfacing", () => {
   beforeEach(() => {
     reactHarness.permissions = { video: "unknown", audio: "unknown" };
+    reactHarness.deviceControls = {
+      devices: [deviceInfo("cam-1", "Cam", "videoinput"), deviceInfo("mic-1", "Mic", "audioinput")],
+      camera: { toggle: vi.fn(async () => true), switchDevice: vi.fn(async () => true) },
+      mic: { toggle: vi.fn(async () => true), switchDevice: vi.fn(async () => true) },
+      selectedDevices: { videoDeviceId: "cam-1", audioDeviceId: "mic-1", speakerDeviceId: "" },
+      selectVideoDevice: vi.fn(),
+      selectAudioDevice: vi.fn(),
+      selectSpeakerDevice: vi.fn(),
+    };
   });
 
   it("explains blocked devices before any join attempt", () => {

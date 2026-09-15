@@ -16,7 +16,12 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./zvonok.css": "./src/prebuilt/zvonok.css"
+    "./embedded": {
+      "types": "./src/embedded/ZvonokEmbeddedRoom.tsx",
+      "default": "./src/embedded/ZvonokEmbeddedRoom.tsx"
+    },
+    "./css/component-kit.css": "./src/css/component-kit.css",
+    "./css/embedded.css": "./src/css/embedded.css"
   },
   "publishConfig": {
     "access": "public",
@@ -25,14 +30,19 @@
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       },
-      "./zvonok.css": "./dist/prebuilt/zvonok.css"
+      "./embedded": {
+        "types": "./dist/embedded/ZvonokEmbeddedRoom.d.ts",
+        "default": "./dist/embedded/ZvonokEmbeddedRoom.js"
+      },
+      "./css/component-kit.css": "./dist/css/component-kit.css",
+      "./css/embedded.css": "./dist/css/embedded.css"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && cp src/prebuilt/zvonok.css dist/prebuilt/zvonok.css",
+    "build": "tsc -p tsconfig.build.json && cp src/css/component-kit.css src/css/embedded.css dist/css/",
     "clean": "rm -rf dist",
     "test": "vitest",
     "test:run": "vitest run",
@@ -40,7 +50,8 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
-    "@zvonok/client": "workspace:*"
+    "@zvonok/client": "workspace:*",
+    "@zvonok/video-layout": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18"

@@ -1,6 +1,6 @@
 # @zvonok/react
 
-React bindings for the ZvonOK video platform: a drop-in room component and
+React bindings for the ZvonOK video platform: an embedded room entry and
 headless hooks over [`@zvonok/client`](https://www.npmjs.com/package/@zvonok/client).
 
 ## Install
@@ -11,12 +11,15 @@ npm i @zvonok/react
 
 Peer dependency: `react >= 18`.
 
-## Drop-in room
+## Embedded room
 
 ```jsx
-import { ZvonokRoom } from "@zvonok/react";
+// Styles: import once, before or with the component.
+import "@zvonok/react/css/component-kit.css";
+import "@zvonok/react/css/embedded.css";
+import { ZvonokEmbeddedRoom } from "@zvonok/react/embedded";
 
-<ZvonokRoom
+<ZvonokEmbeddedRoom
   serverUrl="https://your-zvonok-server.example"
   roomSlug="my-room"
   token="<minted room token>"
@@ -30,9 +33,15 @@ import { ZvonokProvider, useZvonokConnection, useParticipants } from "@zvonok/re
 ```
 
 `useHostControls()` adds `mutePeer`, `muteAll`, `lockRoom`, and `kickPeer`
-for room tokens minted with the admin claim. The component imports its own
-stylesheet; it is also exported as `@zvonok/react/zvonok.css` for manual
-control.
+for room tokens minted with the admin claim.
+
+## Styling contract
+
+Both stylesheets are required for the embedded room; the component puts the
+`zk` namespace class on its roots itself. Colors, radii, and fonts are
+`--zk-*` CSS custom properties defined on `.zk` - override them to brand the
+room. The stable styling contract is the exports map, props, hooks, and
+token names; the preset's class names and DOM are not.
 
 ## Docs
 

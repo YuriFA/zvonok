@@ -3,6 +3,8 @@ import {
   createHostControls,
   EMPTY_ROOM_STATE,
   RoomTracker,
+  usePublishControls,
+  useSfuTrackSync,
   useStoreSelector,
   type HostControls,
   type RoomTrackerState,
@@ -89,6 +91,12 @@ export function useRoomSfu({
   const isMobile = useIsMobile();
   const manager = connection.manager;
   const mediaControls = useMediaControls();
+
+  // When a capture restarts (device switch) while a producer exists, the
+  // published track is swapped in place.
+  useSfuTrackSync();
+
+  const publish = usePublishControls(connection, { isMobile });
 
   // Local UI identity for the tracker (muted-by-host of the local tile).
   // The SFU derives the authoritative identity from the verified session.
@@ -178,122 +186,37 @@ export function useRoomSfu({
     toast.info("Muted by the room host");
   }, [mutedByHost, mediaControls]);
 
-  const { hasProducer, produceTrack, replaceTrack, pauseProducer, resumeProducer } = connection;
-
   const toggleVideo = useCallback(async () => {
     const nextEnabled = !mediaControls.isVideoEnabled;
     mediaControls.setVideoEnabled(nextEnabled);
-
-    if (!nextEnabled) {
-      if (hasProducer("video")) {
-        pauseProducer("video");
-      }
-      // Release the capture hardware: the sensor and preview pipeline
-      // otherwise run for the rest of the call. Re-enabling re-acquires
-      // the track through ensureVideo below.
-      await stopVideoCapture();
-      return;
-    }
-
-    let track = localVideoStream?.getVideoTracks()[0];
-    // A camera disabled in the lobby (or a lost device) leaves no live
-    // track; re-acquire capture before publishing.
-    if (!track || track.readyState !== "live") {
-      const stream = await ensureVideo();
-      track = stream?.getVideoTracks()[0];
-      if (!track || track.readyState !== "live") {
-        mediaControls.setVideoEnabled(false);
-        return;
-      }
-    }
-    if (!hasProducer("video")) {
-      const produced = await produceTrack(track, { isMobile });
-      if (!produced) {
-        mediaControls.setVideoEnabled(false);
-        return;
-      }
-      resumeProducer("video");
-      return;
-    }
-
-    // The producer still references the track that "off" ended. Swap it in
-    // first: resuming first would stream silence until the swap lands.
-    const replaced = await replaceTrack("video", track);
-    if (!replaced) {
+    const result = await publish.toggle("video", nextEnabled, {
+      getTrack: () => localVideoStream?.getVideoTracks()[0],
+      ensureTrack: ensureVideo,
+      release: stopVideoCapture,
+    });
+    if (result === "no-track" || result === "produce-failed") {
+      mediaControls.setVideoEnabled(false);
+    } else if (result === "replace-failed") {
       toast.error("Failed to restart the camera");
       mediaControls.setVideoEnabled(false);
-      return;
     }
-    resumeProducer("video");
-  }, [
-    mediaControls,
-    localVideoStream,
-    ensureVideo,
-    produceTrack,
-    replaceTrack,
-    hasProducer,
-    stopVideoCapture,
-    pauseProducer,
-    resumeProducer,
-    isMobile,
-  ]);
+  }, [mediaControls, localVideoStream, ensureVideo, publish, stopVideoCapture]);
 
   const toggleAudio = useCallback(async () => {
     const nextEnabled = !mediaControls.isAudioEnabled;
     mediaControls.setAudioEnabled(nextEnabled);
-
-    if (!nextEnabled) {
-      if (hasProducer("audio")) {
-        pauseProducer("audio");
-      }
-      // Release the microphone for the same reason as the camera: capture
-      // hardware stays hot otherwise. Re-enabling re-acquires through
-      // ensureAudio below.
-      await stopAudioCapture();
-      return;
-    }
-
-    let track = localAudioStream?.getAudioTracks()[0];
-    // A microphone disabled in the lobby (or a lost device) leaves no live
-    // track; re-acquire capture before publishing.
-    if (!track || track.readyState !== "live") {
-      const stream = await ensureAudio();
-      track = stream?.getAudioTracks()[0];
-      if (!track || track.readyState !== "live") {
-        mediaControls.setAudioEnabled(false);
-        return;
-      }
-    }
-    if (!hasProducer("audio")) {
-      const produced = await produceTrack(track, { isMobile });
-      if (!produced) {
-        mediaControls.setAudioEnabled(false);
-        return;
-      }
-      resumeProducer("audio");
-      return;
-    }
-
-    // The producer still references the track that "off" ended. Swap it in
-    // first: resuming first would stream silence until the swap lands.
-    const replaced = await replaceTrack("audio", track);
-    if (!replaced) {
+    const result = await publish.toggle("audio", nextEnabled, {
+      getTrack: () => localAudioStream?.getAudioTracks()[0],
+      ensureTrack: ensureAudio,
+      release: stopAudioCapture,
+    });
+    if (result === "no-track" || result === "produce-failed") {
+      mediaControls.setAudioEnabled(false);
+    } else if (result === "replace-failed") {
       toast.error("Failed to restart the microphone");
       mediaControls.setAudioEnabled(false);
-      return;
     }
-    resumeProducer("audio");
-  }, [
-    mediaControls,
-    localAudioStream,
-    ensureAudio,
-    produceTrack,
-    replaceTrack,
-    hasProducer,
-    stopAudioCapture,
-    resumeProducer,
-    isMobile,
-  ]);
+  }, [mediaControls, localAudioStream, ensureAudio, publish, stopAudioCapture]);
 
   const kickPeer = useCallback(
     async (userId: string): Promise<void> => {

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useZvonokConnection, ZvonokProvider } from "@zvonok/react";
+import { usePrejoin, useZvonokConnection, ZvonokProvider } from "@zvonok/react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
 
@@ -105,12 +105,8 @@ export const RoomPage = () => {
 
   const guestPreApproved = guestCheckQuery.data?.valid ?? false;
   const currentUserId = user?.id ?? roomMeQuery.data?.userId;
-  const [displayNameOverride, setDisplayNameOverride] = useState<string | null>(null);
-  const displayName =
-    displayNameOverride ??
-    user?.username ??
-    guestCheckQuery.data?.displayName ??
-    loadGuestDisplayName();
+  const resolvedDisplayName =
+    user?.username ?? guestCheckQuery.data?.displayName ?? loadGuestDisplayName();
 
   const handleJoined = useCallback(() => {
     setViewState("active");
@@ -122,24 +118,29 @@ export const RoomPage = () => {
     error: joinError,
   } = useGuestJoinRoom({ onJoinApproved: handleJoined });
 
+  // Prejoin machine: name draft plus the confirm handshake; the guest-vs-
+  // member routing inside the confirm action stays app-side.
+  const prejoin = usePrejoin({
+    initialName: resolvedDisplayName,
+    onConfirm: async ({ displayName: name }) => {
+      if (!slug) {
+        return;
+      }
+      if (user || guestPreApproved) {
+        setViewState("active");
+        return;
+      }
+      saveGuestDisplayName(name);
+      await join({ slug, displayName: name });
+    },
+  });
+  const displayName = prejoin.displayName;
+
   useEffect(() => {
     if (room?.status === "ended") {
       setViewState("ended");
     }
   }, [room?.status]);
-
-  const handleJoin = useCallback(async () => {
-    if (!slug) return;
-
-    if (user || guestPreApproved) {
-      setViewState("active");
-      return;
-    }
-
-    saveGuestDisplayName(displayName);
-
-    await join({ slug, displayName });
-  }, [user, guestPreApproved, slug, displayName, join]);
 
   if (isLoading || authLoading) {
     return (
@@ -175,8 +176,8 @@ export const RoomPage = () => {
             <PrejoinView
               roomUrl={roomUrl}
               displayName={displayName}
-              onDisplayNameChange={setDisplayNameOverride}
-              onJoin={handleJoin}
+              onDisplayNameChange={prejoin.setDisplayName}
+              onJoin={() => void prejoin.confirm()}
               guestState={user ? undefined : guestState}
               errorMessage={joinError}
               onRetry={retry}

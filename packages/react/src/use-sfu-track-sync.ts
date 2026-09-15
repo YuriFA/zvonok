@@ -1,6 +1,14 @@
-import { CaptureState } from "@zvonok/client/media/capture-state";
-import { useZvonokSession } from "@zvonok/react";
+/**
+ * Replace-track sync: when a capture restarts while its producer exists
+ * (device switch, lost-and-regained device), swap the published track
+ * instead of producing a second one. Runs while mounted; pair it with the
+ * room lifecycle the same way as the other session hooks.
+ */
+
+import { isActive } from "@zvonok/client/media/capture-state";
 import { useEffect } from "react";
+
+import { useZvonokSession } from "./zvonok-context.js";
 
 export function useSfuTrackSync(): void {
   const { mediaManager, manager: sfuManager } = useZvonokSession();
@@ -12,7 +20,7 @@ export function useSfuTrackSync(): void {
       return;
     }
     return videoTrackProvider.onStateChange(async (state, track) => {
-      if (state === CaptureState.ACTIVE && track && sfuManager.getProducerByKind("video")) {
+      if (isActive(state) && track && sfuManager.getProducerByKind("video")) {
         await sfuManager.replaceTrack("video", track);
       }
     });
@@ -23,7 +31,7 @@ export function useSfuTrackSync(): void {
       return;
     }
     return audioTrackProvider.onStateChange(async (state, track) => {
-      if (state === CaptureState.ACTIVE && track && sfuManager.getProducerByKind("audio")) {
+      if (isActive(state) && track && sfuManager.getProducerByKind("audio")) {
         await sfuManager.replaceTrack("audio", track);
       }
     });

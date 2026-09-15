@@ -130,6 +130,37 @@ vi.mock("@zvonok/react", () => ({
     mutePeer: vi.fn(async () => {}),
   }),
   EMPTY_ROOM_STATE: { participants: [], locked: false, mutedByHost: false },
+  PeerQualityProvider: ({ children }: { children: React.ReactNode }) => children,
+  usePeerQualityStats: () => undefined,
+  usePrejoin: (options?: {
+    initialName?: string;
+    onConfirm: (o: { displayName: string }) => Promise<void> | void;
+  }) => ({
+    phase: "confirming",
+    displayName: options?.initialName ?? "",
+    setDisplayName: () => {},
+    canConfirm: true,
+    confirm: async () => {
+      await options?.onConfirm?.({ displayName: options?.initialName ?? "" });
+    },
+    reset: () => {},
+  }),
+  deriveMediaControlState: (options: { isEnabled: boolean; isMutedByHost?: boolean }) => ({
+    isOn: options.isEnabled && !options.isMutedByHost,
+    hasError: false,
+    isLoading: false,
+    isForcedOff: options.isMutedByHost ?? false,
+    display: { tooltip: "toggle", status: "off", statusText: null },
+  }),
+  hasCapabilities: () => true,
+  mapScreenShareError: () => undefined,
+  useViewportQuality: () => {},
+  useSfuTrackSync: () => {},
+  useRoomLayout: () => ({
+    mode: "grid",
+    spotlight: null,
+    tiles: [],
+  }),
 }));
 
 vi.mock("@/features/media/contexts/media-stream.context", () => ({

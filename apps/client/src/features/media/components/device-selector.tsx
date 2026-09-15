@@ -1,16 +1,15 @@
 import { CaptureState } from "@zvonok/client/media/capture-state";
-import { useDevicePermissions, useZvonokSession } from "@zvonok/react";
+import { useDeviceControls, useDevicePermissions } from "@zvonok/react";
 import { AlertTriangleIcon, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { LocalVideo } from "@/components/local-video";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 import { cn } from "@/lib/utils";
 
 import { useMediaStreamContext } from "../contexts/media-stream.context";
-import { useDeviceSwitching } from "../hooks/use-device-switching";
 import { useMediaControls } from "../hooks/use-media-controls";
-import { useMediaDevices } from "../hooks/use-media-devices";
 import { DeviceControlGroup } from "./device-control-group";
 import { PermissionRequestModal } from "./permission-request-modal";
 import { SpeakerDeviceControlGroup } from "./speaker-device-control-group";
@@ -29,21 +28,15 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
   const { videoStream, videoState, audioState } = useMediaStreamContext();
   const mediaControls = useMediaControls();
 
-  const mediaManager = useZvonokSession().mediaManager;
-  const videoControl = mediaManager.videoCapture;
-  const audioControl = mediaManager.audioCapture;
-
   const {
-    videoDevices,
-    audioDevices,
-    speakerDevices,
+    devices: allDevices,
+    camera,
+    mic,
     selectedDevices,
-    setSelectedVideoDevice,
-    setSelectedAudioDevice,
-    setSelectedSpeakerDevice,
-  } = useMediaDevices();
-
-  const { switchVideoDevice, switchAudioDevice } = useDeviceSwitching();
+    selectVideoDevice,
+    selectAudioDevice,
+    selectSpeakerDevice,
+  } = useDeviceControls({ storageKey: STORAGE_KEYS.SELECTED_DEVICES });
 
   const [permissionModalOpen, setPermissionModalOpen] = useState(false);
   const [deniedDevices, setDeniedDevices] = useState({ camera: false, microphone: false });
@@ -56,7 +49,7 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
   const handleToggleVideo = useCallback(async () => {
     const nextEnabled = !mediaControls.isVideoEnabled;
     mediaControls.setVideoEnabled(nextEnabled);
-    const success = await videoControl.toggle(nextEnabled);
+    const success = await camera.toggle(nextEnabled);
     if (!success) {
       mediaControls.setVideoEnabled(false);
       if (isPermissionDenied(mediaControls.getVideoCaptureState())) {
@@ -64,12 +57,12 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
         setPermissionModalOpen(true);
       }
     }
-  }, [videoControl, mediaControls]);
+  }, [camera, mediaControls]);
 
   const handleToggleAudio = useCallback(async () => {
     const nextEnabled = !mediaControls.isAudioEnabled;
     mediaControls.setAudioEnabled(nextEnabled);
-    const success = await audioControl.toggle(nextEnabled);
+    const success = await mic.toggle(nextEnabled);
     if (!success) {
       mediaControls.setAudioEnabled(false);
       if (isPermissionDenied(mediaControls.getAudioCaptureState())) {
@@ -77,7 +70,7 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
         setPermissionModalOpen(true);
       }
     }
-  }, [audioControl, mediaControls]);
+  }, [mic, mediaControls]);
 
   const handleModalOpenChange = useCallback((open: boolean) => {
     setPermissionModalOpen(open);
@@ -88,30 +81,34 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
 
   const handleVideoDeviceChange = useCallback(
     async (deviceId: string) => {
-      const success = await switchVideoDevice(deviceId);
+      const success = await camera.switchDevice(deviceId);
       if (success) {
-        setSelectedVideoDevice(deviceId);
+        selectVideoDevice(deviceId);
       }
     },
-    [switchVideoDevice, setSelectedVideoDevice],
+    [camera, selectVideoDevice],
   );
 
   const handleAudioDeviceChange = useCallback(
     async (deviceId: string) => {
-      const success = await switchAudioDevice(deviceId);
+      const success = await mic.switchDevice(deviceId);
       if (success) {
-        setSelectedAudioDevice(deviceId);
+        selectAudioDevice(deviceId);
       }
     },
-    [switchAudioDevice, setSelectedAudioDevice],
+    [mic, selectAudioDevice],
   );
 
   const handleSpeakerDeviceChange = useCallback(
     (deviceId: string) => {
-      setSelectedSpeakerDevice(deviceId);
+      selectSpeakerDevice(deviceId);
     },
-    [setSelectedSpeakerDevice],
+    [selectSpeakerDevice],
   );
+
+  const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
+  const audioDevices = allDevices.filter((d) => d.kind === "audioinput");
+  const speakerDevices = allDevices.filter((d) => d.kind === "audiooutput");
 
   const isVideoLoading = videoState === CaptureState.STARTING;
   const isAudioLoading = audioState === CaptureState.STARTING;

@@ -1,4 +1,4 @@
-import { getCaptureStateDisplay } from "@zvonok/client/media/capture-state";
+import { deriveMediaControlState } from "@zvonok/react";
 import { AlertTriangle, Loader2, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,14 +23,21 @@ export const RoomLeftControls = ({
   const { toggleVideo: onToggleVideo, toggleAudio: onToggleAudio } = useRoomSessionActions();
   const { isVideoEnabled, isAudioEnabled, videoCaptureState, audioCaptureState } = mediaControls;
 
-  const videoDisplay = getCaptureStateDisplay(videoCaptureState, "video");
+  const video = deriveMediaControlState({
+    isEnabled: isVideoEnabled,
+    captureState: videoCaptureState,
+    kind: "video",
+  });
+  const audio = deriveMediaControlState({
+    isEnabled: isAudioEnabled,
+    captureState: audioCaptureState,
+    kind: "audio",
+    isMutedByHost,
+  });
+  // Host mute overrides the capture-state vocabulary for audio.
   const audioDisplay = isMutedByHost
-    ? {
-        tooltip: "Muted by host",
-        status: "off" as const,
-        statusText: null,
-      }
-    : getCaptureStateDisplay(audioCaptureState, "audio");
+    ? { tooltip: "Muted by host", status: "off" as const, statusText: null }
+    : audio.display;
 
   return (
     <div className={cn("flex gap-2", className)}>
@@ -39,27 +46,27 @@ export const RoomLeftControls = ({
           render={
             <Button
               type="button"
-              variant={isVideoEnabled ? buttonVariant : buttonInactiveVariant}
+              variant={video.isOn ? buttonVariant : buttonInactiveVariant}
               className="relative"
               size="icon"
               onClick={onToggleVideo}
-              aria-label={videoDisplay.tooltip}
+              aria-label={video.display.tooltip}
             />
           }
         >
-          {videoDisplay.status === "error" && (
+          {video.hasError && (
             <Badge className="absolute -top-2 -right-1 size-5" variant="destructive">
               <AlertTriangle className="size-3" />
             </Badge>
           )}
-          {videoDisplay.status === "loading" && (
+          {video.isLoading && (
             <Badge className="absolute -top-2 -right-1 size-5" variant="secondary">
               <Loader2 className="size-3 animate-spin" />
             </Badge>
           )}
-          {isVideoEnabled ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+          {video.isOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
         </TooltipTrigger>
-        <TooltipContent>{videoDisplay.tooltip}</TooltipContent>
+        <TooltipContent>{video.display.tooltip}</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -67,7 +74,7 @@ export const RoomLeftControls = ({
           render={
             <Button
               type="button"
-              variant={isAudioEnabled && !isMutedByHost ? buttonVariant : buttonInactiveVariant}
+              variant={audio.isOn ? buttonVariant : buttonInactiveVariant}
               className="relative"
               size="icon"
               onClick={onToggleAudio}
@@ -75,19 +82,19 @@ export const RoomLeftControls = ({
             />
           }
         >
-          {audioDisplay.status === "error" && (
+          {audio.hasError && (
             <Badge className="absolute -top-2 -right-1 size-5" variant="destructive">
               <AlertTriangle className="size-3" />
             </Badge>
           )}
-          {audioDisplay.status === "loading" && (
+          {audio.isLoading && (
             <Badge className="absolute -top-2 -right-1 size-5" variant="secondary">
               <Loader2 className="size-3 animate-spin" />
             </Badge>
           )}
-          {isMutedByHost ? (
+          {audio.isForcedOff ? (
             <MicOff className="size-4 text-red-500" />
-          ) : isAudioEnabled ? (
+          ) : audio.isOn ? (
             <Mic className="size-4" />
           ) : (
             <MicOff className="size-4" />

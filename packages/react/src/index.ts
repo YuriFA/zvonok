@@ -1,7 +1,7 @@
 /**
  * @zvonok/react public entry point: headless React bindings over
  * {@link https://www.npmjs.com/package/@zvonok/client | @zvonok/client}
- * plus the prebuilt {@link ZvonokRoom} drop-in component.
+ * plus the embedded room entry (./embedded).
  */
 
 export { ZvonokProvider, type ZvonokProviderProps } from "./zvonok-context.js";
@@ -16,6 +16,64 @@ export {
   type UseParticipantsResult,
 } from "./use-participants.js";
 export { useViewportQuality } from "./use-viewport-quality.js";
+export {
+  PeerQualityProvider,
+  usePeerQualityContext,
+  usePeerQualityStats,
+  type PeerQualityProviderProps,
+} from "./peer-quality-context.js";
+export {
+  PeerQualityEngine,
+  STATS_INTERVAL_MS,
+  LAYER_SWITCH_DEBOUNCE_MS,
+  type PeerQualityBindOptions,
+} from "./peer-quality-engine.js";
+export {
+  usePublishControls,
+  type UsePublishControlsResult,
+  type UsePublishControlsOptions,
+  type PublishToggleHooks,
+  type PublishToggleResult,
+  type PublishKind,
+} from "./use-publish-controls.js";
+export { useSfuTrackSync } from "./use-sfu-track-sync.js";
+export {
+  usePrejoin,
+  type UsePrejoinOptions,
+  type UsePrejoinResult,
+  type PrejoinPhase,
+} from "./use-prejoin.js";
+export {
+  hasCapabilities,
+  CapabilitiesGate,
+  type CapabilitiesGateProps,
+  type RequiredCapabilities,
+} from "./capability-gate.js";
+export {
+  deriveMediaControlState,
+  type MediaControlState,
+  type DeriveMediaControlStateOptions,
+} from "./derive-media-control.js";
+export {
+  mapScreenShareError,
+  type ScreenShareErrorPresentation,
+} from "./map-screen-share-error.js";
+export {
+  useRoomLayout,
+  type RoomLayout,
+  type RoomLayoutParticipant,
+  type ArrangedTile,
+  type RoomLayoutSpotlight,
+  type LayoutRect,
+  type UseRoomLayoutOptions,
+} from "./use-room-layout.js";
+export {
+  Tile,
+  useTileContext,
+  resolveUiProp,
+  type TileProps,
+  type TileContextValue,
+} from "./tile.js";
 export { useVideoStream } from "./use-video-stream.js";
 export {
   useDevicePermissions,
@@ -71,7 +129,11 @@ export {
 } from "./use-store-selector.js";
 export {
   useDeviceControls,
+  loadDeviceSelection,
   type UseDeviceControlsResult,
+  type UseDeviceControlsOptions,
+  type ZvonokCaptureControl,
+  type DeviceSelection,
 } from "./use-device-controls.js";
 export {
   useQualityControls,
@@ -91,4 +153,3 @@ export {
   type ZvonokServerJoinErrorCode,
 } from "./errors.js";
 export type { ZvonokParticipant, ZvonokStatus } from "./types.js";
-export { ZvonokRoom, type ZvonokRoomProps } from "./prebuilt/ZvonokRoom.js";

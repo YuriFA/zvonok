@@ -147,7 +147,7 @@ export function ChatProvider({ roomId, currentUserId, children }: ChatProviderPr
 
   const loadMore = useCallback(() => {
     void history.fetchNextPage();
-  }, [history.fetchNextPage]);
+  }, [history]);
 
   const resetUnreadCount = useCallback(() => {
     setUnreadCount(0);

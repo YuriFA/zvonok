@@ -12,10 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import type { MediaDevice } from "../hooks/use-media-devices";
-
 interface Props {
-  devices: MediaDevice[];
+  devices: MediaDeviceInfo[];
   selectedDeviceId: string | null;
   onDeviceChange: (deviceId: string) => void;
 }

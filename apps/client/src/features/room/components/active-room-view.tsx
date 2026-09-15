@@ -1,6 +1,4 @@
-import type { ScreenShareError } from "@zvonok/client/screen-share/types";
-import { useScreenShare } from "@zvonok/react";
-import { computeLayout } from "@zvonok/video-layout";
+import { hasCapabilities, mapScreenShareError, useRoomLayout, useScreenShare } from "@zvonok/react";
 import { Lock, LockOpen, MessageSquare, MicOff, Users } from "lucide-react";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -79,9 +77,38 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     typeof navigator !== "undefined" &&
     typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
-  // Derive the active screen share: local takes priority, then first remote sharer
+  // Stage arrangement: the package derivation orders local-first, picks
+  // the spotlight sharer, and computes rects. It memoizes on arrangement
+  // semantics, so unrelated participant churn keeps tile references stable.
+  const layout = useRoomLayout({
+    participants: useMemo(
+      () => [
+        {
+          userId: localUserId,
+          isLocal: true,
+          isScreenSharing: isSharing && screenStream !== null,
+        },
+        ...remotePeers.map((peer) => ({
+          userId: peer.userId,
+          isScreenSharing: peer.isScreenSharing && peer.screenStream !== null,
+        })),
+      ],
+      [localUserId, isSharing, screenStream, remotePeers],
+    ),
+    containerWidth: dimensions.width,
+    containerHeight: dimensions.height,
+  });
+  const isSpotlightMode = layout.spotlight !== null;
+
+  // Active screen share payload for the spotlight selected above.
   const activeScreenShare = useMemo((): ActiveScreenShare | null => {
-    if (isSharing && screenStream) {
+    if (layout.spotlight === null) {
+      return null;
+    }
+    if (layout.spotlight.userId === localUserId) {
+      if (!screenStream) {
+        return null;
+      }
       return {
         userId: localUserId,
         sharerName: currentUsername ?? "You",
@@ -89,10 +116,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
         isLocal: true,
       };
     }
-
-    const remotePeer = remotePeers.find(
-      (peer) => peer.isScreenSharing && peer.screenStream !== null,
-    );
+    const remotePeer = remotePeers.find((peer) => peer.userId === layout.spotlight?.userId);
     if (remotePeer?.screenStream) {
       return {
         userId: remotePeer.userId,
@@ -101,11 +125,8 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
         isLocal: false,
       };
     }
-
     return null;
-  }, [isSharing, screenStream, localUserId, currentUsername, remotePeers]);
-
-  const isSpotlightMode = activeScreenShare !== null;
+  }, [layout.spotlight, localUserId, currentUsername, screenStream, remotePeers]);
   const activeSpeakerId = useActiveSpeakerId();
 
   const recorder = useCallRecording({
@@ -140,17 +161,6 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     }
   };
 
-  const layout = useMemo(
-    () =>
-      computeLayout({
-        containerWidth: dimensions.width,
-        containerHeight: dimensions.height,
-        participantCount: remotePeers.length + 1,
-        spotlight: isSpotlightMode,
-      }),
-    [dimensions.height, dimensions.width, remotePeers.length, isSpotlightMode],
-  );
-
   // Stable per-tile style objects: RoomVideo is memoized, so rebuilding
   // styles on every participant event would defeat the bailout.
   const tileStyles = useMemo(
@@ -160,9 +170,9 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
           position: "absolute",
           top: 0,
           left: 0,
-          width: tile?.width ?? 0,
-          height: tile?.height ?? 0,
-          transform: `translateX(${tile?.x ?? 0}px) translateY(${tile?.y ?? 0}px)`,
+          width: tile.rect.width,
+          height: tile.rect.height,
+          transform: `translateX(${tile.rect.x}px) translateY(${tile.rect.y}px)`,
         }),
       ),
     [layout.tiles],
@@ -172,10 +182,9 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
 
   // Server-delivered capabilities gate the host affordances; role and
   // owner knowledge never lives in the client.
-  const ownCapabilities = capabilities;
-  const canMuteUsers = ownCapabilities.includes("mute-users");
-  const canLockRoom = ownCapabilities.includes("lock-room");
-  const canRemoveParticipants = ownCapabilities.includes("remove-participants");
+  const canMuteUsers = hasCapabilities(capabilities, "mute-users");
+  const canLockRoom = hasCapabilities(capabilities, "lock-room");
+  const canRemoveParticipants = hasCapabilities(capabilities, "remove-participants");
 
   const [asideState, setAsideState] = useState<string | null>(null);
 
@@ -219,15 +228,13 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     try {
       await startScreenShare();
     } catch (error) {
-      const kind = error as ScreenShareError;
-      if (kind === "unsupported") {
-        return;
+      const message = mapScreenShareError(error, {
+        blocked: "Another participant is already sharing",
+        fallback: "Screen share was not started",
+      });
+      if (message !== undefined) {
+        toast.error(message);
       }
-      if (kind === "blocked") {
-        toast.error("Another participant is already sharing");
-        return;
-      }
-      toast.error("Screen share was not started");
     } finally {
       setIsStartingScreenShare(false);
     }
@@ -256,7 +263,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
           {hasValidDimensions && (
             <>
               {/* Screen share spotlight - rendered only in spotlight mode */}
-              {isSpotlightMode && layout.spotlightArea && (
+              {isSpotlightMode && activeScreenShare && layout.spotlight && (
                 <ScreenShareSpotlight
                   key={activeScreenShare.userId}
                   stream={activeScreenShare.stream}
@@ -264,10 +271,10 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                   isLocal={activeScreenShare.isLocal}
                   style={{
                     position: "absolute",
-                    top: layout.spotlightArea.y,
-                    left: layout.spotlightArea.x,
-                    width: layout.spotlightArea.width,
-                    height: layout.spotlightArea.height,
+                    top: layout.spotlight.rect.y,
+                    left: layout.spotlight.rect.x,
+                    width: layout.spotlight.rect.width,
+                    height: layout.spotlight.rect.height,
                   }}
                 />
               )}

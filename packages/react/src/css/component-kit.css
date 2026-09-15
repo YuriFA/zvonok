@@ -1,0 +1,174 @@
+/*
+ * Component kit: design tokens and the shared primitives (buttons, badges,
+ * fields, cards, tiles). The embedded preset builds on this sheet; custom
+ * UIs can take just the kit.
+ *
+ * Theming contract: every color, radius, and font parameter is a --zk-*
+ * custom property defined on the .zk namespace class. Hosts override the
+ * tokens on the widget root or any ancestor; the values here are the
+ * built-in defaults. Token names are the stable styling contract - class
+ * names and DOM are not.
+ */
+
+.zk {
+  --zk-color-background: #16181d;
+  --zk-color-surface: #1c1f25;
+  --zk-color-surface-raised: #22252c;
+  --zk-color-surface-hover: #2c3039;
+  --zk-color-border: #2a2e36;
+  --zk-color-border-strong: #3a404d;
+  --zk-color-text: #e6e8eb;
+  --zk-color-text-muted: #9aa1ac;
+  --zk-color-accent: #2f6f4f;
+  --zk-color-accent-strong: #5b7ca8;
+  --zk-color-danger: #963838;
+  --zk-color-danger-surface: #3a2626;
+  --zk-color-danger-border: #5c3535;
+  --zk-color-danger-text: #e08a8a;
+  --zk-color-notice-surface: rgba(196, 143, 22, 0.18);
+  --zk-color-notice-text: #e8c069;
+  --zk-color-overlay: rgba(0, 0, 0, 0.6);
+  --zk-color-avatar: #3a404d;
+  --zk-color-tile-video-off: #101216;
+  --zk-radius: 10px;
+  --zk-radius-sm: calc(var(--zk-radius) - 4px);
+  --zk-radius-md: calc(var(--zk-radius) - 2px);
+  --zk-radius-lg: calc(var(--zk-radius) + 2px);
+  --zk-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --zk-font-size-sm: 12px;
+  --zk-font-size-md: 14px;
+  --zk-font-size-lg: 18px;
+}
+
+.zk,
+.zk *,
+.zk *::before,
+.zk *::after {
+  box-sizing: border-box;
+}
+
+/* Shared button. Modifier classes: zk-button-off (state off),
+   zk-button-join (accent), zk-button-leave (danger hover). */
+.zk-button {
+  padding: 8px 16px;
+  border: 1px solid var(--zk-color-border-strong);
+  border-radius: var(--zk-radius-md);
+  background-color: var(--zk-color-surface-raised);
+  color: var(--zk-color-text);
+  font-size: var(--zk-font-size-md);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.zk-button:hover:not(:disabled) {
+  background-color: var(--zk-color-surface-hover);
+}
+
+.zk-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.zk-button-off {
+  background-color: var(--zk-color-danger-surface);
+  border-color: var(--zk-color-danger-border);
+}
+
+.zk-button-join {
+  background-color: var(--zk-color-accent);
+  border-color: var(--zk-color-accent);
+}
+
+.zk-button-join:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--zk-color-accent) 85%, white);
+}
+
+.zk-button-leave:hover:not(:disabled) {
+  background-color: var(--zk-color-danger);
+}
+
+/* Shared badge positioned on a tile. */
+.zk-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  padding: 2px 8px;
+  border-radius: var(--zk-radius-sm);
+  background-color: var(--zk-color-overlay);
+  color: #fff;
+  font-size: var(--zk-font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-badge-muted {
+  left: auto;
+  right: 8px;
+  background-color: rgba(180, 40, 40, 0.85);
+}
+
+/* Card panel for the prejoin and error stages. */
+.zk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 340px;
+  padding: 24px;
+  border: 1px solid var(--zk-color-border);
+  border-radius: var(--zk-radius-lg);
+  background-color: var(--zk-color-surface);
+}
+
+.zk-title {
+  margin: 0;
+  font-size: var(--zk-font-size-lg);
+  font-weight: 600;
+  text-align: center;
+}
+
+.zk-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--zk-color-text-muted);
+}
+
+.zk-input {
+  padding: 8px 12px;
+  border: 1px solid var(--zk-color-border-strong);
+  border-radius: var(--zk-radius-md);
+  background-color: var(--zk-color-background);
+  color: var(--zk-color-text);
+  font-size: var(--zk-font-size-md);
+  font-family: inherit;
+}
+
+.zk-input:focus {
+  outline: 1px solid var(--zk-color-accent-strong);
+  border-color: var(--zk-color-accent-strong);
+}
+
+/* Participant tile media primitives (positioned by the consumer). */
+.zk-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.zk-tile-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--zk-color-avatar);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--zk-color-text);
+}

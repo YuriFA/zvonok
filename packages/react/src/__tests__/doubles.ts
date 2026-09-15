@@ -6,6 +6,7 @@
 import { vi } from "vitest";
 
 import type { CaptureState } from "@zvonok/client/media/capture-state";
+import type { PeerQualityStats } from "@zvonok/client/sfu/types";
 
 class MockMediaStream {
   private tracks: MediaStreamTrack[];
@@ -78,6 +79,9 @@ export function createMockSfuManager() {
     (peer: { userId: string; username: string }) => void
   >();
   const peerLeftListeners = new Set<(userId: string) => void>();
+  const qualityStatsListeners = new Set<
+    (stats: Map<string, PeerQualityStats>) => void
+  >();
   const kickedListeners = new Set<(payload: { roomId: string }) => void>();
   const roomEndedListeners = new Set<(payload: { roomId: string }) => void>();
   const producerStateListeners = new Set<
@@ -156,7 +160,10 @@ export function createMockSfuManager() {
     startStatsCollection: vi.fn(),
     stopStatsCollection: vi.fn(),
     getStats: vi.fn(() => new Map()),
-    onQualityStats: vi.fn(() => () => {}),
+    onQualityStats: vi.fn((listener: (stats: Map<string, PeerQualityStats>) => void) => {
+      qualityStatsListeners.add(listener);
+      return () => qualityStatsListeners.delete(listener);
+    }),
     onBroadcast: vi.fn(
       (
         listener: (message: {
@@ -287,6 +294,9 @@ export function createMockSfuManager() {
     emitPeerLeft(userId: string): void {
       peerLeftListeners.forEach((listener) => listener(userId));
     },
+    emitQualityStats(stats: Map<string, PeerQualityStats>): void {
+      qualityStatsListeners.forEach((listener) => listener(stats));
+    },
     emitKicked(roomId = "room-1"): void {
       kickedListeners.forEach((listener) => listener({ roomId }));
     },
@@ -348,7 +358,7 @@ export function createMockMediaManager() {
 
   const deviceService = {
     getUserMedia: vi.fn(),
-    enumerateDevices: vi.fn(async () => []),
+    enumerateDevices: vi.fn(async (): Promise<MediaDeviceInfo[]> => []),
     queryPermission: vi.fn(),
   };
 
@@ -424,8 +434,25 @@ export function createTrack(
     kind,
     id,
     enabled,
+    readyState: "live",
     onmute: null,
     onunmute: null,
     onended: null,
   } as unknown as MediaStreamTrack;
+}
+
+/** jsdom lacks matchMedia; the quality provider uses it for its default. */
+export function stubMatchMedia(matches = false): void {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    })),
+  );
 }

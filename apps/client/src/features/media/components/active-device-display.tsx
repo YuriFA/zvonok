@@ -2,16 +2,13 @@ import { Video, Mic, Volume2, VideoOff, MicOff, VolumeX } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import type { MediaDevice } from "../hooks/use-media-devices";
-
 export interface ActiveDeviceDisplayProps {
   /** Camera device info */
-  camera?: MediaDevice;
+  camera?: MediaDeviceInfo;
   /** Microphone device info */
-  microphone?: MediaDevice;
+  microphone?: MediaDeviceInfo;
   /** Speaker device info */
-  speaker?: MediaDevice;
-  /** Whether video is enabled */
+  speaker?: MediaDeviceInfo;
   isVideoEnabled?: boolean;
   /** Whether audio is enabled */
   isAudioEnabled?: boolean;

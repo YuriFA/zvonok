@@ -1,11 +1,11 @@
+import { useDeviceControls } from "@zvonok/react";
 import { Settings, X, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 import { cn } from "@/lib/utils";
 
-import { useDeviceSwitching } from "../hooks/use-device-switching";
-import { useMediaDevices } from "../hooks/use-media-devices";
 import { ActiveDeviceDisplay } from "./active-device-display";
 import { SingleDeviceSelector } from "./single-device-selector";
 
@@ -27,17 +27,19 @@ export function DeviceSettingsPanel({
   const [isSwitching, setIsSwitching] = useState<"video" | "audio" | "speaker" | null>(null);
 
   const {
-    videoDevices,
-    audioDevices,
-    speakerDevices,
+    devices: allDevices,
+    camera,
+    mic,
     selectedDevices,
-    setSelectedVideoDevice,
-    setSelectedAudioDevice,
-    setSelectedSpeakerDevice,
+    selectVideoDevice,
+    selectAudioDevice,
+    selectSpeakerDevice,
     isLoading,
-  } = useMediaDevices();
+  } = useDeviceControls({ storageKey: STORAGE_KEYS.SELECTED_DEVICES });
 
-  const { switchVideoDevice, switchAudioDevice } = useDeviceSwitching();
+  const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
+  const audioDevices = allDevices.filter((d) => d.kind === "audioinput");
+  const speakerDevices = allDevices.filter((d) => d.kind === "audiooutput");
 
   const activeCamera =
     videoDevices.find((d) => d.deviceId === selectedDevices.videoDeviceId) ?? videoDevices[0];
@@ -58,37 +60,37 @@ export function DeviceSettingsPanel({
     async (deviceId: string) => {
       setIsSwitching("video");
       try {
-        const success = await switchVideoDevice(deviceId);
+        const success = await camera.switchDevice(deviceId);
         if (success) {
-          setSelectedVideoDevice(deviceId);
+          selectVideoDevice(deviceId);
         }
       } finally {
         setIsSwitching(null);
       }
     },
-    [switchVideoDevice, setSelectedVideoDevice],
+    [camera, selectVideoDevice],
   );
 
   const handleAudioChange = useCallback(
     async (deviceId: string) => {
       setIsSwitching("audio");
       try {
-        const success = await switchAudioDevice(deviceId);
+        const success = await mic.switchDevice(deviceId);
         if (success) {
-          setSelectedAudioDevice(deviceId);
+          selectAudioDevice(deviceId);
         }
       } finally {
         setIsSwitching(null);
       }
     },
-    [switchAudioDevice, setSelectedAudioDevice],
+    [mic, selectAudioDevice],
   );
 
   const handleSpeakerChange = useCallback(
     async (deviceId: string) => {
       setIsSwitching("speaker");
       try {
-        setSelectedSpeakerDevice(deviceId);
+        selectSpeakerDevice(deviceId);
         if (setSink) {
           await setSink(deviceId);
         }
@@ -96,7 +98,7 @@ export function DeviceSettingsPanel({
         setIsSwitching(null);
       }
     },
-    [setSink, setSelectedSpeakerDevice],
+    [setSink, selectSpeakerDevice],
   );
 
   const renderSelectors = () => (

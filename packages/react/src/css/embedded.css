@@ -1,0 +1,156 @@
+/*
+ * Embedded room preset: composition styles for the @zvonok/react/embedded
+ * entry, built on the component kit. Requires component-kit.css and the
+ * .zk namespace class on the room root. Class names and DOM are not a
+ * stable contract; the --zk-* tokens are.
+ */
+
+.zk-room {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  height: 100%;
+  width: 100%;
+  background-color: var(--zk-color-background);
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: var(--zk-font-size-md);
+  line-height: 1.4;
+}
+
+.zk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--zk-color-border);
+}
+
+.zk-room-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zk-count {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background-color: var(--zk-color-border);
+  font-size: var(--zk-font-size-sm);
+}
+
+.zk-status {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--zk-color-text-muted);
+}
+
+/* Flow grid layout (layout="grid"). */
+.zk-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  padding: 12px 16px;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.zk-tile {
+  position: relative;
+  min-height: 135px;
+  overflow: hidden;
+  border-radius: var(--zk-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zk-tile-screen {
+  grid-column: 1 / -1;
+  background-color: var(--zk-color-tile-video-off);
+}
+
+/* Spotlight layout (layout="spotlight"): derivation supplies tile rects. */
+.zk-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.zk-stage .zk-tile {
+  position: absolute;
+  min-height: 0;
+  background-color: var(--zk-color-tile-video-off);
+}
+
+.zk-notice {
+  margin: 0;
+  padding: 8px 16px;
+  background-color: var(--zk-color-notice-surface);
+  color: var(--zk-color-notice-text);
+  font-size: 13px;
+}
+
+.zk-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--zk-color-border);
+}
+
+.zk-prejoin {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.zk-toggle-row {
+  display: flex;
+  gap: 8px;
+}
+
+.zk-toggle-row .zk-button {
+  flex: 1;
+}
+
+.zk-error {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.zk-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 380px;
+  padding: 24px;
+  border: 1px solid var(--zk-color-danger-border);
+  border-radius: 12px;
+  background-color: #241a1c;
+}
+
+.zk-error-code {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background-color: var(--zk-color-danger-surface);
+  color: var(--zk-color-danger-text);
+  font-size: var(--zk-font-size-sm);
+  font-family: ui-monospace, monospace;
+}
+
+.zk-error-message {
+  margin: 0;
+  text-align: center;
+  color: #d8dade;
+}

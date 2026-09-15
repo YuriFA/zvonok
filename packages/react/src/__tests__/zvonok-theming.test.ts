@@ -3,42 +3,55 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const cssPath = join(
+const kitPath = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../prebuilt/zvonok.css",
+  "../css/component-kit.css",
+);
+const embeddedPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../css/embedded.css",
 );
 
 /**
- * The documented theming contract: the stylesheet consumes the --zvonok-*
- * custom properties with the built-in defaults as fallbacks. Renaming or
- * dropping a variable is a breaking change for styled hosts.
+ * The styling contract (D6): every color, radius, and font parameter is a
+ * --zk-* custom property defined once on the .zk namespace class; the
+ * preset sheet consumes the tokens. Renaming or dropping a token is a
+ * breaking change for themed hosts.
  */
-describe("ZvonokRoom theming variables", () => {
-  const css = readFileSync(cssPath, "utf8");
+describe("embedded preset theming tokens", () => {
+  const kit = readFileSync(kitPath, "utf8");
+  const embedded = readFileSync(embeddedPath, "utf8");
 
-  it("reads every documented variable with a default fallback", () => {
+  it("defines every documented token on the .zk namespace with its default", () => {
     const documented: Array<[name: string, fallback: string]> = [
-      ["--zvonok-accent-color", "#2f6f4f"],
-      ["--zvonok-background-color", "#16181d"],
-      ["--zvonok-text-color", "#e6e8eb"],
-      ["--zvonok-radius", "10px"],
-      ["--zvonok-font-family", "system-ui"],
+      ["--zk-color-background", "#16181d"],
+      ["--zk-color-text", "#e6e8eb"],
+      ["--zk-color-accent", "#2f6f4f"],
+      ["--zk-color-border", "#2a2e36"],
+      ["--zk-radius", "10px"],
+      ["--zk-font-family", "system-ui"],
     ];
 
-    for (const [name, fallback] of documented) {
+    for (const [name, value] of documented) {
       const pattern = new RegExp(
-        `var\\(\\s*${name.replace(/[-]/g, "\\-")}\\s*,\\s*[^)]*${fallback.replace(/[#]/g, "\\#")}`,
+        `\\.zk\\s*\\{[^}]*${name.replace(/-/g, "\\-")}\\s*:\\s*${value.replace(/[#]/g, "\\#")}`,
       );
-      expect(css, `${name} with ${fallback} fallback`).toMatch(pattern);
+      expect(kit, `${name}: ${value}`).toMatch(pattern);
     }
   });
 
-  it("never defines --zvonok-* properties itself", () => {
-    expect(css).not.toMatch(/--zvonok-[a-z-]+\s*:/);
+  it("keeps token definitions out of the preset sheet", () => {
+    const definitions = embedded.match(/--zk-[a-z0-9-]+\s*:/g) ?? [];
+    expect(definitions).toEqual([]);
   });
 
-  it("keeps every read inside the namespaced widget scope", () => {
-    const reads = css.match(/var\(--zvonok-[a-z-]+/g) ?? [];
-    expect(reads.length).toBeGreaterThanOrEqual(5);
+  it("consumes tokens inside the preset sheet", () => {
+    const reads = embedded.match(/var\(--zk-[a-z0-9-]+/g) ?? [];
+    expect(reads.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("scopes the preset to zk-prefixed classes", () => {
+    expect(embedded).toMatch(/^\.zk-room/m);
+    expect(embedded).not.toMatch(/^\.(?!zk)[a-z]/m);
   });
 });

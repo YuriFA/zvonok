@@ -14,12 +14,10 @@ import {
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 
-import type { MediaDevice } from "../hooks/use-media-devices";
-
 export interface DeviceControlGroupProps {
   captureState?: CaptureState;
   onToggle?: () => void;
-  devices: MediaDevice[];
+  devices: MediaDeviceInfo[];
   selectedDeviceId: string | null;
   onDeviceChange: (deviceId: string) => void;
   isSwitching?: boolean;

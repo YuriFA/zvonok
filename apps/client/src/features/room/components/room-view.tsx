@@ -1,7 +1,8 @@
-import type { UseZvonokConnectionResult } from "@zvonok/react";
+import { PeerQualityProvider, type UseZvonokConnectionResult } from "@zvonok/react";
 import { useNavigate } from "react-router";
 
-import { PeerQualityProvider } from "../contexts/peer-quality.context";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+
 import { RoomAudioContextProvider } from "../contexts/room-audio.context";
 import { useRoomIdentity } from "../contexts/room-identity.context";
 import { RoomSessionProvider, useRoomSessionState } from "../contexts/room-session.context";
@@ -37,10 +38,11 @@ function RoomViewContent({
   });
   const { userId } = useRoomIdentity();
   const { mediaControls, connectionState, wasKicked } = useRoomSessionState();
+  const isMobile = useIsMobile();
   const isOwner = userId === room.ownerId;
 
   return (
-    <PeerQualityProvider enabled={connectionState === "connected"}>
+    <PeerQualityProvider enabled={connectionState === "connected"} isMobile={isMobile}>
       <RoomAudioContextProvider>
         <div className="flex h-dscreen flex-col" data-testid="room-view">
           <ActiveRoomHeader

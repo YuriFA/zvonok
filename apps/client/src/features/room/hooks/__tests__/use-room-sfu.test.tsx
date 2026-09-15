@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { CaptureState } from "@zvonok/client/media/capture-state";
+import { ZvonokProvider } from "@zvonok/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRoomSfu } from "../use-room-sfu";
@@ -96,17 +97,25 @@ function renderUseRoomSfu(options: {
   stopAudioCapture?: () => Promise<boolean>;
   stopVideoCapture?: () => Promise<boolean>;
 }) {
-  return renderHook(() =>
-    useRoomSfu({
-      localVideoStream: null,
-      localAudioStream: options.localAudioStream ?? null,
-      onKicked: vi.fn(),
-      connection: (options.connection ?? createConnection()) as never,
-      ensureAudio: options.ensureAudio ?? vi.fn(async () => null),
-      ensureVideo: vi.fn(async () => null),
-      stopAudioCapture: options.stopAudioCapture ?? vi.fn(async () => true),
-      stopVideoCapture: options.stopVideoCapture ?? vi.fn(async () => true),
-    }),
+  // ZvonokProvider satisfies the package useSfuTrackSync mount (it reads
+  // the session context; its manager stays null here, so it idles).
+  return renderHook(
+    () =>
+      useRoomSfu({
+        localVideoStream: null,
+        localAudioStream: options.localAudioStream ?? null,
+        onKicked: vi.fn(),
+        connection: (options.connection ?? createConnection()) as never,
+        ensureAudio: options.ensureAudio ?? vi.fn(async () => null),
+        ensureVideo: vi.fn(async () => null),
+        stopAudioCapture: options.stopAudioCapture ?? vi.fn(async () => true),
+        stopVideoCapture: options.stopVideoCapture ?? vi.fn(async () => true),
+      }),
+    {
+      wrapper: ({ children }: { children: React.ReactNode }) => (
+        <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
+      ),
+    },
   );
 }
 

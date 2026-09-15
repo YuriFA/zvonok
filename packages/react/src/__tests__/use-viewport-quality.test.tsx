@@ -1,11 +1,17 @@
 import { act, render } from "@testing-library/react";
 import { useRef, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
+import {
+  PeerQualityProvider,
+  usePeerQualityContext,
+} from "../peer-quality-context.js";
+import { LAYER_SWITCH_DEBOUNCE_MS } from "../peer-quality-engine.js";
 import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
 import { useViewportQuality } from "../use-viewport-quality.js";
-import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
+import { createMockSfuManager, stubMatchMedia, type MockSfuManager } from "./doubles.js";
 
 type IntersectionEntry = { isIntersecting: boolean };
 
@@ -28,6 +34,20 @@ function fireIntersection(entries: IntersectionEntry[]) {
   });
 }
 
+function createQualityStats(userId: string, level: QualityLevel): PeerQualityStats {
+  const scoreByLevel: Record<QualityLevel, number> = {
+    excellent: 100,
+    good: 70,
+    fair: 50,
+    poor: 10,
+  };
+  return {
+    userId,
+    score: { level, score: scoreByLevel[level] },
+    stats: { bitrate: 500, rtt: 30, jitter: 5, packetLoss: 0, width: 1280, height: 720, fps: 30 },
+  } as PeerQualityStats;
+}
+
 describe("useViewportQuality", () => {
   let sfu: MockSfuManager;
   let setPreferredLayers: Mock;
@@ -39,16 +59,22 @@ describe("useViewportQuality", () => {
   };
 
   let sessionRef: ZvonokSession | null;
+  let engineRef: ReturnType<typeof usePeerQualityContext> | null;
 
   function Wrapper({ children }: { children: ReactNode }) {
-    return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
+    return (
+      <ZvonokProvider serverUrl="https://sfu.test">
+        <PeerQualityProvider>{children}</PeerQualityProvider>
+      </ZvonokProvider>
+    );
   }
 
-  // Captures the session so tests can attach the manager from the outside
-  // (updating the session from inside a consumer would re-run on every
-  // context value change and loop).
+  // Captures the session and the engine so tests can attach the manager
+  // and read engine state from the outside (updating the session from
+  // inside a consumer would re-run on every context value change and loop).
   function Probe() {
     sessionRef = useZvonokSession();
+    engineRef = usePeerQualityContext();
     return null;
   }
 
@@ -73,11 +99,13 @@ describe("useViewportQuality", () => {
     intersectionCallback = null;
     observe.mockClear();
     disconnect.mockClear();
+    engineRef = null;
     sfu = createMockSfuManager();
     setPreferredLayers = sfu.manager.setPreferredLayers as Mock;
     getVideoConsumerIdForUserId = sfu.manager.getVideoConsumerIdForUserId as Mock;
     getVideoConsumerIdForUserId.mockReturnValue("consumer-1");
     vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+    stubMatchMedia(false);
   });
 
   afterEach(() => {
@@ -85,73 +113,74 @@ describe("useViewportQuality", () => {
     vi.unstubAllGlobals();
   });
 
-  it("requests the full layer when the tile is visible", async () => {
+  function emitStats(userId: string, level: QualityLevel): void {
+    act(() => {
+      sfu.manager.emitQualityStats(new Map([[userId, createQualityStats(userId, level)]]));
+    });
+  }
+
+  it("adapts a visible tile to the score-mapped layer after the debounce", async () => {
     renderTile("peer-1");
     await setManager(sfu.manager as unknown as SfuManager);
 
-    expect(observe).toHaveBeenCalledTimes(1);
     fireIntersection([{ isIntersecting: true }]);
+    emitStats("peer-1", "excellent");
+    expect(setPreferredLayers).not.toHaveBeenCalled();
 
+    vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS);
     expect(setPreferredLayers).toHaveBeenCalledWith("consumer-1", 2);
   });
 
-  it("demotes a hidden tile to the lowest layer after the delay", async () => {
+  it("clamps a tile that left the viewport to the lowest layer", async () => {
     renderTile("peer-1");
     await setManager(sfu.manager as unknown as SfuManager);
 
+    fireIntersection([{ isIntersecting: true }]);
+    emitStats("peer-1", "excellent");
     fireIntersection([{ isIntersecting: false }]);
-    expect(setPreferredLayers).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS);
 
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
-    expect(setPreferredLayers).toHaveBeenCalledWith("consumer-1", 0);
+    expect(setPreferredLayers).toHaveBeenLastCalledWith("consumer-1", 0);
   });
 
-  it("cancels the pending demotion when the tile becomes visible again", async () => {
+  it("cancels the pending clamp when the tile becomes visible again", async () => {
     renderTile("peer-1");
     await setManager(sfu.manager as unknown as SfuManager);
 
-    fireIntersection([{ isIntersecting: false }]);
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-    });
     fireIntersection([{ isIntersecting: true }]);
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
+    emitStats("peer-1", "excellent");
+    vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS);
+    fireIntersection([{ isIntersecting: false }]);
+    vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS / 2);
+    fireIntersection([{ isIntersecting: true }]);
+    vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS);
 
     expect(setPreferredLayers).toHaveBeenCalledTimes(1);
-    expect(setPreferredLayers).toHaveBeenCalledWith("consumer-1", 2);
+    expect(setPreferredLayers).toHaveBeenLastCalledWith("consumer-1", 2);
+  });
+  it("restores visibility for the peer on unmount", async () => {
+    const { unmount } = renderTile("peer-1");
+    await setManager(sfu.manager as unknown as SfuManager);
+
+    fireIntersection([{ isIntersecting: false }]);
+    expect(engineRef?.isViewportVisible("peer-1")).toBe(false);
+
+    unmount();
+    expect(engineRef?.isViewportVisible("peer-1")).toBe(true);
+    expect(disconnect).toHaveBeenCalled();
   });
 
-  it("does not re-request an unchanged layer", async () => {
+  it("restores visibility for the peer on unmount", async () => {
     renderTile("peer-1");
     await setManager(sfu.manager as unknown as SfuManager);
 
-    fireIntersection([{ isIntersecting: true }]);
-    fireIntersection([{ isIntersecting: true }]);
     fireIntersection([{ isIntersecting: false }]);
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
-    fireIntersection([{ isIntersecting: false }]);
+    expect(engineRef?.isViewportVisible("peer-1")).toBe(false);
 
-    expect(setPreferredLayers).toHaveBeenCalledTimes(2);
-  });
-
-  it("stays silent while no camera consumer exists for the user", async () => {
-    getVideoConsumerIdForUserId.mockReturnValue(undefined);
-    renderTile("peer-1");
-    await setManager(sfu.manager as unknown as SfuManager);
-
-    fireIntersection([{ isIntersecting: true }]);
-    fireIntersection([{ isIntersecting: false }]);
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
-
-    expect(setPreferredLayers).not.toHaveBeenCalled();
+    const { unmount } = renderTile("peer-1");
+    unmount();
+    expect(engineRef?.isViewportVisible("peer-1")).toBe(true);
+    expect(disconnect).toHaveBeenCalled();
   });
 
   it("never observes for unwired tiles (null userId)", async () => {
@@ -159,23 +188,32 @@ describe("useViewportQuality", () => {
     await setManager(sfu.manager as unknown as SfuManager);
 
     expect(observe).not.toHaveBeenCalled();
+    expect(intersectionCallback).toBeNull();
   });
 
-  it("does not attach without a connected manager", () => {
+  it("observes without a connected manager but never requests layers", async () => {
     renderTile("peer-1");
-    expect(observe).not.toHaveBeenCalled();
+
+    fireIntersection([{ isIntersecting: true }]);
+    emitStats("peer-1", "excellent");
+    vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS);
+
+    expect(observe).toHaveBeenCalled();
+    expect(setPreferredLayers).not.toHaveBeenCalled();
   });
 
-  it("cancels the pending demotion on unmount", async () => {
-    const { unmount } = renderTile("peer-1");
-    await setManager(sfu.manager as unknown as SfuManager);
-
-    fireIntersection([{ isIntersecting: false }]);
-    unmount();
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
-
-    expect(setPreferredLayers).not.toHaveBeenCalled();
+  it("throws outside of a PeerQualityProvider", () => {
+    function BareTile() {
+      const ref = useRef<HTMLDivElement>(null);
+      useViewportQuality(ref, "peer-1");
+      return <div ref={ref} />;
+    }
+    expect(() =>
+      render(<BareTile />, {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
+        ),
+      }),
+    ).toThrow(/PeerQualityProvider/);
   });
 });

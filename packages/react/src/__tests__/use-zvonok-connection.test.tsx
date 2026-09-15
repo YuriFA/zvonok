@@ -389,10 +389,10 @@ describe("useZvonokConnection", () => {
       expect(result.current.hasProducer("audio")).toBe(false);
     });
 
-    it("reject with a typed error before joining", () => {
+    it("reject with a typed error before joining", async () => {
       const { result } = renderConnection();
 
-      expect(
+      await expect(
         result.current.produceTrack(createTrack("audio", "a1")),
       ).rejects.toMatchObject({
         code: "DISCONNECTED",

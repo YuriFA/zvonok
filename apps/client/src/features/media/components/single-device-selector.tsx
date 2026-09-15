@@ -2,19 +2,16 @@ import { Video, Mic, Volume2 } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-
-import type { MediaDevice, DeviceType } from "../hooks/use-media-devices";
-
 export interface SingleDeviceSelectorProps {
-  type: DeviceType;
-  devices: MediaDevice[];
+  type: MediaDeviceKind;
+  devices: MediaDeviceInfo[];
   selectedDeviceId: string | null;
   onDeviceChange: (deviceId: string) => void;
   disabled?: boolean;
   className?: string;
 }
 
-const deviceConfig: Record<DeviceType, { label: string; icon: typeof Video }> = {
+const deviceConfig: Record<MediaDeviceKind, { label: string; icon: typeof Video }> = {
   videoinput: { label: "Camera", icon: Video },
   audioinput: { label: "Microphone", icon: Mic },
   audiooutput: { label: "Speaker", icon: Volume2 },

@@ -1,8 +1,8 @@
 import { CaptureState } from "@zvonok/client/media/capture-state";
-import { useZvonokSession } from "@zvonok/react";
+import { loadDeviceSelection, useZvonokSession } from "@zvonok/react";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
-import { loadSelectedDevices } from "@/features/media/hooks/use-media-devices";
+import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 
 export interface MediaStreamContextValue {
   videoStream: MediaStream | null;
@@ -51,7 +51,7 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
   }, [manager]);
 
   const start = useCallback(async () => {
-    const saved = loadSelectedDevices();
+    const saved = loadDeviceSelection(STORAGE_KEYS.SELECTED_DEVICES);
     await manager.start({
       video: true,
       audio: true,
@@ -61,7 +61,7 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
   }, [manager]);
 
   const ensureAudio = useCallback(async (): Promise<MediaStream | null> => {
-    const saved = loadSelectedDevices();
+    const saved = loadDeviceSelection(STORAGE_KEYS.SELECTED_DEVICES);
     const deviceId = saved.audioDeviceId || undefined;
     // A saved selection can go stale (device unplugged, driver update);
     // fall back to the default device instead of leaving the mic dead.
@@ -74,7 +74,7 @@ export function MediaStreamProvider({ children }: MediaStreamProviderProps) {
   }, [manager]);
 
   const ensureVideo = useCallback(async (): Promise<MediaStream | null> => {
-    const saved = loadSelectedDevices();
+    const saved = loadDeviceSelection(STORAGE_KEYS.SELECTED_DEVICES);
     const deviceId = saved.videoDeviceId || undefined;
     const ok =
       (await manager.videoCapture.start(deviceId)) ||

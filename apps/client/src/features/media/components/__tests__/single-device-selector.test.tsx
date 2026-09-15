@@ -1,11 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 
-import type { MediaDevice } from "../../hooks/use-media-devices";
 import { SingleDeviceSelector } from "../single-device-selector";
 
-function device(deviceId: string, label: string, kind: MediaDevice["kind"]): MediaDevice {
-  return { deviceId, label, kind };
+function device(deviceId: string, label: string, kind: MediaDeviceKind): MediaDeviceInfo {
+  return { deviceId, label, kind, groupId: "", toJSON: () => ({}) } as MediaDeviceInfo;
 }
 
 describe("SingleDeviceSelector", () => {

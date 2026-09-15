@@ -6,12 +6,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CaptureState } from "@zvonok/client/media/capture-state";
 import { ZvonokJoinError } from "../errors.js";
-import { ZvonokRoom, type ZvonokRoomProps } from "../prebuilt/ZvonokRoom.js";
+import {
+  ZvonokEmbeddedRoom,
+  type ZvonokEmbeddedRoomProps,
+} from "../embedded/ZvonokEmbeddedRoom.js";
 import {
   createMockMediaManager,
   createMockScreenShareService,
   createMockSfuManager,
   createTrack,
+  stubMatchMedia,
   tokenFor,
   type MockMediaManager,
   type MockScreenShareService,
@@ -108,9 +112,9 @@ async function flush() {
   });
 }
 
-async function renderJoined(props?: Partial<ZvonokRoomProps>) {
+async function renderJoined(props?: Partial<ZvonokEmbeddedRoomProps>) {
   const view = render(
-    <ZvonokRoom
+    <ZvonokEmbeddedRoom
       serverUrl="https://sfu.test"
       roomSlug="room-1"
       token={TOKEN}
@@ -126,11 +130,12 @@ async function renderJoined(props?: Partial<ZvonokRoomProps>) {
   return view;
 }
 
-describe("ZvonokRoom", () => {
+describe("ZvonokEmbeddedRoom", () => {
   beforeEach(() => {
     sfuHarness.instances.length = 0;
     mediaHarness.instances.length = 0;
     screenShareHarness.instances.length = 0;
+    stubMatchMedia(false);
   });
 
   it("auto-joins with skipPrejoin and renders local and remote tiles", async () => {
@@ -163,7 +168,7 @@ describe("ZvonokRoom", () => {
 
   it("publishes the active local tracks once joined", async () => {
     render(
-      <ZvonokRoom
+      <ZvonokEmbeddedRoom
         serverUrl="https://sfu.test"
         roomSlug="room-1"
         token={TOKEN}
@@ -203,7 +208,7 @@ describe("ZvonokRoom", () => {
   it("renders the typed join error state and calls onError", async () => {
     const onError = vi.fn();
     render(
-      <ZvonokRoom
+      <ZvonokEmbeddedRoom
         serverUrl="https://sfu.test"
         roomSlug="room-1"
         token={TOKEN}
@@ -280,7 +285,7 @@ describe("ZvonokRoom", () => {
 
   it("collects the name and device choices in the pre-join card", async () => {
     render(
-      <ZvonokRoom
+      <ZvonokEmbeddedRoom
         serverUrl="https://sfu.test"
         roomSlug="room-1"
         token={TOKEN}
@@ -352,7 +357,7 @@ describe("ZvonokRoom", () => {
 
   it("skips the pre-join card when displayName is provided", async () => {
     render(
-      <ZvonokRoom
+      <ZvonokEmbeddedRoom
         serverUrl="https://sfu.test"
         roomSlug="room-1"
         token={TOKEN}
@@ -409,7 +414,7 @@ describe("ZvonokRoom", () => {
     expect(service.stop).toHaveBeenCalled();
   });
 
-  it("declares the css side effect and export path in the manifest", () => {
+  it("declares the embedded and css export paths in the manifest", () => {
     const manifest = JSON.parse(
       readFileSync(join(process.cwd(), "package.json"), "utf8"),
     ) as {
@@ -418,9 +423,13 @@ describe("ZvonokRoom", () => {
       sideEffects: string[];
     };
 
-    expect(manifest.exports["./zvonok.css"]).toBe("./src/prebuilt/zvonok.css");
-    expect(manifest.publishConfig.exports["./zvonok.css"]).toBe(
-      "./dist/prebuilt/zvonok.css",
+    expect(manifest.exports["./embedded"]).toBeTruthy();
+    expect(manifest.exports["./css/component-kit.css"]).toBe(
+      "./src/css/component-kit.css",
+    );
+    expect(manifest.exports["./css/embedded.css"]).toBe("./src/css/embedded.css");
+    expect(manifest.publishConfig.exports["./css/embedded.css"]).toBe(
+      "./dist/css/embedded.css",
     );
     expect(manifest.sideEffects).toContain("*.css");
   });
