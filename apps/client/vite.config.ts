@@ -49,12 +49,7 @@ export default defineConfig(async () => {
               // Data layer — loaded on every page (auth, queries)
               [
                 "vendor-data",
-                [
-                  "@tanstack/react-query",
-                  "react-hook-form",
-                  "@hookform/resolvers",
-                  "zod",
-                ],
+                ["@tanstack/react-query", "react-hook-form", "@hookform/resolvers", "zod"],
               ],
               // Room-specific heavy deps — only loaded with room chunk
               ["vendor-sfu", ["mediasoup-client", "socket.io-client"]],
@@ -62,9 +57,7 @@ export default defineConfig(async () => {
               ["vendor-excalidraw", ["@excalidraw/excalidraw", "yjs"]],
             ];
             for (const [chunk, packages] of groups) {
-              if (
-                packages.some((pkg) => id.includes(`/node_modules/${pkg}/`))
-              ) {
+              if (packages.some((pkg) => id.includes(`/node_modules/${pkg}/`))) {
                 return chunk;
               }
             }

@@ -7,6 +7,15 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
+  // Visual regression: zero-tolerance diffs, animations frozen. Video
+  // regions are masked per-test (the fake device animates), tile chrome
+  // around them is not.
+  expect: {
+    toHaveScreenshot: {
+      animations: "disabled",
+      caret: "hide",
+    },
+  },
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
@@ -21,6 +30,15 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: /e2e\/visual\//,
+    },
+    {
+      name: "visual",
+      testMatch: /e2e\/visual\/.*\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+      },
     },
   ],
   webServer: {

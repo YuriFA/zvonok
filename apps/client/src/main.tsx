@@ -40,6 +40,12 @@ fetch(`${API_BASE_URL}/version`)
 const LazyConsoleLayout = lazy(() =>
   import("./routes/console.tsx").then((m) => ({ default: m.ConsoleLayout })),
 );
+const LazyVisualHarness = lazy(() =>
+  import("./dev/visual/visual-harness.tsx").then((m) => ({ default: m.VisualHarness })),
+);
+const LazyWidgetHarness = lazy(() =>
+  import("./dev/widget-harness.tsx").then((m) => ({ default: m.WidgetHarness })),
+);
 const LazyConsoleLoginPage = lazy(() =>
   import("./routes/console-login.tsx").then((m) => ({ default: m.ConsoleLoginPage })),
 );
@@ -128,6 +134,26 @@ const router = createBrowserRouter([
       },
     ],
   },
+  ...(import.meta.env.DEV
+    ? [
+        {
+          path: "/dev/visual",
+          element: (
+            <Suspense fallback={consolePageFallback}>
+              <LazyVisualHarness />
+            </Suspense>
+          ),
+        },
+        {
+          path: "/dev/widget",
+          element: (
+            <Suspense fallback={consolePageFallback}>
+              <LazyWidgetHarness />
+            </Suspense>
+          ),
+        },
+      ]
+    : []),
   {
     path: ROUTES.CONSOLE_LOGIN,
     element: (
