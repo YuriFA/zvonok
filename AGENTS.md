@@ -161,9 +161,7 @@ Hard-to-reverse process/architecture decisions get an ADR in `docs/adr/`.
 |------|---------|
 | `openspec/specs/` | Source of truth: current behavior per domain |
 | `openspec/changes/` | In-flight and archived change proposals |
-| `docs/architecture/` | C4 diagrams, sequence diagrams, domain model (living) |
 | `docs/adr/` | Architecture decision records |
-| `docs/archive/` | Frozen pre-OpenSpec history (SDD, tasks, roadmap, module docs) |
 
 ## Before Implementation
 

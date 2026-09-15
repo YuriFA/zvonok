@@ -202,10 +202,8 @@ zvonok/
 - **[Egress](docs/egress.md)** — HLS/RTMP streaming and server-side recordings
 - **[Whiteboard](docs/whiteboard.md)** — shared collaborative canvas
 - **[Deployment Guide](docs/deployment.md)** — Production Docker setup
-- **[Architecture](docs/architecture/)** — C4 diagrams, domain model
 - **[ADRs](docs/adr/)** — architecture decision records
 - **[OpenSpec Specs](openspec/specs/)** — source of truth: current behavior per domain
-- **[Archive](docs/archive/)** — pre-OpenSpec history (SDD, agent guide, roadmap)
 
 ## License
 

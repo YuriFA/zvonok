@@ -10,7 +10,7 @@ Setup and the full command table live in the root [README](../../README.md). Cli
 
 ## Architecture
 
-- **Media:** SFU path via `mediasoup-client` over Socket.io signalling — no P2P. Sequence: [docs/architecture/sequence-sfu.md](../../docs/architecture/sequence-sfu.md).
+- **Media:** SFU path via `mediasoup-client` over Socket.io signalling — no P2P. Behavior: [openspec/specs/sfu/](../../openspec/specs/sfu/spec.md).
 - **Routing:** React Router v7, file-based in `src/routes/` (home, auth, room, history, console).
 - **UI:** Base UI primitives (`@base-ui/react`) in `src/components/ui/`, styled with Tailwind CSS v4.
 - **State/data:** TanStack React Query; forms via React Hook Form + Zod.

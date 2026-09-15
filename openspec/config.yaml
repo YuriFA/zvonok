@@ -10,9 +10,9 @@ context: |
   Conventions: TypeScript everywhere, no barrel files (import from source),
   server Prettier single quotes, conventional commits, NestJS exceptions (never
   `throw new Error`), client typed errors from lib/api/api.errors.ts.
-  Architecture diagrams (C4, sequences, domain model) live in docs/architecture/
-  as plain docs - do not duplicate them in specs; specs capture behavior.
-  ADRs for hard-to-reverse decisions live in docs/adr/.
+  Specs are the only living documentation of behavior; ADRs in docs/adr/
+  capture hard-to-reverse decisions. Do not maintain separate architecture
+  docs - diagrams belong in the ADR or change that needed them.
 
 rules:
   proposal:
