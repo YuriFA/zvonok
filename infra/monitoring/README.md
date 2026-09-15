@@ -3,8 +3,7 @@
 Self-hosted monitoring stack for the production VPS: Prometheus, Grafana,
 node_exporter, postgres_exporter, Uptime Kuma, and GlitchTip. Monitors the
 whole host - both sites (zvonok, wallet) behind the shared Traefik gateway.
-Research and decision rationale:
-`docs/research/production-monitoring-stack.md`,
+Decision rationale:
 `docs/adr/0005-adopt-prometheus-grafana-observability.md`,
 OpenSpec change `2026-09-14-production-monitoring-stack`.
 

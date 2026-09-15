@@ -7,8 +7,7 @@ swap**, load ~0.15. Workloads: zvonok stack (server in host network mode
 since 542b60c, postgres loopback-published on 127.0.0.1:5432), the wallet
 site (separate compose project), an AmneziaWG VPN container, and the
 shared Traefik gateway in `~/gateway`. Domains: `zvonok.yurifa.site`,
-`docs.zvonok.yurifa.site`, `wallet.yurifa.site`. Evidence base and tool
-comparison: `docs/research/production-monitoring-stack.md`.
+`docs.zvonok.yurifa.site`, `wallet.yurifa.site`.
 
 ## Goals / Non-Goals
 

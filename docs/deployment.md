@@ -245,7 +245,6 @@ make rollback TAG=v2026.09.14  # redeploy an already-pushed deploy tag or sha-<s
 Notes:
 - The VPS needs its stored GHCR login (`scripts/setup-vps.sh`, step 4) to pull; on-box operation is plain `docker compose -f docker-compose.prod.yml ...` (see the setup script output).
 - Builds run under amd64 emulation on Apple Silicon; enable Rosetta in Docker Desktop (Settings > General > "Use Rosetta for x86_64/amd64 emulation") for acceptable speed.
-- Full analysis of the surveyed alternatives: `docs/research/manual-deploy-without-github-actions.md`.
 
 ## Environment Variables
 

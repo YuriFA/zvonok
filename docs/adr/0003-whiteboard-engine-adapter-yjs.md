@@ -14,8 +14,7 @@ deployment requires a paid license key (pricing unpublished; last public
 anchor $6,000/yr), the free-with-watermark tier is gone, and without a key the
 editor stops rendering after five seconds on non-loopback HTTPS. The
 deployment currently runs a pre-whiteboard build, so there is no live
-exposure - but the dependency cannot ship. Research:
-`docs/research/embeddable-whiteboard-chat-plugins.md`.
+exposure - but the dependency cannot ship.
 
 At the same time the product direction (grilling session 2026-09-08) settled
 on a constructor-style client: room capabilities as isolated widgets with

@@ -2,8 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-14
-- Context: production VPS had zero monitoring (research note
-  `docs/research/production-monitoring-stack.md`, OpenSpec change
+- Context: production VPS had zero monitoring (OpenSpec change
   `2026-09-14-production-monitoring-stack`)
 
 ## Context
