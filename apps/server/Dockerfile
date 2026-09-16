@@ -33,18 +33,29 @@ COPY apps/server/package.json ./apps/server/
 
 # Install all dependencies.
 # onlyBuiltDependencies in root package.json controls which postinstall scripts run.
+# This install is the ONLY place the mediasoup-worker binary is produced;
+# the pnpm deploy step below re-installs prod deps but skips it (see there).
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+
+# Hoist the mediasoup-worker binary (prebuilt download or source build - both
+# land in worker/out/Release) to a stable path before pnpm deploy re-installs
+# prod deps without it. The guard makes the build fail loudly if not found.
+RUN WORKER=$(find /app/node_modules -path '*/worker/out/Release/mediasoup-worker' -type f | head -1) && \
+    { test -n "$WORKER" || { echo "ERROR: mediasoup-worker binary not found in builder" >&2; exit 1; }; } && \
+    cp "$WORKER" /app/mediasoup-worker
 
 # Copy server source files
 COPY apps/server ./apps/server
 
-# Generate Prisma client, build NestJS, then create a self-contained production
-# deployment with pnpm deploy — no symlinks, no .pnpm store, clean node_modules.
-ENV CI=true
-
+# Generate Prisma client and build NestJS.
 RUN pnpm -C apps/server exec prisma generate && \
-    pnpm -C apps/server build && \
-    pnpm deploy --filter=server --prod --legacy /app/deploy
+    pnpm -C apps/server build
+
+# pnpm deploy re-runs build scripts for prod deps, and mediasoup is in
+# onlyBuiltDependencies - without the env var it would download/build the
+# worker a second time. mediasoup's postinstall is a no-op when
+# MEDIASOUP_WORKER_BIN is set; the binary hoisted above ships instead.
+RUN MEDIASOUP_WORKER_BIN=/app/mediasoup-worker pnpm deploy --filter=server --prod --legacy /app/deploy
 
 # ── Stage 2: Migrations runner ────────────────────────────────────────────────
 # Has prisma CLI + ts-node for prisma.config.ts; also seeds the DB.
@@ -57,7 +68,10 @@ COPY apps/server/package.json ./apps/server/
 
 # Install all dependencies.
 # Do NOT use --ignore-scripts: bcrypt requires its postinstall to compile the native addon.
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# Migrator never spawns mediasoup; setting MEDIASOUP_WORKER_BIN makes its
+# postinstall a no-op instead of pointlessly downloading/building the worker.
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    MEDIASOUP_WORKER_BIN=/app/mediasoup-worker pnpm install --frozen-lockfile
 
 # Copy Prisma schema, config, migrations, and seed.
 # seed.ts imports src/developer/api-key.helper.ts (self-contained: node:crypto
@@ -90,13 +104,9 @@ WORKDIR /app
 # No symlinks, no .pnpm store — safe to COPY directly.
 COPY --from=builder /app/deploy/node_modules ./apps/server/node_modules
 
-# Expose mediasoup worker at a stable, fixed path.
-# Using a symlink avoids duplicating the binary already present in node_modules.
-# The guard (`test -n`) makes the build fail loudly if the binary is not found.
-RUN WORKER=$(find /app/apps/server/node_modules -name 'mediasoup-worker' \
-        -path '*/worker/out/Release/mediasoup-worker' | head -1) && \
-    { test -n "$WORKER" || { echo "ERROR: mediasoup-worker binary not found in builder" >&2; exit 1; }; } && \
-    ln -s "$WORKER" /app/mediasoup-worker
+# mediasoup worker, hoisted in the builder stage (built once per image build);
+# spawned at runtime via MEDIASOUP_WORKER_BIN below.
+COPY --from=builder /app/mediasoup-worker /app/mediasoup-worker
 
 # Copy Prisma schema and generated client from builder
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
