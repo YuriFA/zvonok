@@ -55,7 +55,7 @@ fi
 
 # Previous deploy marker: nearest tagged ancestor of HEAD's parent, so
 # a tag on HEAD itself (idempotent re-run) never empties the notes range.
-prev=$(git describe --abbrev=0 --match 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]' "$head_sha^" 2>/dev/null || true)
+prev=$(git describe --tags --abbrev=0 --match 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]' "$head_sha^" 2>/dev/null || true)
 range="${prev:+$prev..}$head_sha"
 
 notes=$(git log --oneline --no-decorate "$range" | grep -E '^[0-9a-f]{7,} (feat|fix)(\([^)]*\))?:' || true)
