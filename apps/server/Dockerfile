@@ -1,6 +1,6 @@
 # ── Shared base ──────────────────────────────────────────────────────────────
 # Single layer enables corepack once; all stages inherit it via FROM base.
-FROM node:22-slim AS base
+FROM node:24-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -111,7 +111,7 @@ COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
 ENV MEDIASOUP_WORKER_BIN=/app/mediasoup-worker
 ENV NODE_ENV=production
 
-# Drop privileges: node user (uid 1000) ships with node:22-slim.
+# Drop privileges: node user (uid 1000) ships with node:24-slim.
 # chown runs as root before USER; all subsequent commands run as node.
 RUN chown -R node:node /app
 USER node
