@@ -145,8 +145,8 @@ zvonok/
 |---------|-------------|
 | `make help` | Show all available targets |
 | `make setup` | Create `.env` from template |
-| `make deploy` | Workstation deploy: build amd64 images, push to GHCR, deploy to the VPS (mirrors `deploy.yml`, no GitHub Actions) |
-| `make rollback TAG=` | Redeploy a pushed version (`v2026.09.14` deploy tag or `sha-<short>`) |
+| `make ci` | Run the CI checks locally (lint, typecheck, unit tests) |
+| `make deploy` | Workstation deploy: run `make ci` checks, build amd64 images, push to GHCR, deploy to the VPS (mirrors `deploy.yml`, no GitHub Actions) |
 | `make deploy-local` | Build images and start all services on this machine (local stack) |
 | `make down` | Stop all services |
 | `make migrate` | Run database migrations |

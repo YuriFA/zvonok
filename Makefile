@@ -8,8 +8,7 @@
 #
 # Usage:
 #   make help            Show available targets
-#   make deploy          Workstation deploy: build amd64 images, push to GHCR,
-#                        deploy to the VPS, tag the deploy (v<date> + release)
+#   make ci              Run the CI checks (lint, typecheck, tests); deploy runs them first
 #   make rollback TAG=   Redeploy an already-pushed version (git tag or sha-<short>)
 #   make deploy-local    Build and start the local stack on this machine
 #   make up / down       Start / stop the local stack
@@ -28,7 +27,7 @@
 #   - Docker and Docker Compose v2+
 #   - .env file (run `make setup` to create from template)
 
-.PHONY: help setup deploy deploy-local rollback deploy-remote deploy-check \
+.PHONY: help setup ci deploy deploy-local rollback deploy-remote deploy-check deploy-guard \
         up down migrate logs status
 
 # Default env file
@@ -80,13 +79,25 @@ deploy-check: ## Verify workstation deploy prerequisites
 	@test -n "$(GHCR_REPO)" || { echo "ERROR: cannot derive GHCR_REPO from 'git remote get-url origin'"; exit 1; }
 	@test -n "$(SHORT_SHA)" || { echo "ERROR: not a git checkout"; exit 1; }
 
-## deploy: build all four images from HEAD (linux/amd64), push sha-<short> +
-## latest to GHCR, deploy to the VPS, then tag the deploy (v<date>) and
-## publish its GitHub Release (scripts/tag-deploy.sh).
-deploy: deploy-check ## Build amd64 images, push to GHCR, deploy to VPS (mirrors deploy.yml)
+deploy-guard: ## Refuse to deploy a dirty tree or without gh (deploy tagging needs it)
 	@[ -z "$$(git status --porcelain)" ] || { echo "ERROR: working tree dirty - commit or stash first (a deploy tag must name exactly what ships)"; exit 1; }
 	@command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 \
 		|| { echo "ERROR: deploy tagging needs gh: brew install gh && gh auth login"; exit 1; }
+
+## ci: the checks .github/workflows/ci.yml runs, minus the e2e suite (kept out:
+## slow). `make deploy` runs them first, so broken code never reaches GHCR.
+ci: ## Run CI checks locally: lint, typecheck, unit tests
+	pnpm -C apps/server exec prisma generate
+	pnpm lint
+	pnpm lint:ts
+	pnpm test:client
+	pnpm test:package
+	pnpm test:server
+
+## deploy: run the CI checks (ci), then build all four images from HEAD
+## (linux/amd64), push sha-<short> + latest to GHCR, deploy to the VPS, then
+## tag the deploy (v<date>) and publish its GitHub Release (scripts/tag-deploy.sh).
+deploy: deploy-check deploy-guard ci ## Run CI checks, build amd64 images, push to GHCR, deploy to VPS
 	$(BUILD) -t $(REGISTRY)/$(GHCR_REPO)/server:$(IMAGE_TAG)   -t $(REGISTRY)/$(GHCR_REPO)/server:latest   -f apps/server/Dockerfile --target production .
 	$(BUILD) -t $(REGISTRY)/$(GHCR_REPO)/migrator:$(IMAGE_TAG) -t $(REGISTRY)/$(GHCR_REPO)/migrator:latest -f apps/server/Dockerfile --target migrator .
 	$(BUILD) -t $(REGISTRY)/$(GHCR_REPO)/caddy:$(IMAGE_TAG)    -t $(REGISTRY)/$(GHCR_REPO)/caddy:latest    -f apps/client/Dockerfile .
