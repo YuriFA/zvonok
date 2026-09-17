@@ -21,8 +21,8 @@
       "default": "./src/binding/excalidraw-yjs-binding.ts"
     },
     "./excalidraw-engine": {
-      "types": "./src/engine-excalidraw/engine.ts",
-      "default": "./src/engine-excalidraw/engine.ts"
+      "types": "./src/engine-excalidraw/engine.tsx",
+      "default": "./src/engine-excalidraw/engine.tsx"
     },
     "./panel": {
       "types": "./src/panel/whiteboard-panel.tsx",

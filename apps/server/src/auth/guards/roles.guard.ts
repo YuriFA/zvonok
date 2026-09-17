@@ -1,6 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Request } from 'express';
+import type { Request } from 'express';
 import type { Role } from 'src/generated/prisma/enums';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { JwtPayloadDto } from '../dto/jwt-payload.dto';
