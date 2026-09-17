@@ -165,7 +165,7 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.logger.log(`Peer ${record.socketId} joined SFU room ${roomId}`);
     // Adapter rooms drive room fan-out (see broadcastToRoom); per-namespace,
     // so the /sfu and /chat rooms with the same id never collide.
-    socket.join(roomId);
+    void socket.join(roomId);
     // Notify existing peers about the new peer - never for a silent restore
     if (!restoredSeat) {
       this.broadcastToRoom(
@@ -534,7 +534,7 @@ export class RoomPresenceService implements OnModuleDestroy, RoomPresence {
     this.records.delete(socketId);
     if (record && roomId) {
       this.rooms.get(roomId)?.delete(socketId);
-      record.socket.leave(roomId);
+      void record.socket.leave(roomId);
     }
   }
 

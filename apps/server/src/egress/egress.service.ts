@@ -304,7 +304,7 @@ export class EgressService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async startPipeline(session: ActiveSession): Promise<void> {
-    this.closeRuntime(session);
+    void this.closeRuntime(session);
     clearTimeout(session.startTimer);
 
     const descriptors = this.mediaSource.listTaps(session.roomId);
@@ -356,7 +356,7 @@ export class EgressService implements OnModuleInit, OnModuleDestroy {
     );
     session.process = process;
     process.on('progress', () => this.markLive(session));
-    process.on('exit', (code, signal) =>
+    process.on('exit', (code: number | null, signal: string | null) =>
       this.onProcessExit(session, code, signal),
     );
 

@@ -36,14 +36,15 @@ describe('Developer console surface (e2e)', () => {
               ? (accounts.find((a) => a.userId === where.userId) ?? null)
               : (accounts.find((a) => a.username === where.username) ?? null),
           ),
-          findMany: jest.fn(({ where }) =>
-            accounts.filter((a) =>
-              (a.username as string).startsWith(
-                where.username?.startsWith ?? '\u0000',
+          findMany: jest.fn(
+            ({ where }: { where: { username?: { startsWith?: string } } }) =>
+              accounts.filter((a) =>
+                (a.username as string).startsWith(
+                  where.username?.startsWith ?? '\u0000',
+                ),
               ),
-            ),
           ),
-          create: jest.fn(({ data }) => {
+          create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
             const account = {
               id: `dev-${accounts.length + 1}`,
               createdAt: new Date(),
@@ -63,7 +64,7 @@ describe('Developer console surface (e2e)', () => {
                   u.username === where.username,
               ) ?? null,
           ),
-          create: jest.fn(({ data }) => {
+          create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
             const user = {
               id: `user-${users.length + 1}`,
               role: 'USER',
@@ -76,13 +77,21 @@ describe('Developer console surface (e2e)', () => {
             users.push(user);
             return user;
           }),
-          update: jest.fn(({ where, data }) => {
-            const user = users.find((u) => u.id === where.id);
-            return Object.assign(user ?? {}, data);
-          }),
+          update: jest.fn(
+            ({
+              where,
+              data,
+            }: {
+              where: { id: string };
+              data: Record<string, unknown>;
+            }) => {
+              const user = users.find((u) => u.id === where.id);
+              return Object.assign(user ?? {}, data);
+            },
+          ),
         },
         project: {
-          create: jest.fn(({ data }) => {
+          create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
             const project = {
               id: `project-${projects.size + 1}`,
               webhookUrl: null,
@@ -93,68 +102,96 @@ describe('Developer console surface (e2e)', () => {
             projects.set(project.id, project);
             return project;
           }),
-          findFirst: jest.fn(({ where }) => {
-            const project = projects.get(where.id);
-            if (!project) return null;
-            if (
-              where.developerAccountId &&
-              project.developerAccountId !== where.developerAccountId
-            ) {
-              return null;
-            }
-            return project;
-          }),
-          findMany: jest.fn(({ where, select }) =>
-            [...projects.values()]
-              .filter(
-                (project) =>
-                  project.developerAccountId === where.developerAccountId,
-              )
-              .map((project) => {
-                // Prisma computes _count from the owned rooms relation.
-                const row = {
-                  ...project,
-                  _count: {
-                    rooms: [...rooms.values()].filter(
-                      (room) => room.projectId === project.id,
-                    ).length,
-                  },
-                };
-                if (!select) return row;
-                const projected: Record<string, unknown> = {};
-                for (const [key, value] of Object.entries(select)) {
-                  if (key === '_count') {
-                    projected._count = row._count;
-                  } else if (value) {
-                    projected[key] = row[key];
-                  }
-                }
-                return projected;
-              }),
+          findFirst: jest.fn(
+            ({
+              where,
+            }: {
+              where: { id: string; developerAccountId?: string };
+            }) => {
+              const project = projects.get(where.id);
+              if (!project) return null;
+              if (
+                where.developerAccountId &&
+                project.developerAccountId !== where.developerAccountId
+              ) {
+                return null;
+              }
+              return project;
+            },
           ),
-          update: jest.fn(({ where, data }) => {
-            const project = projects.get(where.id);
-            return Object.assign(project ?? {}, data);
-          }),
+          findMany: jest.fn(
+            ({
+              where,
+              select,
+            }: {
+              where: { developerAccountId: string };
+              select?: Record<string, boolean>;
+            }) =>
+              [...projects.values()]
+                .filter(
+                  (project) =>
+                    project.developerAccountId === where.developerAccountId,
+                )
+                .map((project) => {
+                  // Prisma computes _count from the owned rooms relation.
+                  const row = {
+                    ...project,
+                    _count: {
+                      rooms: [...rooms.values()].filter(
+                        (room) => room.projectId === project.id,
+                      ).length,
+                    },
+                  };
+                  if (!select) return row;
+                  const projected: Record<string, unknown> = {};
+                  for (const [key, value] of Object.entries(select)) {
+                    if (key === '_count') {
+                      projected._count = row._count;
+                    } else if (value) {
+                      projected[key] = row[key];
+                    }
+                  }
+                  return projected;
+                }),
+          ),
+          update: jest.fn(
+            ({
+              where,
+              data,
+            }: {
+              where: { id: string };
+              data: Record<string, unknown>;
+            }) => {
+              const project = projects.get(where.id);
+              return Object.assign(project ?? {}, data);
+            },
+          ),
         },
         room: {
           deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-          findMany: jest.fn(({ where, select }) =>
-            [...rooms.values()]
-              .filter((room) => room.projectId === where.projectId)
-              .map((room) => {
-                if (!select) return room;
-                // Mirror Prisma's select projection.
-                const projected: Record<string, unknown> = {};
-                for (const [key, enabled] of Object.entries(select)) {
-                  if (enabled) projected[key] = room[key];
-                }
-                return projected;
-              }),
+          findMany: jest.fn(
+            ({
+              where,
+              select,
+            }: {
+              where: { projectId: string };
+              select?: Record<string, boolean>;
+            }) =>
+              [...rooms.values()]
+                .filter((room) => room.projectId === where.projectId)
+                .map((room) => {
+                  if (!select) return room;
+                  // Mirror Prisma's select projection.
+                  const projected: Record<string, unknown> = {};
+                  for (const [key, enabled] of Object.entries(select)) {
+                    if (enabled) projected[key] = room[key];
+                  }
+                  return projected;
+                }),
           ),
         },
         apiKey: {
-          create: jest.fn(({ data }) => {
+          create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
             const key = { id: `key-${apiKeys.size + 1}`, ...data };
             apiKeys.set(key.id, key);
             return key;

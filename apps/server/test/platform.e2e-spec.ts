@@ -53,10 +53,12 @@ describe('Developer platform (e2e)', () => {
     revokedAt: null as Date | null,
   };
   const rooms = new Map<string, TestRoom>();
-  const egresses = new Map<
-    string,
-    Record<string, unknown> & { id: string; roomId: string; status: string }
-  >();
+  type EgressRow = Record<string, unknown> & {
+    id: string;
+    roomId: string;
+    status: string;
+  };
+  const egresses = new Map<string, EgressRow>();
 
   function connectSocket(): Socket {
     const socket = io(`${httpUrl}/sfu`, {
@@ -111,10 +113,12 @@ describe('Developer platform (e2e)', () => {
         },
         egress: {
           findUnique: jest.fn(
-            async ({ where }) => egresses.get(where.id) ?? null,
+            async ({ where }: { where: { id: string } }) =>
+              egresses.get(where.id) ?? null,
           ),
-          findUniqueOrThrow: jest.fn(async ({ where }) =>
-            egresses.get(where.id),
+          findUniqueOrThrow: jest.fn(
+            async ({ where }: { where: { id: string } }) =>
+              egresses.get(where.id),
           ),
           findFirst: jest.fn(({ where }) => {
             for (const row of egresses.values()) {
@@ -128,28 +132,48 @@ describe('Developer platform (e2e)', () => {
               (row) => row.projectId === 'project-e2e',
             ),
           ),
-          create: jest.fn(({ data }) => {
-            const row = {
-              id: `egress-${egresses.size + 1}`,
-              status: 'starting',
-              endedReason: null,
-              error: null,
-              startedAt: new Date(),
-              endedAt: null,
-              ...data,
-            };
-            egresses.set(row.id, row);
-            return row;
-          }),
-          update: jest.fn(({ where, data }) => {
-            const next = { ...(egresses.get(where.id) ?? {}), ...data };
-            egresses.set(where.id, next);
-            return next;
-          }),
+          create: jest.fn(
+            ({
+              data,
+            }: {
+              data: { roomId: string } & Record<string, unknown>;
+            }) => {
+              const row = {
+                id: `egress-${egresses.size + 1}`,
+                status: 'starting',
+                endedReason: null,
+                error: null,
+                startedAt: new Date(),
+                endedAt: null,
+                ...data,
+              };
+              egresses.set(row.id, row);
+              return row;
+            },
+          ),
+          update: jest.fn(
+            ({
+              where,
+              data,
+            }: {
+              where: { id: string };
+              data: Record<string, unknown>;
+            }) => {
+              const next = {
+                ...(egresses.get(where.id) ?? {}),
+                ...data,
+              } as EgressRow;
+              egresses.set(where.id, next);
+              return next;
+            },
+          ),
           updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         },
         room: {
-          findUnique: jest.fn(({ where }) => rooms.get(where.id) ?? null),
+          findUnique: jest.fn(
+            ({ where }: { where: { id: string } }) =>
+              rooms.get(where.id) ?? null,
+          ),
           findFirst: jest.fn(
             ({ where }: { where: { id: string; projectId?: string } }) => {
               const room = rooms.get(where.id);
@@ -812,7 +836,7 @@ describe('Developer platform (e2e)', () => {
         .set(bearer);
       expect(page.status).toBe(200);
       expect(page.body.items).toHaveLength(1);
-      walked.push(page.body.items[0].id);
+      walked.push(page.body.items[0].id as string);
       cursor = page.body.next;
       if (!insertedBetweenPages) {
         insertedBetweenPages = true;

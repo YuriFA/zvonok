@@ -211,7 +211,7 @@ describe('Project webhooks (e2e)', () => {
           ({ where }) =>
             db.developers.find((d) => d.username === where.username) ?? null,
         ),
-        create: jest.fn(({ data }) => {
+        create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
           const record = {
             id: `dev-${db.developers.length + 1}`,
             ...data,
@@ -221,16 +221,22 @@ describe('Project webhooks (e2e)', () => {
         }),
       },
       project: {
-        create: jest.fn(({ data }) => {
-          const record = {
-            id: `project-${db.projects.length + 1}`,
-            webhookUrl: null,
-            webhookSecret: null,
-            ...data,
-          };
-          db.projects.push(record);
-          return record;
-        }),
+        create: jest.fn(
+          ({
+            data,
+          }: {
+            data: Omit<DbProject, 'id' | 'webhookUrl' | 'webhookSecret'>;
+          }) => {
+            const record = {
+              id: `project-${db.projects.length + 1}`,
+              webhookUrl: null,
+              webhookSecret: null,
+              ...data,
+            };
+            db.projects.push(record);
+            return record;
+          },
+        ),
         findFirst: jest.fn(
           ({ where }) =>
             db.projects.find(
@@ -255,15 +261,21 @@ describe('Project webhooks (e2e)', () => {
               (k) => k.keyHash === where.keyHash || k.id === where.id,
             ) ?? null,
         ),
-        create: jest.fn(({ data }) => {
-          const record = {
-            id: `key-${db.keys.length + 1}`,
-            revokedAt: null,
-            ...data,
-          };
-          db.keys.push(record);
-          return record;
-        }),
+        create: jest.fn(
+          ({
+            data,
+          }: {
+            data: { keyHash: string; prefix: string; projectId: string };
+          }) => {
+            const record = {
+              id: `key-${db.keys.length + 1}`,
+              revokedAt: null,
+              ...data,
+            };
+            db.keys.push(record);
+            return record;
+          },
+        ),
       },
       egress: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -330,7 +342,7 @@ describe('Project webhooks (e2e)', () => {
               (u) => u.id === where.id || u.email === where.email,
             ) ?? null,
         ),
-        create: jest.fn(({ data }) => {
+        create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
           const record = { id: `user-${db.users.length + 1}`, ...data };
           db.users.push(record);
           return record;

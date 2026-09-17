@@ -156,7 +156,7 @@ describe('EgressService', () => {
       findFirst: jest.Mock;
       findMany: jest.Mock;
       create: jest.Mock;
-      update: jest.Mock;
+      update: jest.Mock<unknown, [{ data: Record<string, unknown> }]>;
       updateMany: jest.Mock;
     };
   };
@@ -223,17 +223,20 @@ describe('EgressService', () => {
         findUniqueOrThrow: jest.fn(),
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn(({ data }) => makeRow({ ...data, id: undefined })),
-        update: jest.fn(({ data }) => makeRow({ ...data })),
+        create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
+          makeRow({ ...data, id: undefined }),
+        ),
+        update: jest.fn(({ data }: { data: Record<string, unknown> }) =>
+          makeRow({ ...data }),
+        ),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     };
-    prisma.egress.create.mockImplementation(({ data }) =>
-      makeRow({ ...data, id: `egress-${rowCounter + 1}` }),
+    prisma.egress.create.mockImplementation(
+      ({ data }: { data: Record<string, unknown> }) =>
+        makeRow({ ...data, id: `egress-${rowCounter + 1}` }),
     );
-    prisma.egress.update.mockImplementation(async ({ data }) =>
-      makeRow(data as Record<string, unknown>),
-    );
+    prisma.egress.update.mockImplementation(async ({ data }) => makeRow(data));
     presence = {
       broadcastToRoom: jest.fn(),
       onRoomClosed: jest.fn((roomId: string, handler: () => void) => {
