@@ -20,6 +20,11 @@ export interface UseMediaControlsOptions {
   microphone: ToggleControl;
   /** A server host mute overrides the audio control. */
   mutedByHost?: boolean;
+  /**
+   * Surfaced when a toggle fails at track replacement and the control
+   * rolls back. One mapping serves both preset variants.
+   */
+  onNotice?: (notice: { key: string; message: string }) => void;
 }
 
 export interface MediaControls {
@@ -31,8 +36,14 @@ export interface MediaControls {
   toggleAudio(): Promise<PublishToggleResult>;
 }
 
+/** Replace-failure notices; identical wording across control variants. */
+const FAILURE_COPY = {
+  micRestartFailed: "Failed to restart the microphone",
+  cameraRestartFailed: "Failed to restart the camera",
+} as const;
+
 export function useMediaControls(options: UseMediaControlsOptions): MediaControls {
-  const { camera, microphone, mutedByHost = false } = options;
+  const { camera, microphone, mutedByHost = false, onNotice } = options;
 
   const video = useMemo(
     () =>
@@ -61,8 +72,25 @@ export function useMediaControls(options: UseMediaControlsOptions): MediaControl
     };
   }, [microphone.isEnabled, microphone.captureState, mutedByHost]);
 
-  const toggleVideo = useCallback(() => camera.toggle(), [camera]);
-  const toggleAudio = useCallback(() => microphone.toggle(), [microphone]);
+  const toggleVideo = useCallback(() => {
+    return camera.toggle().then((outcome) => {
+      if (outcome === "replace-failed") {
+        onNotice?.({
+          key: "video-restart-failed",
+          message: FAILURE_COPY.cameraRestartFailed,
+        });
+      }
+      return outcome;
+    });
+  }, [camera, onNotice]);
+  const toggleAudio = useCallback(() => {
+    return microphone.toggle().then((outcome) => {
+      if (outcome === "replace-failed") {
+        onNotice?.({ key: "audio-restart-failed", message: FAILURE_COPY.micRestartFailed });
+      }
+      return outcome;
+    });
+  }, [microphone, onNotice]);
 
   return { video, audio, toggleVideo, toggleAudio };
 }
@@ -92,8 +120,10 @@ export function MediaControlButton({ state, labelOn, labelOff, onClick }: MediaC
 
 export interface MediaControlsPresetProps {
   controls: MediaControls;
-  /** Surfaced when a toggle fails and the control rolls back. */
-  onNotice?: (notice: { key: string; message: string }) => void;
+  /**
+   * Replace-failure notices surface through the controls' own wiring:
+   * pass onNotice to useMediaControls, not here.
+   */
   className?: string;
 }
 
@@ -102,44 +132,26 @@ const COPY = {
   micOff: "Mic off",
   cameraOn: "Camera",
   cameraOff: "Camera off",
-  micRestartFailed: "Failed to restart the microphone",
-  cameraRestartFailed: "Failed to restart the camera",
 } as const;
 
 /**
- * Preset mic/camera buttons. Toggles run through the core; a replace
- * failure (rolled-back control) surfaces a notice.
+ * Preset mic/camera buttons. Toggles run through the core, which surfaces
+ * the replace-failure notice.
  */
-export function MediaControlsPreset({ controls, onNotice, className }: MediaControlsPresetProps) {
-  const handleToggleAudio = useCallback(() => {
-    return controls.toggleAudio().then((outcome) => {
-      if (outcome === "replace-failed") {
-        onNotice?.({ key: "audio-restart-failed", message: COPY.micRestartFailed });
-      }
-    });
-  }, [controls, onNotice]);
-
-  const handleToggleVideo = useCallback(() => {
-    return controls.toggleVideo().then((outcome) => {
-      if (outcome === "replace-failed") {
-        onNotice?.({ key: "video-restart-failed", message: COPY.cameraRestartFailed });
-      }
-    });
-  }, [controls, onNotice]);
-
+export function MediaControlsPreset({ controls, className }: MediaControlsPresetProps) {
   return (
     <div className={["zk-media-controls", className].filter(Boolean).join(" ")}>
       <MediaControlButton
         state={controls.audio}
         labelOn={COPY.micOn}
         labelOff={COPY.micOff}
-        onClick={() => void handleToggleAudio()}
+        onClick={() => void controls.toggleAudio()}
       />
       <MediaControlButton
         state={controls.video}
         labelOn={COPY.cameraOn}
         labelOff={COPY.cameraOff}
-        onClick={() => void handleToggleVideo()}
+        onClick={() => void controls.toggleVideo()}
       />
     </div>
   );

@@ -33,8 +33,6 @@ const COPY = {
   recordStart: "Record",
   recordStop: "Stop recording",
   leave: "Leave",
-  micRestartFailed: "Failed to restart the microphone",
-  cameraRestartFailed: "Failed to restart the camera",
 } as const;
 
 function screenShareSupported(): boolean {
@@ -56,23 +54,8 @@ export function ControlBarPreset({
     camera: call.camera,
     microphone: call.microphone,
     mutedByHost: call.mutedByHost,
+    onNotice,
   });
-
-  const handleToggleAudio = useCallback(() => {
-    void controls.toggleAudio().then((outcome) => {
-      if (outcome === "replace-failed") {
-        onNotice?.({ key: "audio-restart-failed", message: COPY.micRestartFailed });
-      }
-    });
-  }, [controls, onNotice]);
-
-  const handleToggleVideo = useCallback(() => {
-    void controls.toggleVideo().then((outcome) => {
-      if (outcome === "replace-failed") {
-        onNotice?.({ key: "video-restart-failed", message: COPY.cameraRestartFailed });
-      }
-    });
-  }, [controls, onNotice]);
 
   const isSharing = screenShare?.sharing === true;
   const isBlocked = screenShare?.blocked === true;
@@ -104,13 +87,13 @@ export function ControlBarPreset({
         state={controls.audio}
         labelOn="Mic"
         labelOff="Mic off"
-        onClick={handleToggleAudio}
+        onClick={() => void controls.toggleAudio()}
       />
       <MediaControlButton
         state={controls.video}
         labelOn="Camera"
         labelOff="Camera off"
-        onClick={handleToggleVideo}
+        onClick={() => void controls.toggleVideo()}
       />
       {screenShare &&
         (screenShareSupported() ? (

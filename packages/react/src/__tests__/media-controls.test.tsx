@@ -69,4 +69,23 @@ describe("useMediaControls", () => {
     expect(camera.toggle).toHaveBeenCalledOnce();
     expect(microphone.toggle).toHaveBeenCalledOnce();
   });
+  it("surfaces a notice when a toggle fails at replace, none on success", async () => {
+    const onNotice = vi.fn();
+    const camera = control();
+    const microphone = control({
+      toggle: vi.fn().mockResolvedValue("replace-failed" as never),
+    });
+    const { result } = renderHook(() => useMediaControls({ camera, microphone, onNotice }));
+
+    await act(() => result.current.toggleAudio());
+
+    expect(onNotice).toHaveBeenCalledWith({
+      key: "audio-restart-failed",
+      message: "Failed to restart the microphone",
+    });
+
+    await act(() => result.current.toggleVideo());
+
+    expect(onNotice).not.toHaveBeenCalledTimes(2);
+  });
 });
