@@ -19,6 +19,7 @@ import { createLogger } from "../helpers/logger.js";
 import { SfuActions } from "./actions.js";
 import { SfuConnection } from "./connection.js";
 import { SfuEventRouter, type SfuEventHandlers } from "./event-router.js";
+import { ParticipantRegistry } from "./participant-registry.js";
 import { SfuPublish } from "./publish.js";
 import { SfuSession } from "./session.js";
 import { SfuStatsCollector } from "./stats-collector.js";
@@ -36,7 +37,6 @@ import type {
   SfuExistingParticipantsPayload,
   SfuPeerMediaDetachedPayload,
   QualityStatsCallback,
-  PeerQualityStats,
   SfuStateCallback,
   SfuTrackCallback,
   SfuParticipantCallback,
@@ -76,8 +76,10 @@ export class SfuManager {
   private device: Device | null = null;
   private sendTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
-  private peers = new Map<string, SfuParticipantInfo>();
   private localUserId: string | null = null;
+
+  // Participant state: one registry shared by the facade and the units.
+  private readonly registry = new ParticipantRegistry();
 
   // State and callbacks
   private state: SfuState = {
@@ -107,11 +109,10 @@ export class SfuManager {
   });
 
   // Subscribe unit: remote media consumption and consumer bookkeeping.
-  private readonly subscribe = new SfuSubscribe({
+  private readonly subscribe = new SfuSubscribe(this.registry, {
     getSocket: () => this.connection.getSocket(),
     getDevice: () => this.device,
     getRecvTransport: () => this.recvTransport,
-    getPeers: () => this.peers,
     getLocalUserId: () => this.localUserId,
     updateState: (partial) => this.updateState(partial),
     notifyPeerJoined: (peer) => {
@@ -155,7 +156,7 @@ export class SfuManager {
     this.statsCollector = new SfuStatsCollector(
       () => this.recvTransport,
       () => this.subscribe.getConsumerEntries(),
-      (producerId) => this.subscribe.findPeerForProducer(producerId),
+      (producerId) => this.registry.findProducer(producerId)?.userId,
     );
   }
 
@@ -384,11 +385,11 @@ export class SfuManager {
 
   // ISfuParticipantRegistry
   getParticipants(): Map<string, SfuParticipantInfo> {
-    return new Map(this.peers);
+    return this.registry.snapshot();
   }
 
   getParticipant(userId: string): SfuParticipantInfo | undefined {
-    return this.peers.get(userId);
+    return this.registry.get(userId);
   }
 
   onParticipantJoined(callback: SfuParticipantCallback): () => void {
@@ -443,10 +444,6 @@ export class SfuManager {
 
   onQualityStats(callback: QualityStatsCallback): () => void {
     return this.statsCollector.onStats(callback);
-  }
-
-  getStats(): Map<string, PeerQualityStats> {
-    return new Map();
   }
 
   // Event handlers
@@ -573,61 +570,28 @@ export class SfuManager {
 
   private handlePeerJoined(payload: SfuParticipantJoinedPayload): void {
     this.log.debug("[SFU] Peer joined:", payload.userId, payload.username);
-    let peer = this.peers.get(payload.userId);
-    if (!peer) {
-      peer = {
-        userId: payload.userId,
-        username: payload.username,
-        externalId: payload.externalId,
-        metadata: payload.metadata,
-        producers: new Map(),
-      };
-      this.peers.set(payload.userId, peer);
-    } else {
-      if (payload.username) {
-        peer.username = payload.username;
-      }
-      // A (re)joining peer's media is live again after a detach.
-      peer.mediaConnected = true;
-    }
+    const { peer } = this.registry.upsert(payload);
     this.peerJoinedCallbacks.forEach((callback) => {
-      callback(peer!);
+      callback(peer);
     });
   }
 
   private handleExistingPeers(peers: SfuExistingParticipantsPayload[]): void {
     this.log.debug("[SFU] Existing peers:", peers.length);
     for (const peerData of peers) {
-      let peer = this.peers.get(peerData.userId);
-      if (!peer) {
-        peer = {
-          userId: peerData.userId,
-          username: peerData.username,
-          externalId: peerData.externalId,
-          metadata: peerData.metadata,
-          producers: new Map(),
-        };
-        this.peers.set(peerData.userId, peer);
-      } else {
-        if (peerData.username) {
-          peer.username = peerData.username;
-        }
-        // A peer present in existing-peers has live membership.
-        peer.mediaConnected = true;
-      }
+      const { peer } = this.registry.upsert(peerData);
       this.peerJoinedCallbacks.forEach((callback) => {
-        callback(peer!);
+        callback(peer);
       });
     }
   }
 
   private handlePeerLeft(payload: { userId: string }): void {
     this.log.debug("[SFU] Peer left:", payload.userId);
-    const peer = this.peers.get(payload.userId);
+    const peer = this.registry.remove(payload.userId);
     if (peer) {
       // Close consumers for this peer
       this.subscribe.closeConsumersForPeer(peer);
-      this.peers.delete(payload.userId);
     }
     this.peerLeftCallbacks.forEach((callback) => {
       callback(payload.userId);
@@ -700,11 +664,10 @@ export class SfuManager {
 
   private handlePeerMediaDetached(payload: SfuPeerMediaDetachedPayload): void {
     this.log.debug("[SFU] Peer media detached:", payload.userId);
-    const peer = this.peers.get(payload.userId);
-    if (!peer || peer.mediaConnected === false) {
+    const peer = this.registry.markMediaDetached(payload.userId);
+    if (!peer) {
       return;
     }
-    peer.mediaConnected = false;
     this.peerMediaDetachedCallbacks.forEach((callback) => {
       callback(peer);
     });
@@ -723,7 +686,7 @@ export class SfuManager {
     this.recvTransport?.close();
     this.sendTransport = null;
     this.recvTransport = null;
-    this.peers.clear();
+    this.registry.clear();
     this.updateState({
       audioProducerId: null,
       videoProducerId: null,
@@ -739,7 +702,7 @@ export class SfuManager {
     this.recvTransport = null;
     this.publish.resetState();
     this.subscribe.resetState();
-    this.peers.clear();
+    this.registry.clear();
     this.state = {
       connectionState: "disconnected",
       audioProducerId: null,
@@ -791,6 +754,3 @@ export interface SfuManagerOptions {
 export function createSfuManager(options: SfuManagerOptions = {}): SfuManager {
   return new SfuManager(options.connection ?? new SfuConnection(options.serverUrl));
 }
-
-/** Singleton instance for backward compatibility */
-export const sfuManager = new SfuManager();

@@ -2,9 +2,9 @@
  * Subscribe unit of the SFU manager: remote media consumption. Owns the
  * consumers map, the new-producer buffer for announcements that arrive
  * before the recv transport exists, the track callback registry, and the
- * screen-share-stopped callback registry. The peers map, the device, and
- * the transports stay with the manager facade (they are shared with the
- * participant registry and the publish side) and are reached through the
+ * screen-share-stopped callback registry. Participant state is owned by
+ * the ParticipantRegistry this unit consumes; the device and the
+ * transports stay with the manager facade and are reached through the
  * narrow host interface below.
  */
 
@@ -13,10 +13,10 @@ import type { Consumer, Transport } from "mediasoup-client/types";
 import type { Socket } from "socket.io-client";
 
 import { createLogger } from "../helpers/logger.js";
+import { ParticipantRegistry } from "./participant-registry.js";
 import type {
   SfuConsumerClosedPayload,
   SfuConsumerCreatedPayload,
-  SfuMediaSource,
   SfuNewProducerPayload,
   SfuParticipantInfo,
   SfuProducerStateChangedPayload,
@@ -27,13 +27,11 @@ import type {
   SimulcastSpatialLayer,
 } from "./types.js";
 
-/** How the unit reaches the recv pipeline, the peer registry, and state. */
+/** How the unit reaches the recv pipeline and the shared manager state. */
 export interface SfuSubscribeHost {
   getSocket(): Socket | null;
   getDevice(): Device | null;
   getRecvTransport(): Transport | null;
-  /** Live peers map; the participant registry owns its lifecycle. */
-  getPeers(): Map<string, SfuParticipantInfo>;
   getLocalUserId(): string | null;
   updateState(partial: Partial<SfuState>): void;
   /** Fires the peer-joined registry when consuming implies a new peer. */
@@ -44,13 +42,15 @@ export interface SfuSubscribeHost {
 
 export class SfuSubscribe {
   private readonly log = createLogger("sfu");
+  private readonly registry: ParticipantRegistry;
   private readonly host: SfuSubscribeHost;
   private consumers = new Map<string, Consumer>();
   private pendingNewProducers: SfuNewProducerPayload[] = [];
   private trackCallbacks = new Set<SfuTrackCallback>();
   private screenShareStoppedCallbacks = new Set<SfuScreenShareStoppedCallback>();
 
-  constructor(host: SfuSubscribeHost) {
+  constructor(registry: ParticipantRegistry, host: SfuSubscribeHost) {
+    this.registry = registry;
     this.host = host;
   }
 
@@ -68,7 +68,7 @@ export class SfuSubscribe {
    * Skips screen-share consumers even if they are video kind.
    */
   getVideoConsumerIdForUserId(userId: string): string | undefined {
-    const peer = this.host.getPeers().get(userId);
+    const peer = this.registry.get(userId);
     if (!peer) return undefined;
 
     for (const [consumerId, consumer] of this.consumers) {
@@ -133,25 +133,17 @@ export class SfuSubscribe {
         this.host.getSocket()?.emit("sfu:resume-consumer", { consumerId: consumer.id });
       }
 
-      // Find the peer userId for this consumer
-      let userId = "";
-      let source: SfuMediaSource | undefined;
-      for (const [uid, peer] of this.host.getPeers()) {
-        const producerInfo = peer.producers.get(payload.producerId);
-        if (producerInfo) {
-          userId = uid;
-          source = producerInfo.source;
-          break;
-        }
-      }
+      // Find the announcing participant for this consumer's producer
+      const found = this.registry.findProducer(payload.producerId);
+      const userId = found?.userId ?? "";
+      const source = found?.info.source;
 
       // Notify track callback
       for (const callback of this.trackCallbacks) {
         callback(consumer.track, payload.kind, userId, source);
       }
 
-      const producerInfo = this.host.getPeers().get(userId)?.producers.get(payload.producerId);
-      if (producerInfo?.paused) {
+      if (found?.info.paused) {
         this.host.notifyProducerState({
           producerId: payload.producerId,
           kind: payload.kind,
@@ -207,15 +199,6 @@ export class SfuSubscribe {
     this.pendingNewProducers = [];
   }
 
-  findPeerForProducer(producerId: string): string | undefined {
-    for (const [userId, peer] of this.host.getPeers()) {
-      if (peer.producers.has(producerId)) {
-        return userId;
-      }
-    }
-    return undefined;
-  }
-
   /** Consumer snapshot for the stats collector. */
   getConsumerEntries(): Iterable<[string, Consumer]> {
     return this.consumers.entries();
@@ -245,25 +228,20 @@ export class SfuSubscribe {
       return;
     }
 
-    // Track peer info
-    let peer = this.host.getPeers().get(payload.userId);
-    if (!peer) {
-      peer = {
-        userId: payload.userId,
-        username: payload.username || "",
-        producers: new Map(),
-      };
-      this.host.getPeers().set(payload.userId, peer);
+    // Track peer info: consuming a producer implies the participant exists
+    // and their media is flowing.
+    const { peer, created } = this.registry.upsert({
+      userId: payload.userId,
+      username: payload.username,
+    });
+    if (created) {
       this.host.notifyPeerJoined(peer);
     }
-    peer.producers.set(payload.producerId, {
+    this.registry.attachProducer(payload.userId, payload.producerId, {
       kind: payload.kind,
       paused: payload.paused,
       source: payload.appData?.source,
     });
-
-    // Media from this peer is flowing again after any detach.
-    peer.mediaConnected = true;
 
     // Request to consume
     socket.emit("sfu:consume", {
