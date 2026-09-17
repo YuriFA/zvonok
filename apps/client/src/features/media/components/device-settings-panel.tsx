@@ -3,7 +3,6 @@ import { Settings, X, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 import { cn } from "@/lib/utils";
 
 import { ActiveDeviceDisplay } from "./active-device-display";
@@ -35,7 +34,7 @@ export function DeviceSettingsPanel({
     selectAudioDevice,
     selectSpeakerDevice,
     isLoading,
-  } = useDeviceControls({ storageKey: STORAGE_KEYS.SELECTED_DEVICES });
+  } = useDeviceControls();
 
   const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
   const audioDevices = allDevices.filter((d) => d.kind === "audioinput");

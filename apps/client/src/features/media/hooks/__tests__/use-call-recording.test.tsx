@@ -1,7 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
+import type { ZvonokParticipant } from "@zvonok/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { RemotePeerMedia } from "@/features/room/hooks/use-room-sfu";
 
 import { useCallRecording } from "../use-call-recording";
 
@@ -91,10 +90,10 @@ function makePeerStream(hasVideo: boolean, hasAudio: boolean): MediaStream {
   } as unknown as MediaStream;
 }
 
-function makePeer(userId: string, overrides: Partial<RemotePeerMedia> = {}): RemotePeerMedia {
+function makePeer(userId: string, overrides: Partial<ZvonokParticipant> = {}): ZvonokParticipant {
   return {
     userId,
-    username: `User ${userId}`,
+    displayName: `User ${userId}`,
     cameraStream: makePeerStream(true, false),
     screenStream: null,
     audioStream: makePeerStream(false, true),
@@ -110,9 +109,9 @@ function makePeer(userId: string, overrides: Partial<RemotePeerMedia> = {}): Rem
 const localVideoStream = makePeerStream(true, false);
 const localAudioStream = makePeerStream(false, true);
 
-function renderCallRecording(remotePeers: RemotePeerMedia[]) {
+function renderCallRecording(remotePeers: ZvonokParticipant[]) {
   return renderHook(
-    (props: { remotePeers: RemotePeerMedia[] }) =>
+    (props: { remotePeers: ZvonokParticipant[] }) =>
       useCallRecording({
         roomSlug: "my-room",
         localUserId: "me",

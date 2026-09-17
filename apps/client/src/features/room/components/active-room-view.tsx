@@ -52,7 +52,8 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
   const {
     localVideoStream,
     localAudioStream,
-    mediaControls,
+    camera,
+    microphone,
     remotePeers,
     localUserId,
     participants,
@@ -120,7 +121,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     if (remotePeer?.screenStream) {
       return {
         userId: remotePeer.userId,
-        sharerName: remotePeer.username,
+        sharerName: remotePeer.displayName,
         stream: remotePeer.screenStream,
         isLocal: false,
       };
@@ -285,8 +286,8 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                 style={tileStyles[0]}
                 stream={localVideoStream}
                 username={currentUsername}
-                isVideoEnabled={mediaControls.isVideoEnabled}
-                isAudioEnabled={mediaControls.isAudioEnabled}
+                isVideoEnabled={camera.isEnabled}
+                isAudioEnabled={microphone.isEnabled}
               />
 
               {/* Remote participant tiles */}
@@ -296,7 +297,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                   userId={peer.userId}
                   style={tileStyles[index + 1]}
                   stream={peer.cameraStream}
-                  username={peer.username}
+                  username={peer.displayName}
                   isVideoEnabled={peer.isCameraEnabled}
                   isAudioEnabled={peer.isAudioEnabled}
                 />

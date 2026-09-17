@@ -37,7 +37,7 @@ function RoomViewContent({
     onSuccess: () => navigate("/"),
   });
   const { userId } = useRoomIdentity();
-  const { mediaControls, connectionState, wasKicked } = useRoomSessionState();
+  const { camera, microphone, connectionState, wasKicked } = useRoomSessionState();
   const isMobile = useIsMobile();
   const isOwner = userId === room.ownerId;
 
@@ -46,8 +46,8 @@ function RoomViewContent({
       <RoomAudioContextProvider>
         <div className="flex h-dscreen flex-col" data-testid="room-view">
           <ActiveRoomHeader
-            isVideoEnabled={mediaControls.isVideoEnabled}
-            isAudioEnabled={mediaControls.isAudioEnabled}
+            isVideoEnabled={camera.isEnabled}
+            isAudioEnabled={microphone.isEnabled}
             isOwner={isOwner}
             onEndRoom={() => endRoom.mutate(room.id)}
             isEndingRoom={endRoom.isPending}

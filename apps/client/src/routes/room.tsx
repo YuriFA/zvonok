@@ -5,7 +5,7 @@ import { useParams } from "react-router";
 
 import { LinkButton } from "@/components/ui/link-button";
 import { useAuth } from "@/features/auth/contexts/auth.context";
-import { MediaStreamProvider } from "@/features/media/contexts/media-stream.context";
+import { CaptureLifecycle } from "@/features/media/components/capture-lifecycle";
 import { CallEndedView } from "@/features/room/components/call-ended-view";
 import { GuestApprovalDialog } from "@/features/room/components/guest-approval-dialog";
 import { PrejoinView } from "@/features/room/components/prejoin-view";
@@ -64,7 +64,7 @@ function RoomSession({
   const isOwner = userId === room.ownerId;
 
   return (
-    <MediaStreamProvider>
+    <CaptureLifecycle>
       {viewState === "prejoin" ? (
         guestView
       ) : (
@@ -79,7 +79,7 @@ function RoomSession({
           )}
         </>
       )}
-    </MediaStreamProvider>
+    </CaptureLifecycle>
   );
 }
 

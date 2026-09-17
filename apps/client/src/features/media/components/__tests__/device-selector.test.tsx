@@ -12,20 +12,6 @@ vi.mock("@zvonok/react", () => ({
   useVideoStream: vi.fn(),
 }));
 
-vi.mock("@/features/media/contexts/media-stream.context", () => ({
-  useMediaStreamContext: () => ({ videoStream: null, videoState: "active", audioState: "active" }),
-}));
-vi.mock("@/features/media/hooks/use-media-controls", () => ({
-  useMediaControls: () => ({
-    isVideoEnabled: true,
-    isAudioEnabled: true,
-    setVideoEnabled: vi.fn(),
-    setAudioEnabled: vi.fn(),
-    getVideoCaptureState: vi.fn(() => "active"),
-    getAudioCaptureState: vi.fn(() => "active"),
-  }),
-}));
-
 function deviceInfo(deviceId: string, label: string, kind: string) {
   return { deviceId, kind, label, groupId: "", toJSON: () => ({}) };
 }
@@ -37,8 +23,18 @@ describe("DeviceSelector permission surfacing", () => {
     reactHarness.permissions = { video: "unknown", audio: "unknown" };
     reactHarness.deviceControls = {
       devices: [deviceInfo("cam-1", "Cam", "videoinput"), deviceInfo("mic-1", "Mic", "audioinput")],
-      camera: { toggle: vi.fn(async () => true), switchDevice: vi.fn(async () => true) },
-      mic: { toggle: vi.fn(async () => true), switchDevice: vi.fn(async () => true) },
+      camera: {
+        state: 2,
+        stream: null,
+        toggle: vi.fn(async () => true),
+        switchDevice: vi.fn(async () => true),
+      },
+      mic: {
+        state: 2,
+        stream: null,
+        toggle: vi.fn(async () => true),
+        switchDevice: vi.fn(async () => true),
+      },
       selectedDevices: { videoDeviceId: "cam-1", audioDeviceId: "mic-1", speakerDeviceId: "" },
       selectVideoDevice: vi.fn(),
       selectAudioDevice: vi.fn(),

@@ -32,10 +32,20 @@ export {
   usePublishControls,
   type UsePublishControlsResult,
   type UsePublishControlsOptions,
-  type PublishToggleHooks,
   type PublishToggleResult,
   type PublishKind,
 } from "./use-publish-controls.js";
+export {
+  useZvonokCall,
+  type UseZvonokCallOptions,
+  type UseZvonokCallResult,
+  type ToggleControl,
+} from "./use-zvonok-call.js";
+export {
+  createMediaCapturePort,
+  type CapturePort,
+  type MediaCapturePortOptions,
+} from "./capture-port.js";
 export { useSfuTrackSync } from "./use-sfu-track-sync.js";
 export {
   usePrejoin,

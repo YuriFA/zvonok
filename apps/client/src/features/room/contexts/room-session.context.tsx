@@ -2,27 +2,33 @@
  * Room session state and actions in two sibling contexts: action-only
  * consumers (buttons, shortcuts) re-render only when an action identity
  * changes, and state consumers never re-render because a callback was
- * rebuilt. The provider owns the useRoomSession call, so the view tree
- * consumes hooks instead of receiving the session object as props.
+ * rebuilt. The provider composes the SDK call-session hook and adapts its
+ * output to the room's presentation types; media policy (toggles, host
+ * mute, kick, publishing) lives in @zvonok/react.
  */
 
-import type { HostControls, UseZvonokConnectionResult } from "@zvonok/react";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import type {
+  HostControls,
+  ToggleControl,
+  UseZvonokConnectionResult,
+  ZvonokParticipant,
+} from "@zvonok/react";
+import { useZvonokCall } from "@zvonok/react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import type { Participant } from "@/components/room/participants-list";
-import type { UseMediaControlsReturn } from "@/features/media/hooks/use-media-controls";
 
-import { useRoomSession } from "../hooks/use-room-session";
-import type { RemotePeerMedia } from "../hooks/use-room-sfu";
 import { useRoomIdentity } from "./room-identity.context";
 
 export interface RoomSessionState {
   localVideoStream: MediaStream | null;
   localAudioStream: MediaStream | null;
-  mediaControls: UseMediaControlsReturn;
+  camera: ToggleControl;
+  microphone: ToggleControl;
   connectionState: string;
   capabilities: string[];
-  remotePeers: RemotePeerMedia[];
+  remotePeers: ZvonokParticipant[];
   wasKicked: boolean;
   participants: Participant[];
   localUserId: string;
@@ -40,6 +46,19 @@ export interface RoomSessionActions {
 const RoomSessionStateContext = createContext<RoomSessionState | null>(null);
 const RoomSessionActionsContext = createContext<RoomSessionActions | null>(null);
 
+/** The SDK participant projection shaped for the participants panel. */
+function toParticipant(participant: ZvonokParticipant, fallbackName: string): Participant {
+  return {
+    id: participant.userId,
+    userId: participant.userId,
+    username: participant.displayName || fallbackName,
+    isMuted: !participant.isAudioEnabled,
+    isVideoOff: !participant.isCameraEnabled,
+    isConnected: participant.isConnected,
+    isMutedByHost: participant.mutedByHost,
+  };
+}
+
 interface RoomSessionProviderProps {
   connection: UseZvonokConnectionResult;
   children: ReactNode;
@@ -47,58 +66,57 @@ interface RoomSessionProviderProps {
 
 export function RoomSessionProvider({ connection, children }: RoomSessionProviderProps) {
   const { userId, displayName } = useRoomIdentity();
-  const session = useRoomSession({ userId, displayName, connection });
+  const call = useZvonokCall({
+    connection,
+    localUserId: userId,
+    localDisplayName: displayName,
+    onHostMuted: () => toast.info("Muted by the room host"),
+  });
 
-  const {
-    localVideoStream,
-    localAudioStream,
-    mediaControls,
-    connectionState,
-    capabilities,
-    remotePeers,
-    wasKicked,
-    participants,
-    localUserId,
-    isRoomLocked,
-    mutedByHost,
-    toggleVideo,
-    toggleAudio,
-    kickPeer,
-    hostControls,
-  } = session;
+  const { camera, microphone } = call;
+
+  const toggleVideo = useCallback(async () => {
+    const outcome = await camera.toggle();
+    if (outcome === "replace-failed") {
+      toast.error("Failed to restart the camera");
+    }
+  }, [camera]);
+
+  const toggleAudio = useCallback(async () => {
+    const outcome = await microphone.toggle();
+    if (outcome === "replace-failed") {
+      toast.error("Failed to restart the microphone");
+    }
+  }, [microphone]);
 
   const state = useMemo<RoomSessionState>(
     () => ({
-      localVideoStream,
-      localAudioStream,
-      mediaControls,
-      connectionState,
-      capabilities,
-      remotePeers,
-      wasKicked,
-      participants,
-      localUserId,
-      isRoomLocked,
-      mutedByHost,
+      localVideoStream: call.localVideoStream,
+      localAudioStream: call.localAudioStream,
+      camera,
+      microphone,
+      connectionState: call.connectionState,
+      capabilities: call.capabilities,
+      remotePeers: call.participants.slice(1),
+      wasKicked: call.wasKicked,
+      participants: call.participants.map((participant) =>
+        toParticipant(participant, participant.userId === call.localUserId ? "You" : ""),
+      ),
+      localUserId: call.localUserId,
+      isRoomLocked: call.isRoomLocked,
+      mutedByHost: call.mutedByHost,
     }),
-    [
-      localVideoStream,
-      localAudioStream,
-      mediaControls,
-      connectionState,
-      capabilities,
-      remotePeers,
-      wasKicked,
-      participants,
-      localUserId,
-      isRoomLocked,
-      mutedByHost,
-    ],
+    [call, camera, microphone],
   );
 
   const actions = useMemo<RoomSessionActions>(
-    () => ({ toggleVideo, toggleAudio, kickPeer, hostControls }),
-    [toggleVideo, toggleAudio, kickPeer, hostControls],
+    () => ({
+      toggleVideo,
+      toggleAudio,
+      kickPeer: call.kickPeer,
+      hostControls: call.hostControls,
+    }),
+    [toggleVideo, toggleAudio, call.kickPeer, call.hostControls],
   );
 
   return (

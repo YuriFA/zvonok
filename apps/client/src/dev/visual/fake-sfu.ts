@@ -1,6 +1,6 @@
 /**
  * Deterministic SFU double for the visual harness: event-emitter shape the
- * app's room hooks consume (RoomTracker, useRoomSfu) without any network.
+ * SDK's RoomTracker consumes without any network.
  * The harness drives peers by emitting manager events, so every screenshot
  * sees the same room state.
  */

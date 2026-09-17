@@ -4,9 +4,9 @@ import type { UseZvonokConnectionResult } from "../use-zvonok-connection.js";
 
 import {
   usePublishControls,
-  type PublishToggleHooks,
   type PublishToggleResult,
 } from "../use-publish-controls.js";
+import type { CapturePort } from "../capture-port.js";
 import { useSfuTrackSync } from "../use-sfu-track-sync.js";
 
 // Session double for the track-sync hook; the module mock below is
@@ -43,10 +43,10 @@ function createConnection(overrides: Record<string, unknown> = {}) {
   } as unknown as UseZvonokConnectionResult;
 }
 
-function hooksWith(
+function portWith(
   track: MediaStreamTrack | null | undefined,
-  overrides: Partial<PublishToggleHooks> = {},
-): PublishToggleHooks {
+  overrides: Partial<CapturePort> = {},
+): CapturePort {
   return {
     getTrack: () => track,
     ...overrides,
@@ -57,11 +57,11 @@ async function toggleOnce(
   connection: UseZvonokConnectionResult,
   kind: "audio" | "video",
   enabled: boolean,
-  hooks: PublishToggleHooks,
+  port: CapturePort,
   isMobile?: boolean,
 ): Promise<PublishToggleResult> {
   const { result } = renderHook(() => usePublishControls(connection, { isMobile }));
-  return result.current.toggle(kind, enabled, hooks);
+  return result.current.toggle(kind, enabled, port);
 }
 
 describe("usePublishControls", () => {
@@ -69,7 +69,7 @@ describe("usePublishControls", () => {
     const connection = createConnection({ hasProducer: vi.fn(() => true) });
     const release = vi.fn(async () => {});
 
-    const result = await toggleOnce(connection, "video", false, hooksWith(null, { release }));
+    const result = await toggleOnce(connection, "video", false, portWith(null, { release }));
 
     expect(connection.pauseProducer).toHaveBeenCalledWith("video");
     expect(release).toHaveBeenCalledTimes(1);
@@ -80,7 +80,7 @@ describe("usePublishControls", () => {
     const connection = createConnection({ hasProducer: vi.fn(() => false) });
     const release = vi.fn();
 
-    const result = await toggleOnce(connection, "audio", false, hooksWith(null, { release }));
+    const result = await toggleOnce(connection, "audio", false, portWith(null, { release }));
 
     expect(connection.pauseProducer).not.toHaveBeenCalled();
     expect(release).toHaveBeenCalledTimes(1);
@@ -91,7 +91,7 @@ describe("usePublishControls", () => {
     const track = createLiveTrack("cam-1", "video");
     const connection = createConnection();
 
-    const result = await toggleOnce(connection, "video", true, hooksWith(track), true);
+    const result = await toggleOnce(connection, "video", true, portWith(track), true);
 
     expect(connection.produceTrack).toHaveBeenCalledWith(track, { isMobile: true });
     expect(connection.resumeProducer).toHaveBeenCalledWith("video");
@@ -104,7 +104,7 @@ describe("usePublishControls", () => {
     const connection = createConnection();
     const ensureTrack = vi.fn(async () => ({ getTracks: () => [fresh] } as unknown as MediaStream));
 
-    const result = await toggleOnce(connection, "video", true, hooksWith(dead, { ensureTrack }));
+    const result = await toggleOnce(connection, "video", true, portWith(dead, { ensureTrack }));
 
     expect(ensureTrack).toHaveBeenCalledTimes(1);
     expect(connection.produceTrack).toHaveBeenCalledWith(fresh, undefined);
@@ -115,7 +115,7 @@ describe("usePublishControls", () => {
     const connection = createConnection();
     const ensureTrack = vi.fn(async () => null);
 
-    const result = await toggleOnce(connection, "audio", true, hooksWith(null, { ensureTrack }));
+    const result = await toggleOnce(connection, "audio", true, portWith(null, { ensureTrack }));
 
     expect(connection.produceTrack).not.toHaveBeenCalled();
     expect(connection.resumeProducer).not.toHaveBeenCalled();
@@ -126,7 +126,7 @@ describe("usePublishControls", () => {
     const track = createLiveTrack("mic-1");
     const connection = createConnection({ produceTrack: vi.fn(async () => false) });
 
-    const result = await toggleOnce(connection, "audio", true, hooksWith(track));
+    const result = await toggleOnce(connection, "audio", true, portWith(track));
 
     expect(connection.resumeProducer).not.toHaveBeenCalled();
     expect(result).toBe("produce-failed");
@@ -136,7 +136,7 @@ describe("usePublishControls", () => {
     const track = createLiveTrack("mic-2");
     const connection = createConnection({ hasProducer: vi.fn(() => true) });
 
-    const result = await toggleOnce(connection, "audio", true, hooksWith(track));
+    const result = await toggleOnce(connection, "audio", true, portWith(track));
 
     expect(connection.produceTrack).not.toHaveBeenCalled();
     expect(connection.replaceTrack).toHaveBeenCalledWith("audio", track);
@@ -151,7 +151,7 @@ describe("usePublishControls", () => {
       replaceTrack: vi.fn(async () => false),
     });
 
-    const result = await toggleOnce(connection, "video", true, hooksWith(track));
+    const result = await toggleOnce(connection, "video", true, portWith(track));
 
     expect(connection.resumeProducer).not.toHaveBeenCalled();
     expect(result).toBe("replace-failed");

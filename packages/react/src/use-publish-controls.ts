@@ -12,6 +12,7 @@
 
 import { useCallback, useMemo } from "react";
 
+import type { CapturePort } from "./capture-port.js";
 import type { UseZvonokConnectionResult } from "./use-zvonok-connection.js";
 
 export type PublishKind = "audio" | "video";
@@ -29,18 +30,6 @@ export type PublishToggleResult =
   | "produce-failed"
   | "replace-failed";
 
-export interface PublishToggleHooks {
-  /** The kind's current track from the consumer's captured stream. */
-  getTrack(): MediaStreamTrack | null | undefined;
-  /**
-   * Re-acquires capture when no live track exists (camera or mic was off
-   * in the lobby, or the device was lost). Returns the fresh stream.
-   */
-  ensureTrack?(): MediaStream | null | undefined | Promise<MediaStream | null | undefined>;
-  /** Runs after a successful pause; consumers release capture hardware here. */
-  release?(): unknown;
-}
-
 export interface UsePublishControlsOptions {
   /** Slower publish errored-retry pacing on phones; forwarded to produce. */
   isMobile?: boolean;
@@ -50,7 +39,7 @@ export interface UsePublishControlsResult {
   toggle(
     kind: PublishKind,
     enabled: boolean,
-    hooks: PublishToggleHooks,
+    port: CapturePort,
   ): Promise<PublishToggleResult>;
 }
 
@@ -64,21 +53,21 @@ export function usePublishControls(
     async (
       kind: PublishKind,
       enabled: boolean,
-      { getTrack, ensureTrack, release }: PublishToggleHooks,
+      { getTrack, ensureTrack, release }: CapturePort,
     ): Promise<PublishToggleResult> => {
       if (!enabled) {
         if (connection.hasProducer(kind)) {
           connection.pauseProducer(kind);
         }
-        await release?.();
+        await release?.(kind);
         return "paused";
       }
 
-      let track = getTrack();
+      let track = getTrack(kind);
       // A camera or mic disabled in the lobby (or a lost device) leaves no
       // live track; re-acquire capture before publishing.
       if (!track || track.readyState !== "live") {
-        const stream = await ensureTrack?.();
+        const stream = await ensureTrack?.(kind);
         track = stream?.getTracks().find((candidate) => candidate.kind === kind) ?? null;
         if (!track || track.readyState !== "live") {
           return "no-track";

@@ -336,9 +336,9 @@ export function createMockMediaManager() {
   >();
 
   const makeCapture = (listeners: typeof videoStateListeners) => ({
-    getStream: vi.fn(() => null),
-    getState: vi.fn(() => 0 as CaptureState),
-    getTrack: vi.fn(() => null),
+    getStream: vi.fn((): MediaStream | null => null),
+    getState: vi.fn((): CaptureState => 0 as CaptureState),
+    getTrack: vi.fn((): MediaStreamTrack | null => null),
     onStateChange: vi.fn(
       (
         listener: (state: CaptureState, track: MediaStreamTrack | null) => void,
@@ -347,10 +347,10 @@ export function createMockMediaManager() {
         return () => listeners.delete(listener);
       },
     ),
-    start: vi.fn(async () => true),
+    start: vi.fn(async (): Promise<boolean> => true),
     stop: vi.fn(),
-    switchDevice: vi.fn(async () => true),
-    toggle: vi.fn(async () => true),
+    switchDevice: vi.fn(async (): Promise<boolean> => true),
+    toggle: vi.fn(async (): Promise<boolean> => true),
   });
 
   const videoCapture = makeCapture(videoStateListeners);

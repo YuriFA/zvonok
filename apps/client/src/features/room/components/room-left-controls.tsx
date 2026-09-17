@@ -1,3 +1,4 @@
+import { CaptureState } from "@zvonok/client/media/capture-state";
 import { deriveMediaControlState } from "@zvonok/react";
 import { AlertTriangle, Loader2, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
@@ -19,18 +20,17 @@ export const RoomLeftControls = ({
   buttonVariant = "outline",
   buttonInactiveVariant = "secondary",
 }: Props) => {
-  const { mediaControls, mutedByHost: isMutedByHost } = useRoomSessionState();
+  const { camera, microphone, mutedByHost: isMutedByHost } = useRoomSessionState();
   const { toggleVideo: onToggleVideo, toggleAudio: onToggleAudio } = useRoomSessionActions();
-  const { isVideoEnabled, isAudioEnabled, videoCaptureState, audioCaptureState } = mediaControls;
 
   const video = deriveMediaControlState({
-    isEnabled: isVideoEnabled,
-    captureState: videoCaptureState,
+    isEnabled: camera.isEnabled,
+    captureState: camera.captureState ?? CaptureState.STOPPED,
     kind: "video",
   });
   const audio = deriveMediaControlState({
-    isEnabled: isAudioEnabled,
-    captureState: audioCaptureState,
+    isEnabled: microphone.isEnabled,
+    captureState: microphone.captureState ?? CaptureState.STOPPED,
     kind: "audio",
     isMutedByHost,
   });

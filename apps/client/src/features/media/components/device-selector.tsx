@@ -1,15 +1,12 @@
-import { CaptureState } from "@zvonok/client/media/capture-state";
+import { CaptureState, isActive } from "@zvonok/client/media/capture-state";
 import { useDeviceControls, useDevicePermissions } from "@zvonok/react";
 import { AlertTriangleIcon, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { useCallback, useState } from "react";
 
 import { LocalVideo } from "@/components/local-video";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { STORAGE_KEYS } from "@/lib/constants/storage-keys";
 import { cn } from "@/lib/utils";
 
-import { useMediaStreamContext } from "../contexts/media-stream.context";
-import { useMediaControls } from "../hooks/use-media-controls";
 import { DeviceControlGroup } from "./device-control-group";
 import { PermissionRequestModal } from "./permission-request-modal";
 import { SpeakerDeviceControlGroup } from "./speaker-device-control-group";
@@ -25,9 +22,6 @@ const isPermissionDenied = (state: CaptureState) =>
   state === CaptureState.CAPTURE_CANCELED;
 
 export function DeviceSelector({ className, username }: DeviceSelectorProps) {
-  const { videoStream, videoState, audioState } = useMediaStreamContext();
-  const mediaControls = useMediaControls();
-
   const {
     devices: allDevices,
     camera,
@@ -36,7 +30,12 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
     selectVideoDevice,
     selectAudioDevice,
     selectSpeakerDevice,
-  } = useDeviceControls({ storageKey: STORAGE_KEYS.SELECTED_DEVICES });
+  } = useDeviceControls();
+
+  const videoState = camera.state;
+  const audioState = mic.state;
+  const isVideoEnabled = isActive(videoState);
+  const isAudioEnabled = isActive(audioState);
 
   const [permissionModalOpen, setPermissionModalOpen] = useState(false);
   const [deniedDevices, setDeniedDevices] = useState({ camera: false, microphone: false });
@@ -47,30 +46,20 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
   const micPermission = useDevicePermissions("audio");
 
   const handleToggleVideo = useCallback(async () => {
-    const nextEnabled = !mediaControls.isVideoEnabled;
-    mediaControls.setVideoEnabled(nextEnabled);
-    const success = await camera.toggle(nextEnabled);
-    if (!success) {
-      mediaControls.setVideoEnabled(false);
-      if (isPermissionDenied(mediaControls.getVideoCaptureState())) {
-        setDeniedDevices((prev) => ({ ...prev, camera: true }));
-        setPermissionModalOpen(true);
-      }
+    const success = await camera.toggle(!isVideoEnabled);
+    if (!success && isPermissionDenied(camera.state)) {
+      setDeniedDevices((prev) => ({ ...prev, camera: true }));
+      setPermissionModalOpen(true);
     }
-  }, [camera, mediaControls]);
+  }, [camera, isVideoEnabled]);
 
   const handleToggleAudio = useCallback(async () => {
-    const nextEnabled = !mediaControls.isAudioEnabled;
-    mediaControls.setAudioEnabled(nextEnabled);
-    const success = await mic.toggle(nextEnabled);
-    if (!success) {
-      mediaControls.setAudioEnabled(false);
-      if (isPermissionDenied(mediaControls.getAudioCaptureState())) {
-        setDeniedDevices((prev) => ({ ...prev, microphone: true }));
-        setPermissionModalOpen(true);
-      }
+    const success = await mic.toggle(!isAudioEnabled);
+    if (!success && isPermissionDenied(mic.state)) {
+      setDeniedDevices((prev) => ({ ...prev, microphone: true }));
+      setPermissionModalOpen(true);
     }
-  }, [mic, mediaControls]);
+  }, [mic, isAudioEnabled]);
 
   const handleModalOpenChange = useCallback((open: boolean) => {
     setPermissionModalOpen(open);
@@ -123,9 +112,9 @@ export function DeviceSelector({ className, username }: DeviceSelectorProps) {
         )}
         {!isVideoLoading && (
           <LocalVideo
-            stream={videoStream}
+            stream={camera.stream}
             username={username}
-            isVideoEnabled={mediaControls.isVideoEnabled}
+            isVideoEnabled={isVideoEnabled}
             className="h-full"
           />
         )}

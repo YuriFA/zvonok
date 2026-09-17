@@ -9,7 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 const mockUseRoom = vi.hoisted(() => vi.fn());
 const mockUseEndRoom = vi.hoisted(() => vi.fn());
 const mockUseAuth = vi.hoisted(() => vi.fn());
-const mockUseRoomSession = vi.hoisted(() => vi.fn());
+const mockUseZvonokCall = vi.hoisted(() => vi.fn());
 const mockKickPeer = vi.hoisted(() => vi.fn());
 const mockToggleVideo = vi.hoisted(() => vi.fn());
 const mockToggleAudio = vi.hoisted(() => vi.fn());
@@ -112,6 +112,30 @@ vi.mock("@zvonok/react", () => ({
     update: vi.fn(),
   }),
   useZvonokConnection: () => mockConnection,
+  useZvonokCall: () => mockUseZvonokCall(),
+  useDeviceControls: () => ({
+    devices: [],
+    camera: {
+      state: 2,
+      stream: null,
+      toggle: vi.fn(async () => true),
+      switchDevice: vi.fn(async () => true),
+    },
+    mic: {
+      state: 2,
+      stream: null,
+      toggle: vi.fn(async () => true),
+      switchDevice: vi.fn(async () => true),
+    },
+    start: vi.fn(async () => {}),
+    stop: vi.fn(),
+    isLoading: false,
+    selectedDevices: { videoDeviceId: null, audioDeviceId: null, speakerDeviceId: null },
+    selectVideoDevice: vi.fn(),
+    selectAudioDevice: vi.fn(),
+    selectSpeakerDevice: vi.fn(),
+    permissions: { video: "granted", audio: "granted" },
+  }),
   useParticipants: () => ({ participants: [] }),
   useOwnCapabilities: () => [],
   useEgressState: () => ({ isRecording: false }),
@@ -155,25 +179,11 @@ vi.mock("@zvonok/react", () => ({
   hasCapabilities: () => true,
   mapScreenShareError: () => undefined,
   useViewportQuality: () => {},
-  useSfuTrackSync: () => {},
   useRoomLayout: () => ({
     mode: "grid",
     spotlight: null,
     tiles: [],
   }),
-}));
-
-vi.mock("@/features/media/contexts/media-stream.context", () => ({
-  useMediaStreamContext: () => ({
-    videoStream: { id: "local-video-stream", getTracks: () => [] } as unknown as MediaStream,
-    audioStream: { id: "local-audio-stream", getTracks: () => [] } as unknown as MediaStream,
-    stop: vi.fn(),
-  }),
-  MediaStreamProvider: ({ children }: { children: React.ReactNode }) => children,
-}));
-
-vi.mock("@/features/room/hooks/use-room-session", () => ({
-  useRoomSession: mockUseRoomSession,
 }));
 
 vi.mock("@/components/local-video", () => ({
@@ -277,19 +287,19 @@ describe("RoomPage", () => {
         username: "alice",
       },
     });
-    mockUseRoomSession.mockReturnValue({
+    mockUseZvonokCall.mockReturnValue({
       localVideoStream: { id: "local-video-stream", getTracks: () => [] } as unknown as MediaStream,
       localAudioStream: { id: "local-audio-stream", getTracks: () => [] } as unknown as MediaStream,
-      mediaControls: {
-        isVideoEnabled: true,
-        isAudioEnabled: true,
-        videoCaptureState: CaptureState.ACTIVE,
-        audioCaptureState: CaptureState.ACTIVE,
-        setVideoEnabled: vi.fn(),
-        setAudioEnabled: vi.fn(),
+      camera: {
+        isEnabled: true,
+        captureState: CaptureState.ACTIVE,
+        toggle: mockToggleVideo,
       },
-      toggleVideo: mockToggleVideo,
-      toggleAudio: mockToggleAudio,
+      microphone: {
+        isEnabled: true,
+        captureState: CaptureState.ACTIVE,
+        toggle: mockToggleAudio,
+      },
       connectionState: "connected",
       capabilities: [
         "send-audio",
@@ -301,43 +311,42 @@ describe("RoomPage", () => {
         "start-recording",
         "start-broadcast",
       ],
-      remotePeers: [
+      participants: [
+        {
+          userId: "user-1",
+          displayName: "alice",
+          cameraStream: null,
+          screenStream: null,
+          audioStream: null,
+          isCameraEnabled: true,
+          isScreenSharing: false,
+          isAudioEnabled: true,
+          isConnected: true,
+          mutedByHost: false,
+        },
         {
           userId: "user-2",
-          username: "bob",
+          displayName: "bob",
           cameraStream: { id: "cam-remote" } as unknown as MediaStream,
           screenStream: null,
           audioStream: { id: "mic-remote" } as unknown as MediaStream,
           isCameraEnabled: true,
           isScreenSharing: false,
           isAudioEnabled: true,
+          isConnected: true,
           mutedByHost: false,
         },
       ],
+      localUserId: "user-1",
+      isRoomLocked: false,
+      mutedByHost: false,
       wasKicked: false,
       kickPeer: mockKickPeer,
-      participants: [
-        {
-          id: "user-1",
-          userId: "user-1",
-          username: "alice",
-          isMuted: false,
-          isVideoOff: false,
-          isConnected: true,
-        },
-        {
-          id: "user-2",
-          userId: "user-2",
-          username: "bob",
-          isMuted: false,
-          isVideoOff: false,
-          isConnected: true,
-        },
-      ],
-      localUserId: "user-1",
+      hostControls: { muteAll: vi.fn(), lockRoom: vi.fn(), mutePeer: vi.fn() },
     });
-    mockToggleVideo.mockResolvedValue(undefined);
-    mockToggleAudio.mockResolvedValue(undefined);
+    mockToggleVideo.mockResolvedValue("published");
+    mockToggleAudio.mockResolvedValue("published");
+    mockKickPeer.mockResolvedValue(undefined);
     mockGetRoomMe.mockResolvedValue({ userId: "guest-abc" });
   });
 

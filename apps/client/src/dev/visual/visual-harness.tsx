@@ -13,7 +13,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 
 import { AuthProvider } from "@/features/auth/contexts/auth.context";
-import { MediaStreamProvider } from "@/features/media/contexts/media-stream.context";
+import { CaptureLifecycle } from "@/features/media/components/capture-lifecycle";
 import { PrejoinView } from "@/features/room/components/prejoin-view";
 import { RoomView } from "@/features/room/components/room-view";
 import { GuestRequestsProvider } from "@/features/room/contexts/guest-requests.context";
@@ -104,14 +104,14 @@ function RoomScene({ scene }: { scene: string }) {
 function PrejoinScene() {
   return (
     <div data-testid="visual-root" className="contents">
-      <MediaStreamProvider>
+      <CaptureLifecycle>
         <PrejoinView
           roomUrl="http://localhost:5173/room/visual-room"
           displayName=""
           onDisplayNameChange={() => {}}
           onJoin={() => {}}
         />
-      </MediaStreamProvider>
+      </CaptureLifecycle>
     </div>
   );
 }
@@ -131,11 +131,11 @@ export function VisualHarness() {
     scene === "prejoin" ? (
       <PrejoinScene />
     ) : (
-      <MediaStreamProvider>
+      <CaptureLifecycle>
         <GuestRequestsProvider roomSlug="visual-room">
           <RoomScene scene={scene} />
         </GuestRequestsProvider>
-      </MediaStreamProvider>
+      </CaptureLifecycle>
     );
 
   return (

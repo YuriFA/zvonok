@@ -11,11 +11,11 @@ import { useEffect, useRef } from "react";
 import { useRoomSessionState } from "../contexts/room-session.context";
 
 export function useRoomVisibilityPause(connection: UseZvonokConnectionResult): void {
-  const { mediaControls } = useRoomSessionState();
+  const { camera } = useRoomSessionState();
   const managerRef = useRef(connection.manager);
   managerRef.current = connection.manager;
-  const isVideoEnabledRef = useRef(mediaControls.isVideoEnabled);
-  isVideoEnabledRef.current = mediaControls.isVideoEnabled;
+  const isVideoEnabledRef = useRef(camera.isEnabled);
+  isVideoEnabledRef.current = camera.isEnabled;
 
   useEffect(() => {
     if (typeof document === "undefined") {

@@ -1,6 +1,5 @@
+import type { ZvonokParticipant } from "@zvonok/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import type { RemotePeerMedia } from "@/features/room/hooks/use-room-sfu";
 
 import { CallAudioMixer } from "../lib/call-audio-mixer";
 import { CallRecordingCompositor, type RecordingSource } from "../lib/call-recording-compositor";
@@ -12,7 +11,7 @@ export interface UseCallRecordingOptions {
   localDisplayName: string;
   localVideoStream: MediaStream | null;
   localAudioStream: MediaStream | null;
-  remotePeers: RemotePeerMedia[];
+  remotePeers: ZvonokParticipant[];
   /** Active screen share (local priority), already derived by the room view. */
   activeScreenShare: { userId: string; label: string; stream: MediaStream } | null;
   /** The participant the room currently detects as speaking, if any. */
@@ -76,7 +75,7 @@ export function useCallRecording({
     for (const peer of remotePeers) {
       list.push({
         id: peer.userId,
-        label: peer.username,
+        label: peer.displayName,
         stream: peer.cameraStream,
         isLocal: false,
         isScreen: false,
@@ -108,7 +107,7 @@ export function useCallRecording({
       list.push({ id: localUserId ?? "me", stream: localAudioStream });
     }
     for (const peer of remotePeers) {
-      if (hasLiveAudio(peer.audioStream)) {
+      if (peer.audioStream != null && hasLiveAudio(peer.audioStream)) {
         list.push({ id: peer.userId, stream: peer.audioStream });
       }
     }

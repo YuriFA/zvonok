@@ -18,6 +18,8 @@ import { useZvonokSession } from "./zvonok-context.js";
 export interface ZvonokCaptureControl {
   state: CaptureState;
   track: MediaStreamTrack | null;
+  /** The captured stream, for local previews (prejoin tiles). */
+  stream: MediaStream | null;
   toggle(enabled: boolean): Promise<boolean>;
   switchDevice(deviceId: string): Promise<boolean>;
 }
@@ -96,10 +98,19 @@ function saveDeviceSelection(selection: DeviceSelection, storageKey: string): vo
 interface CaptureSnapshot {
   state: CaptureState;
   track: MediaStreamTrack | null;
+  stream: MediaStream | null;
 }
 
-function snapshot(capture: { getState(): CaptureState; getTrack(): MediaStreamTrack | null }): CaptureSnapshot {
-  return { state: capture.getState(), track: capture.getTrack() };
+function snapshot(capture: {
+  getState(): CaptureState;
+  getTrack(): MediaStreamTrack | null;
+  getStream(): MediaStream | null;
+}): CaptureSnapshot {
+  return {
+    state: capture.getState(),
+    track: capture.getTrack(),
+    stream: capture.getStream(),
+  };
 }
 
 export function useDeviceControls(options: UseDeviceControlsOptions = {}): UseDeviceControlsResult {
@@ -116,10 +127,18 @@ export function useDeviceControls(options: UseDeviceControlsOptions = {}): UseDe
 
   useEffect(() => {
     const unsubscribeVideo = mediaManager.onVideoStateChange((state, track) =>
-      setCameraSnapshot({ state, track: track ?? null }),
+      setCameraSnapshot({
+        state,
+        track: track ?? null,
+        stream: mediaManager.videoCapture.getStream(),
+      }),
     );
     const unsubscribeAudio = mediaManager.onAudioStateChange((state, track) =>
-      setMicSnapshot({ state, track: track ?? null }),
+      setMicSnapshot({
+        state,
+        track: track ?? null,
+        stream: mediaManager.audioCapture.getStream(),
+      }),
     );
     return () => {
       unsubscribeVideo();
