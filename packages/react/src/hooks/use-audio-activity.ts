@@ -43,7 +43,10 @@ interface RemoteNodes {
 /**
  * Samples audio levels for every audio track flowing through the manager
  * (local microphone included) and derives the active speaker from them.
- * Purely observational: no signalling, no media playout.
+ * Purely observational: no signalling, no media playout. This is the one
+ * sampling pipeline for the whole tree; consumers attach through
+ * {@link useActiveSpeaker}, {@link useAudioLevels}, and
+ * {@link useAudioActivityEngine}.
  */
 export class AudioActivityEngine {
   private readonly manager: SfuManager;
@@ -56,6 +59,8 @@ export class AudioActivityEngine {
   private ctx: AudioContext | null = null;
   private localUserId: string | null = null;
   private localTrack: MediaStreamTrack | null = null;
+  private localAudioUserId: string | null = null;
+  private localAudioStream: MediaStream | null = null;
   private timer: ReturnType<typeof setInterval> | undefined;
   private unsubscribes: Array<() => void> = [];
   private snapshot: AudioActivitySnapshot = EMPTY_AUDIO_ACTIVITY;
@@ -136,10 +141,23 @@ export class AudioActivityEngine {
     }
   }
 
-  /** Keeps the sampler's local entry in sync with the produced mic track. */
+  /**
+   * Overrides the local analysis source with a consumer-provided mic
+   * stream (for capture the manager does not produce yet). Null arguments
+   * fall back to the manager's produced audio producer.
+   */
+  setLocalAudio(userId: string | null, stream: MediaStream | null): void {
+    if (userId === this.localAudioUserId && stream === this.localAudioStream) return;
+    this.localAudioUserId = userId;
+    this.localAudioStream = stream;
+  }
+
+  /** Keeps the sampler's local entry in sync with the local mic track. */
   private reconcileLocal(): void {
-    const userId = this.manager.getLocalUserId();
-    const track = this.manager.getProducerByKind("audio")?.track ?? null;
+    const userId = this.localAudioUserId ?? this.manager.getLocalUserId();
+    const track = this.localAudioUserId
+      ? (this.localAudioStream?.getAudioTracks()[0] ?? null)
+      : (this.manager.getProducerByKind("audio")?.track ?? null);
     if (userId === this.localUserId && track === this.localTrack) return;
     this.detachLocal();
     if (userId && track) {
@@ -203,7 +221,7 @@ function engineFor(manager: SfuManager): AudioActivityEngine {
   return engine;
 }
 
-function useAudioActivityEngine(): AudioActivityEngine | null {
+export function useAudioActivityEngine(): AudioActivityEngine | null {
   const session = useZvonokSession();
   const manager = session.manager;
   const engine = useMemo(() => (manager ? engineFor(manager) : null), [manager]);

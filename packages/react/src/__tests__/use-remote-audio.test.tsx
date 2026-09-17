@@ -47,6 +47,7 @@ const samplerHarness = vi.hoisted(() => ({
   addBorrowed: vi.fn(),
   remove: vi.fn(),
   ids: vi.fn(() => [] as string[]),
+  clear: vi.fn(),
   dispose: vi.fn(),
 }));
 
@@ -58,7 +59,7 @@ vi.mock("@zvonok/client/audio/audio-level-sampler", () => ({
       remove: samplerHarness.remove,
       ids: samplerHarness.ids,
       sample: samplerHarness.sample,
-      clear: vi.fn(),
+      clear: samplerHarness.clear,
       dispose: samplerHarness.dispose,
     };
   }),
@@ -114,6 +115,7 @@ describe("useRemoteAudio", () => {
     samplerHarness.addOwned.mockClear();
     samplerHarness.addBorrowed.mockClear();
     samplerHarness.remove.mockClear();
+    samplerHarness.clear.mockClear();
     samplerHarness.dispose.mockClear();
     detectorHarness.detect.mockImplementation(() => null);
     detectorHarness.reset.mockClear();
@@ -169,10 +171,9 @@ describe("useRemoteAudio", () => {
     expect(mixerHarness.instances.at(-1)!.setSink).toHaveBeenCalledWith("speakers-9");
   });
 
-  it("feeds levels and the active speaker from the playout graph", async () => {
+  it("feeds levels and the active speaker from the shared engine", async () => {
     vi.useFakeTimers();
     try {
-      samplerHarness.ids.mockImplementation(() => ["peer-1"]);
       samplerHarness.sample.mockImplementation(() => new Map([["peer-1", 0.5]]));
       detectorHarness.detect.mockImplementation(() => "peer-1");
       const { result } = renderRemoteAudio();
@@ -190,22 +191,38 @@ describe("useRemoteAudio", () => {
 
       expect(result.current.hook.levels).toEqual({ "peer-1": 0.5 });
       expect(result.current.hook.activeSpeakerId).toBe("peer-1");
-      expect(samplerHarness.addBorrowed).toHaveBeenCalledWith("peer-1", { fake: "analyser" });
     } finally {
       vi.useRealTimers();
     }
   });
 
   it("includes the local microphone in analysis without playing it", async () => {
-    const { result } = renderRemoteAudio({
-      localAudio: { userId: "me-1", stream: new MediaStream([createTrack("audio", "local-mic")]) },
-    });
-    await attachManager(result, sfu);
+    vi.useFakeTimers();
+    try {
+      const { result } = renderRemoteAudio({
+        localAudio: {
+          userId: "me-1",
+          stream: new MediaStream([createTrack("audio", "local-mic")]),
+        },
+      });
+      await act(async () => {
+        await attachManager(result, sfu);
+      });
 
-    const mixer = mixerHarness.instances.at(-1)!;
-    expect(mixer.addAnalysisTap).toHaveBeenCalledWith("me-1", expect.anything());
-    expect(samplerHarness.addBorrowed).toHaveBeenCalledWith("me-1", { fake: "mic-analyser" });
-    expect(mixer.addPeer).not.toHaveBeenCalledWith("me-1", expect.anything());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+
+      // Analysis crosses the engine's sampler, never the playout mixer.
+      expect(samplerHarness.addOwned).toHaveBeenCalledWith("me-1", expect.anything());
+      expect(mixerHarness.instances.at(-1)!.addAnalysisTap).not.toHaveBeenCalled();
+      expect(mixerHarness.instances.at(-1)!.addPeer).not.toHaveBeenCalledWith(
+        "me-1",
+        expect.anything(),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("releases playout and sampling resources on leave", async () => {
@@ -221,7 +238,7 @@ describe("useRemoteAudio", () => {
     });
 
     expect(mixerHarness.instances.at(-1)!.destroy).toHaveBeenCalled();
-    expect(samplerHarness.dispose).toHaveBeenCalled();
+    expect(samplerHarness.clear).toHaveBeenCalled();
     expect(detectorHarness.reset).toHaveBeenCalled();
     expect(result.current.hook.levels).toEqual({});
     expect(result.current.hook.activeSpeakerId).toBeNull();
