@@ -9,10 +9,13 @@
 import type { Socket } from "socket.io-client";
 
 import type {
+  SfuBroadcastErrorCode,
   SfuBroadcastMessage,
+  SfuEgressActionErrorCode,
   SfuEgressOutputRequest,
   SfuEgressStatusPayload,
   SfuGuestJoinRequestPayload,
+  SfuHostActionErrorCode,
   SfuState,
 } from "./types.js";
 import { SfuHostActionError, SfuEgressActionError, SfuBroadcastError } from "./types.js";
@@ -53,34 +56,57 @@ export class SfuActions {
   private static readonly HOST_ACTION_TIMEOUT_MS = 10_000;
 
   /**
-   * Emits a host-control event and settles on the server's acknowledgement:
-   * `{ok: true}` resolves; `{ok: false, code, message}` rejects with a typed
-   * SfuHostActionError carrying the server's code. A missing acknowledgement
-   * rejects with HOST_ACTION_TIMEOUT.
+   * Emits a host-control event and settles on the server's acknowledgement
+   * through {@link SfuActions.emitAck}.
    */
   private emitHostAction(
     event: "sfu:mute-peer" | "sfu:mute-all" | "sfu:lock-room" | "sfu:kick-peer",
     payload: Record<string, string | boolean>,
     timeoutMs?: number,
   ): Promise<void> {
+    return this.emitAck<SfuHostActionErrorCode>({
+      event,
+      payload,
+      timeoutMs: timeoutMs ?? SfuActions.HOST_ACTION_TIMEOUT_MS,
+      timeoutCode: "HOST_ACTION_TIMEOUT",
+      fallbackCode: "MISSING_CAPABILITY",
+      disconnectedMessage: "Join the room before using host controls",
+      makeError: (code, message) => new SfuHostActionError(code, message),
+    });
+  }
+
+  /**
+   * The single request primitive behind every acknowledgement-settled
+   * action: emits `event` with `payload`; `{ok: true}` resolves;
+   * `{ok: false, code, message}` rejects with `makeError(code ??
+   * fallbackCode, message ?? "Server denied <event>")`; no acknowledgement
+   * within `timeoutMs` rejects with `timeoutCode`; no socket rejects with
+   * DISCONNECTED. The host, egress, and broadcast vocabularies share this
+   * contract.
+   */
+  private emitAck<C extends string>(options: {
+    event: string;
+    payload: Record<string, unknown>;
+    timeoutMs: number;
+    timeoutCode: C;
+    fallbackCode: C;
+    disconnectedMessage: string;
+    makeError: (code: C, message: string) => Error;
+  }): Promise<void> {
     const socket = this.host.getSocket();
     if (!socket) {
-      return Promise.reject(
-        new SfuHostActionError("DISCONNECTED", "Join the room before using host controls"),
-      );
+      return Promise.reject(options.makeError("DISCONNECTED" as C, options.disconnectedMessage));
     }
-
-    const wait = timeoutMs ?? SfuActions.HOST_ACTION_TIMEOUT_MS;
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(
-          new SfuHostActionError(
-            "HOST_ACTION_TIMEOUT",
-            `Server did not acknowledge ${event} within ${wait}ms`,
+          options.makeError(
+            options.timeoutCode,
+            `Server did not acknowledge ${options.event} within ${options.timeoutMs}ms`,
           ),
         );
-      }, wait);
-      socket.emit(event, payload, (ack: unknown) => {
+      }, options.timeoutMs);
+      socket.emit(options.event, options.payload, (ack: unknown) => {
         clearTimeout(timer);
         const { ok, code, message } = (ack ?? {}) as {
           ok?: boolean;
@@ -92,9 +118,9 @@ export class SfuActions {
           return;
         }
         reject(
-          new SfuHostActionError(
-            (code as SfuHostActionError["code"]) ?? "MISSING_CAPABILITY",
-            message ?? `Server denied ${event}`,
+          options.makeError(
+            (code as C) ?? options.fallbackCode,
+            message ?? `Server denied ${options.event}`,
           ),
         );
       });
@@ -119,88 +145,34 @@ export class SfuActions {
 
   /**
    * Emits an egress control event and settles on the server's
-   * acknowledgement, mirroring the host-action ack contract.
+   * acknowledgement through {@link SfuActions.emitAck}.
    */
   private emitEgressAction(
     event: "egress:start" | "egress:stop",
     payload: Record<string, boolean>,
     timeoutMs?: number,
   ): Promise<void> {
-    const socket = this.host.getSocket();
-    if (!socket) {
-      return Promise.reject(
-        new SfuEgressActionError("DISCONNECTED", "Join the room before controlling egress"),
-      );
-    }
-
-    const wait = timeoutMs ?? SfuActions.EGRESS_ACTION_TIMEOUT_MS;
-    return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(
-          new SfuEgressActionError(
-            "EGRESS_ACTION_TIMEOUT",
-            `Server did not acknowledge ${event} within ${wait}ms`,
-          ),
-        );
-      }, wait);
-      socket.emit(event, payload, (ack: unknown) => {
-        clearTimeout(timer);
-        const { ok, code, message } = (ack ?? {}) as {
-          ok?: boolean;
-          code?: string;
-          message?: string;
-        };
-        if (ok === true) {
-          resolve();
-          return;
-        }
-        reject(
-          new SfuEgressActionError(
-            (code as SfuEgressActionError["code"]) ?? "EGRESS_UNAVAILABLE",
-            message ?? `Server denied ${event}`,
-          ),
-        );
-      });
+    return this.emitAck<SfuEgressActionErrorCode>({
+      event,
+      payload,
+      timeoutMs: timeoutMs ?? SfuActions.EGRESS_ACTION_TIMEOUT_MS,
+      timeoutCode: "EGRESS_ACTION_TIMEOUT",
+      fallbackCode: "EGRESS_UNAVAILABLE",
+      disconnectedMessage: "Join the room before controlling egress",
+      makeError: (code, message) => new SfuEgressActionError(code, message),
     });
   }
 
   // Data channel (ephemeral topic-scoped broadcasts)
   sendBroadcast(topic: string, payload: unknown, options?: { timeoutMs?: number }): Promise<void> {
-    const socket = this.host.getSocket();
-    if (!socket) {
-      return Promise.reject(
-        new SfuBroadcastError("DISCONNECTED", "Join the room before broadcasting"),
-      );
-    }
-
-    const wait = options?.timeoutMs ?? SfuActions.BROADCAST_TIMEOUT_MS;
-    return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(
-          new SfuBroadcastError(
-            "BROADCAST_TIMEOUT",
-            `Server did not acknowledge sfu:broadcast within ${wait}ms`,
-          ),
-        );
-      }, wait);
-      socket.emit("sfu:broadcast", { topic, payload }, (ack: unknown) => {
-        clearTimeout(timer);
-        const { ok, code, message } = (ack ?? {}) as {
-          ok?: boolean;
-          code?: string;
-          message?: string;
-        };
-        if (ok === true) {
-          resolve();
-          return;
-        }
-        reject(
-          new SfuBroadcastError(
-            (code as SfuBroadcastError["code"]) ?? "MISSING_CAPABILITY",
-            message ?? "Server denied sfu:broadcast",
-          ),
-        );
-      });
+    return this.emitAck<SfuBroadcastErrorCode>({
+      event: "sfu:broadcast",
+      payload: { topic, payload },
+      timeoutMs: options?.timeoutMs ?? SfuActions.BROADCAST_TIMEOUT_MS,
+      timeoutCode: "BROADCAST_TIMEOUT",
+      fallbackCode: "MISSING_CAPABILITY",
+      disconnectedMessage: "Join the room before broadcasting",
+      makeError: (code, message) => new SfuBroadcastError(code, message),
     });
   }
 
