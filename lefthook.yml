@@ -49,3 +49,7 @@ pre-commit:
     typecheck:
       glob: "**/*.{ts,tsx}"
       run: pnpm lint:ts
+
+    knip:
+      glob: "**/*.{ts,tsx,json}"
+      run: pnpm exec knip --no-progress

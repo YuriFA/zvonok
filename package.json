@@ -49,6 +49,7 @@
   "devDependencies": {
     "@fission-ai/openspec": "^1.12.0",
     "@release-it/conventional-changelog": "^10.0.6",
+    "knip": "^6.36.0",
     "lefthook": "^2.1.12",
     "release-it": "^19.2.4",
     "vitepress": "^1.6.4"

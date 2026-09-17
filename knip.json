@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "unlisted": "error",
+    "binaries": "off",
+    "exports": "off",
+    "types": "off",
+    "duplicates": "error",
+    "enumMembers": "off"
+  },
+  "workspaces": {
+    ".": {
+      "entry": ["docs/.vitepress/config.mts"],
+      "ignore": ["docs/.vitepress/cache/**"]
+    },
+    "apps/server": {
+      "entry": ["src/main.ts", "test/*.e2e-spec.ts"],
+      "ignoreDependencies": ["@prisma/client"]
+    },
+    "apps/client": {
+      "ignoreDependencies": ["mediasoup-client"]
+    }
+  }
+}
