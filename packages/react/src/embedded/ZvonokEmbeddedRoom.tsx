@@ -7,15 +7,17 @@
  * behavior can never drift from the headless surface.
  */
 
-import "../css/component-kit.css";
-import "../css/embedded.css";
+import type { IMediaManager } from "@zvonok/client/media/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useEffect, useState } from "react";
 
+import "../css/component-kit.css";
+import "../css/embedded.css";
 import { ControlBarPreset } from "../components/control-bar/control-bar.js";
 import { DeviceSwitcherPreset } from "../components/device-switcher/device-switcher-preset.js";
 import { ParticipantsPanelPreset } from "../components/participants-panel/participants-panel-preset.js";
 import { StagePreset } from "../components/stage/stage.js";
-import { StatusCardsPreset, useRoomStatus } from "../components/status-cards/status-cards.js";
+import { StatusCardsPreset } from "../components/status-cards/status-cards.js";
 import { ZvonokProvider } from "../contexts/zvonok-context.js";
 import { useDeviceControls } from "../hooks/use-device-controls.js";
 import { useEgressControls } from "../hooks/use-egress-controls.js";
@@ -57,9 +59,18 @@ export interface ZvonokEmbeddedRoomProps {
   onError?: (error: unknown) => void;
   /** Skip the prejoin card and join immediately with mic and camera on. */
   skipPrejoin?: boolean;
+  /**
+   * Supplies the SfuManager; defaults to the standard client manager.
+   * Test injection point, forwarded to the provider.
+   */
+  createManager?: (options: { serverUrl: string }) => SfuManager;
+  /**
+   * Supplies the media manager; defaults to the shared client media manager.
+   * Test injection point, forwarded to the provider.
+   */
+  createMediaManager?: () => IMediaManager;
   /** Rendered alongside the stage inside the room surface. */
   children?: React.ReactNode;
-  /** Extra class for the room root, composed with the `zk` namespace. */
   className?: string;
 }
 
@@ -89,7 +100,6 @@ function EmbeddedRoomSurface({
     localDisplayName: displayName,
     onHostMuted: () => setNotice("Muted by the room host"),
   });
-  const status = useRoomStatus({ call, connection });
 
   const devices = useDeviceControls();
   const ownCapabilities = useOwnCapabilities();
@@ -187,7 +197,7 @@ function EmbeddedRoomSurface({
             {call.participants.length === 1 ? "participant" : "participants"}
           </span>
         </header>
-        <StatusCardsPreset status={status} />
+        <StatusCardsPreset call={call} connection={connection} />
         <StagePreset
           call={call}
           screenShare={screenShare}
@@ -237,10 +247,18 @@ function EmbeddedRoomSurface({
   );
 }
 
-export function ZvonokEmbeddedRoom(props: ZvonokEmbeddedRoomProps) {
+export function ZvonokEmbeddedRoom({
+  createManager,
+  createMediaManager,
+  ...rest
+}: ZvonokEmbeddedRoomProps) {
   return (
-    <ZvonokProvider serverUrl={props.serverUrl}>
-      <EmbeddedRoomSurface {...props} />
+    <ZvonokProvider
+      serverUrl={rest.serverUrl}
+      createManager={createManager}
+      createMediaManager={createMediaManager}
+    >
+      <EmbeddedRoomSurface {...rest} />
     </ZvonokProvider>
   );
 }

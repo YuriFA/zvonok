@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { CaptureState } from "@zvonok/client/media/capture-state";
+import type { IMediaManager } from "@zvonok/client/media/interfaces";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,30 +25,10 @@ import {
   type MockSfuManager,
 } from "./doubles.js";
 
-const sfuHarness = vi.hoisted(() => ({ instances: [] as unknown[] }));
-const mediaHarness = vi.hoisted(() => ({ instances: [] as unknown[] }));
+const sfuInstances: MockSfuManager[] = [];
+const mediaInstances: MockMediaManager[] = [];
 const screenShareHarness = vi.hoisted(() => ({ instances: [] as unknown[] }));
 
-vi.mock("@zvonok/client/sfu/manager", () => {
-  const SfuManagerModule = {
-    SfuManager: vi.fn(function () {
-      const mock = createMockSfuManager();
-      sfuHarness.instances.push(mock);
-      return mock.manager;
-    }),
-  };
-  return {
-    SfuManager: SfuManagerModule.SfuManager,
-    createSfuManager: vi.fn(() => new SfuManagerModule.SfuManager()),
-  };
-});
-vi.mock("@zvonok/client/media/manager-factory", () => ({
-  createMediaManager: () => {
-    const instance = createMockMediaManager();
-    mediaHarness.instances.push(instance);
-    return instance;
-  },
-}));
 vi.mock("@zvonok/client/screen-share/service", () => ({
   ScreenShareService: vi.fn(function () {
     // The client's mock factory predates `destroy()`; add the cleanup hook.
@@ -93,11 +75,27 @@ vi.mock("@zvonok/client/audio/active-speaker-detector", () => ({
 const TOKEN = tokenFor({ participantId: "participant-9", roomId: "room-1" });
 
 function lastSfu(): MockSfuManager {
-  return sfuHarness.instances.at(-1) as MockSfuManager;
+  return sfuInstances.at(-1) as MockSfuManager;
 }
 
 function lastMedia(): MockMediaManager {
-  return mediaHarness.instances.at(-1) as MockMediaManager;
+  return mediaInstances.at(-1) as MockMediaManager;
+}
+
+/** Provider factory props that install and track mock managers. */
+function managerFactories() {
+  return {
+    createManager: () => {
+      const mock = createMockSfuManager();
+      sfuInstances.push(mock);
+      return mock.manager as unknown as SfuManager;
+    },
+    createMediaManager: () => {
+      const instance = createMockMediaManager();
+      mediaInstances.push(instance);
+      return instance as unknown as IMediaManager;
+    },
+  };
 }
 
 function lastScreenShareService(): MockScreenShareService {
@@ -120,6 +118,7 @@ async function renderJoined(props?: Partial<ZvonokEmbeddedRoomProps>) {
       roomSlug="room-1"
       token={TOKEN}
       skipPrejoin
+      {...managerFactories()}
       {...props}
     />,
   );
@@ -133,8 +132,8 @@ async function renderJoined(props?: Partial<ZvonokEmbeddedRoomProps>) {
 
 describe("ZvonokEmbeddedRoom", () => {
   beforeEach(() => {
-    sfuHarness.instances.length = 0;
-    mediaHarness.instances.length = 0;
+    sfuInstances.length = 0;
+    mediaInstances.length = 0;
     screenShareHarness.instances.length = 0;
     stubMatchMedia(false);
   });
@@ -163,6 +162,7 @@ describe("ZvonokEmbeddedRoom", () => {
         roomSlug="room-1"
         token={TOKEN}
         skipPrejoin
+        {...managerFactories()}
       />,
     );
     // Seed the captures before the join completes so the initial publish
@@ -204,6 +204,7 @@ describe("ZvonokEmbeddedRoom", () => {
         token={TOKEN}
         skipPrejoin
         onError={onError}
+        {...managerFactories()}
       />,
     );
     await flush();
@@ -268,7 +269,14 @@ describe("ZvonokEmbeddedRoom", () => {
   });
 
   it("collects the name and device choices in the pre-join card", async () => {
-    render(<ZvonokEmbeddedRoom serverUrl="https://sfu.test" roomSlug="room-1" token={TOKEN} />);
+    render(
+      <ZvonokEmbeddedRoom
+        serverUrl="https://sfu.test"
+        roomSlug="room-1"
+        token={TOKEN}
+        {...managerFactories()}
+      />,
+    );
 
     fireEvent.change(screen.getByPlaceholderText("Your name"), {
       target: { value: "Alice" },
@@ -336,6 +344,7 @@ describe("ZvonokEmbeddedRoom", () => {
         roomSlug="room-1"
         token={TOKEN}
         displayName="Bob"
+        {...managerFactories()}
       />,
     );
 

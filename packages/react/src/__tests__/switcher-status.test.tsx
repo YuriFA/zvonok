@@ -1,8 +1,8 @@
-import { renderHook } from "@testing-library/react";
+import { render, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useDeviceSwitcher } from "../components/device-switcher/device-switcher.js";
-import { useRoomStatus } from "../components/status-cards/status-cards.js";
+import { StatusCardsPreset } from "../components/status-cards/status-cards.js";
 import type { UseDeviceControlsResult } from "../hooks/use-device-controls.js";
 import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
 import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
@@ -67,39 +67,43 @@ const baseCall = {
   wasKicked: false,
 } as UseZvonokCallResult;
 
-describe("useRoomStatus", () => {
-  it("derives the quiet room state", () => {
-    const { result } = renderHook(() =>
-      useRoomStatus({ call: baseCall, connection: connection("joined") }),
+describe("StatusCardsPreset", () => {
+  it("renders nothing for a quiet joined room", () => {
+    const { container } = render(
+      <StatusCardsPreset call={baseCall} connection={connection("joined")} />,
     );
-    expect(result.current).toMatchObject({
-      isConnecting: false,
-      isReconnecting: false,
-      isRoomLocked: false,
-      wasKicked: false,
-      hasJoinError: false,
-    });
+    expect(container.childElementCount).toBe(0);
   });
 
-  it("derives lock, kick, and typed join-failure states", () => {
-    const kicked = renderHook(() =>
-      useRoomStatus({
-        call: { ...baseCall, isRoomLocked: true, wasKicked: true },
-        connection: connection("joined"),
-      }),
-    ).result;
-    expect(kicked.current.isRoomLocked).toBe(true);
-    expect(kicked.current.wasKicked).toBe(true);
+  it("renders lock, kick, and typed join-failure cards", () => {
+    const locked = render(
+      <StatusCardsPreset
+        call={{ ...baseCall, isRoomLocked: true }}
+        connection={connection("joined")}
+      />,
+    );
+    expect(locked.container.querySelector(".zk-banner")?.textContent).toContain("Room is locked");
 
-    const failed = renderHook(() =>
-      useRoomStatus({ call: baseCall, connection: connection("error") }),
-    ).result;
-    expect(failed.current.hasJoinError).toBe(true);
-    expect(failed.current.joinError?.message).toBe("Invalid or expired token");
+    const kicked = render(
+      <StatusCardsPreset
+        call={{ ...baseCall, wasKicked: true }}
+        connection={connection("joined")}
+      />,
+    );
+    expect(kicked.container.querySelector(".zk-card")?.textContent).toContain(
+      "removed from the room",
+    );
 
-    const reconnecting = renderHook(() =>
-      useRoomStatus({ call: baseCall, connection: connection("reconnecting") }),
-    ).result;
-    expect(reconnecting.current.isReconnecting).toBe(true);
+    const failed = render(<StatusCardsPreset call={baseCall} connection={connection("error")} />);
+    expect(failed.container.querySelector(".zk-card")?.textContent).toContain(
+      "Invalid or expired token",
+    );
+
+    const reconnecting = render(
+      <StatusCardsPreset call={baseCall} connection={connection("reconnecting")} />,
+    );
+    expect(reconnecting.container.querySelector(".zk-status")?.textContent).toContain(
+      "reconnecting",
+    );
   });
 });

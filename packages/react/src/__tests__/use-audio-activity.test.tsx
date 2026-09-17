@@ -210,10 +210,8 @@ describe("useActiveSpeaker and useAudioLevels", () => {
     const sfu = createMockSfuManager();
     const { result, unmount } = renderAudioHooks();
     await act(async () => {
-      result.current.session.update({
-        manager: sfu.manager as unknown as SfuManager,
-        status: "joined",
-      });
+      result.current.session.store.setManager(sfu.manager as unknown as SfuManager);
+      result.current.session.store.joined();
     });
 
     const remoteTrack = {

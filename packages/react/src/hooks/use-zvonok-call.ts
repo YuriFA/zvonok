@@ -12,6 +12,7 @@ import type { SfuConnectionState } from "@zvonok/client/sfu/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import type { SessionState } from "../core/session-store.js";
 import { useSfuTrackSync } from "../core/use-sfu-track-sync.js";
 import type { ZvonokParticipant } from "../types.js";
 import { createMediaCapturePort, type CapturePort } from "./capture-port.js";
@@ -36,6 +37,11 @@ export interface UseZvonokCallOptions {
   autoPublish?: boolean;
   /** Slower publish errored-retry pacing on phones; forwarded to produce. */
   isMobile?: boolean;
+  /**
+   * Pauses the local video producer while the document is hidden and, on
+   * return, resumes only what the camera control wants. Default false.
+   */
+  pauseVideoWhenHidden?: boolean;
   /** Capture adapter. Default: the provider's shared media manager. */
   capture?: CapturePort;
   /** Fires once per host-mute occurrence, after the mic control is forced off. */
@@ -132,13 +138,14 @@ export function useZvonokCall(options: UseZvonokCallOptions): UseZvonokCallResul
     capture,
     autoPublish = true,
     isMobile,
+    pauseVideoWhenHidden = false,
     localUserId: localUserIdOption,
     localDisplayName,
     onHostMuted,
     onKicked,
   } = options;
   const session = useZvonokSession();
-  const manager = connection.manager;
+  const manager = useStoreSelector(session.store, selectManager);
 
   const port = useMemo(
     () => capture ?? createMediaCapturePort(session.mediaManager),
@@ -154,8 +161,7 @@ export function useZvonokCall(options: UseZvonokCallOptions): UseZvonokCallResul
   // Replace-track sync: capture restarts (device switches) swap the
   // published track in place while a producer exists.
   useSfuTrackSync();
-
-  const publish = usePublishControls(connection, { isMobile });
+  const publish = usePublishControls(manager, { isMobile });
   const camera = useToggleControl("video", publish, port);
   const microphone = useToggleControl("audio", publish, port);
 
@@ -189,18 +195,18 @@ export function useZvonokCall(options: UseZvonokCallOptions): UseZvonokCallResul
       publishedRef.current = false;
       return;
     }
-    if (!autoPublish || publishedRef.current) {
+    if (!autoPublish || publishedRef.current || !manager) {
       return;
     }
     publishedRef.current = true;
     for (const kind of ["video", "audio"] as const) {
       const track = port.getTrack(kind);
-      if (track && track.readyState === "live" && !connection.hasProducer(kind)) {
-        void connection
-          .produceTrack(track, isMobile === undefined ? undefined : { isMobile })
-          .then((produced) => {
-            if (produced) {
-              connection.resumeProducer(kind);
+      if (track && track.readyState === "live" && !manager.getProducerByKind(kind)) {
+        void manager
+          .produce(track, isMobile === undefined ? undefined : { isMobile })
+          .then((producer) => {
+            if (producer) {
+              manager.resumeProducer(producer.id);
             }
           })
           .catch((error: unknown) => {
@@ -208,7 +214,37 @@ export function useZvonokCall(options: UseZvonokCallOptions): UseZvonokCallResul
           });
       }
     }
-  }, [connection, connection.status, autoPublish, port, isMobile]);
+  }, [connection, manager, connection.status, autoPublish, port, isMobile]);
+
+  // Hidden-tab video pause: while opted in, the camera producer pauses when
+  // the document hides and, on return, resumes only if the user's own
+  // camera control wants it on. Audio is deliberately untouched: the user
+  // may still be listening.
+  const cameraEnabledRef = useRef(camera.isEnabled);
+  cameraEnabledRef.current = camera.isEnabled;
+  useEffect(() => {
+    if (!pauseVideoWhenHidden || typeof document === "undefined") {
+      return;
+    }
+    const handleVisibilityChange = () => {
+      if (!manager) {
+        return;
+      }
+      const producer = manager.getProducerByKind("video");
+      if (!producer) {
+        return;
+      }
+      if (document.visibilityState === "hidden") {
+        manager.pauseProducer(producer.id);
+      } else if (cameraEnabledRef.current) {
+        manager.resumeProducer(producer.id);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pauseVideoWhenHidden, manager]);
 
   // A server-enforced host mute pauses our producer: force the mic control
   // off and tell the consumer once per occurrence.
@@ -302,3 +338,5 @@ export function useZvonokCall(options: UseZvonokCallOptions): UseZvonokCallResul
 }
 
 const selectRoomState = (state: RoomTrackerState) => state;
+
+const selectManager = (state: SessionState) => state.manager;

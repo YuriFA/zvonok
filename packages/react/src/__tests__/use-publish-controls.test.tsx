@@ -1,10 +1,10 @@
 import { renderHook, waitFor } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import { useSfuTrackSync } from "../core/use-sfu-track-sync.js";
 import type { CapturePort } from "../hooks/capture-port.js";
 import { usePublishControls, type PublishToggleResult } from "../hooks/use-publish-controls.js";
-import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
 // Session double for the track-sync hook; the module mock below is
 // hoisted, so the double lives here too.
@@ -28,16 +28,22 @@ function createEndedTrack(id: string, kind: "audio" | "video" = "audio"): MediaS
   return { kind, id, enabled: true, readyState: "ended" } as unknown as MediaStreamTrack;
 }
 
-function createConnection(overrides: Record<string, unknown> = {}) {
+function createManager({
+  producer,
+  produceResult,
+  replaceResult = true,
+}: {
+  producer?: { id: string };
+  produceResult?: { id: string } | null;
+  replaceResult?: boolean;
+} = {}) {
   return {
-    status: "joined",
-    hasProducer: vi.fn(() => false),
-    produceTrack: vi.fn(async () => true),
-    resumeProducer: vi.fn(),
+    getProducerByKind: vi.fn(() => producer),
+    produce: vi.fn(async () => produceResult ?? null),
     pauseProducer: vi.fn(),
-    replaceTrack: vi.fn(async () => true),
-    ...overrides,
-  } as unknown as UseZvonokConnectionResult;
+    resumeProducer: vi.fn(),
+    replaceTrack: vi.fn(async () => replaceResult),
+  } as unknown as SfuManager;
 }
 
 function portWith(
@@ -51,118 +57,125 @@ function portWith(
 }
 
 async function toggleOnce(
-  connection: UseZvonokConnectionResult,
+  manager: SfuManager | null,
   kind: "audio" | "video",
   enabled: boolean,
   port: CapturePort,
   isMobile?: boolean,
 ): Promise<PublishToggleResult> {
-  const { result } = renderHook(() => usePublishControls(connection, { isMobile }));
+  const { result } = renderHook(() => usePublishControls(manager, { isMobile }));
   return result.current.toggle(kind, enabled, port);
 }
 
 describe("usePublishControls", () => {
   it("pauses the producer and releases capture when disabling", async () => {
-    const connection = createConnection({ hasProducer: vi.fn(() => true) });
+    const manager = createManager({ producer: { id: "video-producer" } });
     const release = vi.fn(async () => {});
 
-    const result = await toggleOnce(connection, "video", false, portWith(null, { release }));
+    const result = await toggleOnce(manager, "video", false, portWith(null, { release }));
 
-    expect(connection.pauseProducer).toHaveBeenCalledWith("video");
+    expect(manager.pauseProducer).toHaveBeenCalledWith("video-producer");
     expect(release).toHaveBeenCalledTimes(1);
     expect(result).toBe("paused");
   });
 
   it("still releases capture when no producer exists while disabling", async () => {
-    const connection = createConnection({ hasProducer: vi.fn(() => false) });
+    const manager = createManager();
     const release = vi.fn();
 
-    const result = await toggleOnce(connection, "audio", false, portWith(null, { release }));
+    const result = await toggleOnce(manager, "audio", false, portWith(null, { release }));
 
-    expect(connection.pauseProducer).not.toHaveBeenCalled();
+    expect(manager.pauseProducer).not.toHaveBeenCalled();
     expect(release).toHaveBeenCalledTimes(1);
     expect(result).toBe("paused");
   });
 
   it("produces a live track and resumes when no producer exists", async () => {
     const track = createLiveTrack("cam-1", "video");
-    const connection = createConnection();
+    const manager = createManager({ produceResult: { id: "video-producer" } });
 
-    const result = await toggleOnce(connection, "video", true, portWith(track), true);
+    const result = await toggleOnce(manager, "video", true, portWith(track), true);
 
-    expect(connection.produceTrack).toHaveBeenCalledWith(track, { isMobile: true });
-    expect(connection.resumeProducer).toHaveBeenCalledWith("video");
+    expect(manager.produce).toHaveBeenCalledWith(track, { isMobile: true });
+    expect(manager.resumeProducer).toHaveBeenCalledWith("video-producer");
     expect(result).toBe("published");
   });
 
   it("re-acquires capture when the current track is not live", async () => {
     const dead = createEndedTrack("cam-dead", "video");
     const fresh = createLiveTrack("cam-fresh", "video");
-    const connection = createConnection();
+    const manager = createManager({ produceResult: { id: "video-producer" } });
     const ensureTrack = vi.fn(async () => ({ getTracks: () => [fresh] }) as unknown as MediaStream);
 
-    const result = await toggleOnce(connection, "video", true, portWith(dead, { ensureTrack }));
+    const result = await toggleOnce(manager, "video", true, portWith(dead, { ensureTrack }));
 
     expect(ensureTrack).toHaveBeenCalledTimes(1);
-    expect(connection.produceTrack).toHaveBeenCalledWith(fresh, undefined);
+    expect(manager.produce).toHaveBeenCalledWith(fresh, undefined);
     expect(result).toBe("published");
   });
 
   it("fails with no-track when re-acquiring returns nothing live", async () => {
-    const connection = createConnection();
+    const manager = createManager();
     const ensureTrack = vi.fn(async () => null);
 
-    const result = await toggleOnce(connection, "audio", true, portWith(null, { ensureTrack }));
+    const result = await toggleOnce(manager, "audio", true, portWith(null, { ensureTrack }));
 
-    expect(connection.produceTrack).not.toHaveBeenCalled();
-    expect(connection.resumeProducer).not.toHaveBeenCalled();
+    expect(manager.produce).not.toHaveBeenCalled();
+    expect(manager.resumeProducer).not.toHaveBeenCalled();
     expect(result).toBe("no-track");
   });
 
   it("fails with produce-failed and never resumes when producing fails", async () => {
     const track = createLiveTrack("mic-1");
-    const connection = createConnection({ produceTrack: vi.fn(async () => false) });
+    const manager = createManager({ produceResult: null });
 
-    const result = await toggleOnce(connection, "audio", true, portWith(track));
+    const result = await toggleOnce(manager, "audio", true, portWith(track));
 
-    expect(connection.resumeProducer).not.toHaveBeenCalled();
+    expect(manager.resumeProducer).not.toHaveBeenCalled();
     expect(result).toBe("produce-failed");
   });
 
   it("swaps the new track into an existing producer before resuming", async () => {
     const track = createLiveTrack("mic-2");
-    const connection = createConnection({ hasProducer: vi.fn(() => true) });
+    const manager = createManager({ producer: { id: "existing-producer" } });
 
-    const result = await toggleOnce(connection, "audio", true, portWith(track));
+    const result = await toggleOnce(manager, "audio", true, portWith(track));
 
-    expect(connection.produceTrack).not.toHaveBeenCalled();
-    expect(connection.replaceTrack).toHaveBeenCalledWith("audio", track);
-    expect(connection.resumeProducer).toHaveBeenCalledWith("audio");
+    expect(manager.produce).not.toHaveBeenCalled();
+    expect(manager.replaceTrack).toHaveBeenCalledWith("audio", track);
+    expect(manager.resumeProducer).toHaveBeenCalledWith("existing-producer");
     expect(result).toBe("published");
   });
 
   it("fails with replace-failed and never resumes when the swap fails", async () => {
     const track = createLiveTrack("cam-x", "video");
-    const connection = createConnection({
-      hasProducer: vi.fn(() => true),
-      replaceTrack: vi.fn(async () => false),
+    const manager = createManager({
+      producer: { id: "video-producer" },
+      replaceResult: false,
     });
 
-    const result = await toggleOnce(connection, "video", true, portWith(track));
+    const result = await toggleOnce(manager, "video", true, portWith(track));
 
-    expect(connection.resumeProducer).not.toHaveBeenCalled();
+    expect(manager.resumeProducer).not.toHaveBeenCalled();
     expect(result).toBe("replace-failed");
   });
 
+  it("rejects with a typed error before the join created a manager", async () => {
+    const { result } = renderHook(() => usePublishControls(null));
+    await expect(result.current.toggle("audio", true, portWith(null))).rejects.toMatchObject({
+      code: "DISCONNECTED",
+    });
+  });
+
   it("keeps the toggle stable across re-renders with the same inputs", () => {
-    const connection = createConnection();
+    const manager = createManager();
     const { result, rerender } = renderHook(
-      ({ connection }: { connection: UseZvonokConnectionResult }) =>
-        usePublishControls(connection, { isMobile: false }),
-      { initialProps: { connection } },
+      ({ sfuManager }: { sfuManager: SfuManager | null }) =>
+        usePublishControls(sfuManager, { isMobile: false }),
+      { initialProps: { sfuManager: manager } },
     );
     const first = result.current.toggle;
-    rerender({ connection });
+    rerender({ sfuManager: manager });
     expect(result.current.toggle).toBe(first);
   });
 });

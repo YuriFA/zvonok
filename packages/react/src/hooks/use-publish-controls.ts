@@ -10,10 +10,11 @@
  * state and present failures where they want to.
  */
 
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useMemo } from "react";
 
+import { ZvonokError } from "./../errors.js";
 import type { CapturePort } from "./capture-port.js";
-import type { UseZvonokConnectionResult } from "./use-zvonok-connection.js";
 
 export type PublishKind = "audio" | "video";
 
@@ -40,7 +41,7 @@ export interface UsePublishControlsResult {
 }
 
 export function usePublishControls(
-  connection: UseZvonokConnectionResult,
+  manager: SfuManager | null,
   options: UsePublishControlsOptions = {},
 ): UsePublishControlsResult {
   const isMobile = options.isMobile;
@@ -51,9 +52,16 @@ export function usePublishControls(
       enabled: boolean,
       { getTrack, ensureTrack, release }: CapturePort,
     ): Promise<PublishToggleResult> => {
+      if (!manager) {
+        throw new ZvonokError("DISCONNECTED", "Join the room before using publish controls");
+      }
+
+      const getProducer = () => manager.getProducerByKind(kind);
+
       if (!enabled) {
-        if (connection.hasProducer(kind)) {
-          connection.pauseProducer(kind);
+        const producer = getProducer();
+        if (producer) {
+          manager.pauseProducer(producer.id);
         }
         await release?.(kind);
         return "paused";
@@ -70,28 +78,31 @@ export function usePublishControls(
         }
       }
 
-      if (!connection.hasProducer(kind)) {
-        const produced = await connection.produceTrack(
+      if (!getProducer()) {
+        const producer = await manager.produce(
           track,
           isMobile === undefined ? undefined : { isMobile },
         );
-        if (!produced) {
+        if (producer === null) {
           return "produce-failed";
         }
-        connection.resumeProducer(kind);
+        manager.resumeProducer(producer.id);
         return "published";
       }
 
       // The producer still references the track that "off" ended. Swap it
       // in first: resuming first would stream silence until the swap lands.
-      const replaced = await connection.replaceTrack(kind, track);
+      const replaced = await manager.replaceTrack(kind, track);
       if (!replaced) {
         return "replace-failed";
       }
-      connection.resumeProducer(kind);
+      const producer = getProducer();
+      if (producer) {
+        manager.resumeProducer(producer.id);
+      }
       return "published";
     },
-    [connection, isMobile],
+    [manager, isMobile],
   );
 
   return useMemo(() => ({ toggle }), [toggle]);

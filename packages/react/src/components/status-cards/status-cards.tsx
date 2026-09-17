@@ -1,48 +1,17 @@
 /**
- * Room status block: the derived room states a surface renders cards from
- * (locked, kicked, join failure, reconnection), plus the preset cards.
- * Recovery actions stay with the owner via callbacks.
+ * Room status block: derives the room states a surface renders cards from
+ * (locked, kicked, join failure, reconnection) from the call and connection
+ * inputs, and renders the preset cards. Recovery actions stay with the owner
+ * via callbacks.
  */
 
-import type { SfuConnectionState } from "@zvonok/client/sfu/types";
 import { useMemo } from "react";
 
 import type { UseZvonokCallResult, UseZvonokConnectionResult } from "../../index.js";
 
-export interface UseRoomStatusOptions {
+export interface StatusCardsPresetProps {
   call: UseZvonokCallResult;
   connection: UseZvonokConnectionResult;
-}
-
-export interface RoomStatus {
-  connectionState: SfuConnectionState;
-  isConnecting: boolean;
-  isReconnecting: boolean;
-  isRoomLocked: boolean;
-  wasKicked: boolean;
-  hasJoinError: boolean;
-  joinError: Error | null;
-}
-
-export function useRoomStatus(options: UseRoomStatusOptions): RoomStatus {
-  const { call, connection } = options;
-
-  return useMemo(
-    () => ({
-      connectionState: call.connectionState,
-      isConnecting: connection.status === "connecting",
-      isReconnecting: connection.status === "reconnecting",
-      isRoomLocked: call.isRoomLocked,
-      wasKicked: call.wasKicked,
-      hasJoinError: connection.status === "error",
-      joinError: connection.error,
-    }),
-    [call.connectionState, call.isRoomLocked, call.wasKicked, connection.status, connection.error],
-  );
-}
-
-export interface StatusCardsPresetProps {
-  status: RoomStatus;
   /** From an ended/kicked room back to the prejoin stage. */
   onBack?: () => void;
   className?: string;
@@ -65,9 +34,24 @@ function joinErrorMessage(error: Error | null): string {
 
 /**
  * Preset status surfaces: locked banner, kicked card, join-error card, and
- * connection status line. Renders nothing when the room is unremarkable.
+ * connection status line. Derives the room-status projection internally
+ * from the call and connection inputs; renders nothing when the room is
+ * unremarkable.
  */
-export function StatusCardsPreset({ status, onBack, className }: StatusCardsPresetProps) {
+export function StatusCardsPreset({ call, connection, onBack, className }: StatusCardsPresetProps) {
+  const status = useMemo(
+    () => ({
+      connectionState: call.connectionState,
+      isConnecting: connection.status === "connecting",
+      isReconnecting: connection.status === "reconnecting",
+      isRoomLocked: call.isRoomLocked,
+      wasKicked: call.wasKicked,
+      hasJoinError: connection.status === "error",
+      joinError: connection.error,
+    }),
+    [call.connectionState, call.isRoomLocked, call.wasKicked, connection.status, connection.error],
+  );
+
   if (
     !status.isRoomLocked &&
     !status.wasKicked &&

@@ -55,7 +55,7 @@ describe("useViewportQuality", () => {
   let getVideoConsumerIdForUserId: Mock;
 
   const setManager = async (manager: SfuManager | null) => {
-    sessionRef?.update({ manager });
+    sessionRef?.store.setManager(manager);
     await act(async () => {});
   };
 

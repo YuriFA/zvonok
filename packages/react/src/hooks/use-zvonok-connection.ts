@@ -1,17 +1,19 @@
 /**
- * Join lifecycle hook: connection, join with room slug + room token, and
- * publish controls passed through to the underlying SfuManager.
+ * Join lifecycle hook: connection, join with room slug + room token, and the
+ * session state transitions behind the provider's store.
  */
 
 import { singleFlight } from "@zvonok/client/helpers/concurrency";
-import { createSfuManager, type SfuManager } from "@zvonok/client/sfu/manager";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { useCallback, useEffect, useRef } from "react";
 import type { Socket } from "socket.io-client";
 
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import type { SessionState } from "../core/session-store.js";
 import { ZvonokError, ZvonokJoinError } from "../errors.js";
 import type { ZvonokStatus } from "../types.js";
 import { createDeferred } from "./deferred.js";
+import { useStoreSelector } from "./use-store-selector.js";
 
 const CONNECTION_TIMEOUT_MS = 10_000;
 const JOIN_TIMEOUT_MS = 10_000;
@@ -45,14 +47,6 @@ export interface UseZvonokConnectionResult {
   wasKicked: boolean;
   /** True after the server ended the room; the connection was released. */
   roomEnded: boolean;
-  /** Live SfuManager instance; null until the first join. Escape hatch for advanced consumers. */
-  manager: SfuManager | null;
-  produceTrack(track: MediaStreamTrack, options?: { isMobile?: boolean }): Promise<boolean>;
-  pauseProducer(kind: "audio" | "video"): void;
-  resumeProducer(kind: "audio" | "video"): void;
-  closeProducer(kind: "audio" | "video"): void;
-  replaceTrack(kind: "audio" | "video", track: MediaStreamTrack | null): Promise<boolean>;
-  hasProducer(kind: "audio" | "video"): boolean;
 }
 
 function toZvonokError(error: unknown, fallbackCode: string): ZvonokError {
@@ -141,22 +135,24 @@ export function useZvonokConnection({
   tokenProvider,
 }: UseZvonokConnectionOptions): UseZvonokConnectionResult {
   const session = useZvonokSession();
+  const store = session.store;
+  const state = useStoreSelector(store, selectSessionState);
+  const manager = state.manager;
   const managerRef = useRef<SfuManager | null>(null);
   const joinLocksRef = useRef(new Map<string, Promise<unknown>>());
   const detachRoomListenersRef = useRef<(() => void) | null>(null);
   /** Bumped by every leave(); in-flight joins check it before acting. */
   const leaveGenerationRef = useRef(0);
-  const [wasKicked, setWasKicked] = useState(false);
 
   const ensureManager = useCallback((): SfuManager => {
     if (managerRef.current) {
       return managerRef.current;
     }
-    const manager = createSfuManager({ serverUrl: session.serverUrl });
+    const manager = session.createManager({ serverUrl: session.serverUrl });
     managerRef.current = manager;
-    session.update({ manager });
+    store.setManager(manager);
     return manager;
-  }, [session]);
+  }, [session, store]);
 
   const leave = useCallback(() => {
     // Supersede any in-flight join first: it observes the generation bump
@@ -171,9 +167,8 @@ export function useZvonokConnection({
     }
     managerRef.current = null;
     joinLocksRef.current.delete("join");
-    setWasKicked(false);
-    session.update({ manager: null, status: "disconnected", error: null, locked: false });
-  }, [session]);
+    store.disconnected();
+  }, [store]);
 
   const join = useCallback((): Promise<void> => {
     if (!roomId && !roomSlug) {
@@ -189,14 +184,14 @@ export function useZvonokConnection({
       if (superseded()) return;
 
       const manager = ensureManager();
-      session.update({ status: "connecting", error: null, roomEnded: false });
+      store.connecting();
       manager.connect();
 
       const socket = manager.getSocket();
       if (socket) {
         const onRoomLocked = (payload: unknown) => {
           const { locked } = (payload ?? {}) as { locked?: boolean };
-          session.update({ locked: locked === true });
+          store.setLocked(locked === true);
         };
         socket.on("sfu:room-locked", onRoomLocked);
         detachRoomListenersRef.current = () => {
@@ -223,81 +218,72 @@ export function useZvonokConnection({
         ack.send();
         await ack.promise;
         if (superseded()) return;
-        session.update({ status: "joined" });
+        store.joined();
       } catch (error) {
         if (superseded()) return;
         throw error;
       }
     }).catch((error: unknown) => {
       const typedError = toZvonokError(error, "JOIN_FAILED");
-      session.update({ status: "error", error: typedError });
+      store.failed(typedError);
       throw typedError;
     });
-  }, [ensureManager, roomId, roomSlug, session, token, tokenProvider]);
+  }, [ensureManager, roomId, roomSlug, store, token, tokenProvider]);
 
   // Automatic recovery: mirror the manager's reconnecting/connected cycle
   // into the session status. A recovery failure surfaces typed as an error.
   const reconnectingRef = useRef(false);
   useEffect(() => {
-    const manager = session.manager;
     if (!manager) {
       return;
     }
-    // The flag lives in a ref: the effect resubscribes whenever the session
-    // object is recreated, but the recovery cycle must not restart mid-blip.
     const offState = manager.onStateChange((state) => {
       if (state.connectionState === "reconnecting") {
         reconnectingRef.current = true;
-        session.update({ status: "reconnecting" });
+        store.reconnecting();
         return;
       }
       if (state.connectionState === "connected" && reconnectingRef.current) {
         reconnectingRef.current = false;
-        session.update({ status: "joined" });
+        store.joined();
       }
     });
     const offReconnectError = manager.onReconnectError((error) => {
-      session.update({
-        status: "error",
-        error: new ZvonokError("RECONNECT_FAILED", error.message),
-      });
+      store.failed(new ZvonokError("RECONNECT_FAILED", error.message));
     });
     return () => {
       offState();
       offReconnectError();
     };
-  }, [session.manager, session]);
+  }, [manager, store]);
 
   // A kicked peer loses its room membership; reflect it in the status.
   useEffect(() => {
-    const manager = session.manager;
     if (!manager) {
       return;
     }
     const offKicked = manager.onKicked(() => {
-      setWasKicked(true);
-      session.update({ status: "disconnected", locked: false });
+      store.kicked();
     });
     return () => {
       offKicked();
     };
-  }, [session.manager, session]);
+  }, [manager, store]);
 
   // A server-ended room is terminal: surface the state and release the
   // connection (which also stops automatic recovery).
   useEffect(() => {
-    const manager = session.manager;
     if (!manager) {
       return;
     }
     const offRoomEnded = manager.onRoomEnded(() => {
-      session.update({ roomEnded: true });
+      store.roomEnded();
       leaveRef.current();
     });
     return () => {
       offRoomEnded();
     };
-  }, [session.manager, session]);
+  }, [manager, store]);
 
   // Disconnect when the owning component unmounts.
   const leaveRef = useRef(leave);
@@ -311,76 +297,15 @@ export function useZvonokConnection({
     [],
   );
 
-  const requireManager = useCallback((): SfuManager => {
-    const manager = managerRef.current;
-    if (!manager) {
-      throw new ZvonokError("DISCONNECTED", "Join the room before using publish controls");
-    }
-    return manager;
-  }, []);
-
-  const produceTrack = useCallback(
-    async (track: MediaStreamTrack, options?: { isMobile?: boolean }): Promise<boolean> => {
-      const producer = await requireManager().produce(track, options);
-      return producer !== null;
-    },
-    [requireManager],
-  );
-
-  const pauseProducer = useCallback(
-    (kind: "audio" | "video"): void => {
-      const manager = requireManager();
-      const producer = manager.getProducerByKind(kind);
-      if (producer) {
-        manager.pauseProducer(producer.id);
-      }
-    },
-    [requireManager],
-  );
-
-  const resumeProducer = useCallback(
-    (kind: "audio" | "video"): void => {
-      const manager = requireManager();
-      const producer = manager.getProducerByKind(kind);
-      if (producer) {
-        manager.resumeProducer(producer.id);
-      }
-    },
-    [requireManager],
-  );
-
-  const closeProducer = useCallback(
-    (kind: "audio" | "video"): void => {
-      requireManager().closeProducer(kind);
-    },
-    [requireManager],
-  );
-
-  const replaceTrack = useCallback(
-    (kind: "audio" | "video", track: MediaStreamTrack | null): Promise<boolean> => {
-      return requireManager().replaceTrack(kind, track);
-    },
-    [requireManager],
-  );
-
-  const hasProducer = useCallback((kind: "audio" | "video"): boolean => {
-    return managerRef.current?.getProducerByKind(kind) !== undefined;
-  }, []);
-
   return {
-    status: session.status,
-    error: session.error,
+    status: state.status,
+    error: state.error,
     join,
     leave,
-    manager: session.manager,
-    isRoomLocked: session.locked,
-    wasKicked,
-    roomEnded: session.roomEnded,
-    produceTrack,
-    pauseProducer,
-    resumeProducer,
-    closeProducer,
-    replaceTrack,
-    hasProducer,
+    isRoomLocked: state.locked,
+    wasKicked: state.kicked,
+    roomEnded: state.roomEnded,
   };
 }
+
+const selectSessionState = (state: SessionState) => state;

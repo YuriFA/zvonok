@@ -96,10 +96,8 @@ async function attachManager(
   sfu: MockSfuManager,
 ) {
   await act(async () => {
-    result.current.session.update({
-      manager: sfu.manager as unknown as SfuManager,
-      status: "joined",
-    });
+    result.current.session.store.setManager(sfu.manager as unknown as SfuManager);
+    result.current.session.store.joined();
   });
 }
 
@@ -234,7 +232,7 @@ describe("useRemoteAudio", () => {
     });
 
     await act(async () => {
-      result.current.session.update({ manager: null, status: "disconnected" });
+      result.current.session.store.disconnected();
     });
 
     expect(mixerHarness.instances.at(-1)!.destroy).toHaveBeenCalled();

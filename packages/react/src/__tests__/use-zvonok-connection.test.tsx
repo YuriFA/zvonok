@@ -1,10 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ZvonokProvider } from "../contexts/zvonok-context.js";
+import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
 import { ZvonokJoinError } from "../errors.js";
 import { useZvonokConnection } from "../hooks/use-zvonok-connection.js";
-import { createMockSfuManager, createTrack, tokenFor } from "./doubles.js";
+import { createMockSfuManager, tokenFor } from "./doubles.js";
 
 const sfuHarness = vi.hoisted(() => ({
   instances: [] as unknown[],
@@ -46,9 +46,15 @@ function Provider({ children }: { children: React.ReactNode }) {
 }
 
 function renderConnection() {
-  return renderHook(() => useZvonokConnection({ roomSlug: "room-1", token: TOKEN }), {
-    wrapper: Provider,
-  });
+  return renderHook(
+    () => ({
+      ...useZvonokConnection({ roomSlug: "room-1", token: TOKEN }),
+      session: useZvonokSession(),
+    }),
+    {
+      wrapper: Provider,
+    },
+  );
 }
 
 function lastSfu() {
@@ -97,14 +103,13 @@ describe("useZvonokConnection", () => {
     await act(async () => {
       await promise;
     });
-
     expect(result.current.status).toBe("joined");
     expect(connectionHarness.urls).toEqual(["https://sfu.test"]);
-    expect(result.current.manager).toBe(lastSfu().manager);
+    expect(result.current.session.store.getSnapshot().manager).toBe(lastSfu().manager);
   });
 
   function renderConnectionWith(options: Parameters<typeof useZvonokConnection>[0]) {
-    return renderHook(() => useZvonokConnection(options), {
+    return renderHook(() => ({ ...useZvonokConnection(options), session: useZvonokSession() }), {
       wrapper: Provider,
     });
   }
@@ -154,24 +159,6 @@ describe("useZvonokConnection", () => {
     expect(sfuHarness.instances).toHaveLength(0);
     expect(result.current.status).toBe("disconnected");
   });
-
-  it("passes the mobile hint through produceTrack", async () => {
-    const { result } = renderConnectionWith({
-      roomSlug: "room-1",
-      token: TOKEN,
-    });
-    await joinFully(result);
-
-    await act(async () => {
-      await result.current.produceTrack(createTrack("video", "v-mobile"), {
-        isMobile: true,
-      });
-    });
-    expect(lastSfu().manager.produce).toHaveBeenCalledWith(expect.anything(), {
-      isMobile: true,
-    });
-  });
-
   it("surfaces room-ended, releases the connection, and stops recovery", async () => {
     const { result } = renderConnectionWith({
       roomSlug: "room-1",
@@ -182,12 +169,11 @@ describe("useZvonokConnection", () => {
     act(() => {
       lastSfu().manager.emitRoomEnded("room-1");
     });
-
     expect(result.current.roomEnded).toBe(true);
     expect(result.current.status).toBe("disconnected");
     expect(lastSfu().manager.leaveRoom).toHaveBeenCalled();
     expect(lastSfu().manager.disconnect).toHaveBeenCalled();
-    expect(result.current.manager).toBeNull();
+    expect(result.current.session.store.getSnapshot().manager).toBeNull();
   });
 
   it("joins with the room slug and token only, no client identity", async () => {
@@ -331,7 +317,7 @@ describe("useZvonokConnection", () => {
     expect(sfu.manager.leaveRoom).toHaveBeenCalled();
     expect(sfu.manager.disconnect).toHaveBeenCalled();
     expect(result.current.status).toBe("disconnected");
-    expect(result.current.manager).toBeNull();
+    expect(result.current.session.store.getSnapshot().manager).toBeNull();
     expect(result.current.wasKicked).toBe(false);
   });
 
@@ -343,45 +329,6 @@ describe("useZvonokConnection", () => {
     expect(lastSfu().manager.disconnect).toHaveBeenCalled();
   });
 
-  describe("publish controls", () => {
-    it("pass through to the underlying manager", async () => {
-      const { result } = renderConnection();
-      await joinFully(result);
-
-      const sfu = lastSfu();
-      sfu.manager.getProducerByKind.mockReturnValue({ id: "audio-producer" });
-
-      expect(await act(async () => result.current.produceTrack(createTrack("video", "v1")))).toBe(
-        true,
-      );
-      expect(sfu.manager.produce).toHaveBeenCalled();
-
-      act(() => result.current.pauseProducer("audio"));
-      expect(sfu.manager.pauseProducer).toHaveBeenCalledWith("audio-producer");
-
-      act(() => result.current.resumeProducer("audio"));
-      expect(sfu.manager.resumeProducer).toHaveBeenCalledWith("audio-producer");
-
-      act(() => result.current.closeProducer("video"));
-      expect(sfu.manager.closeProducer).toHaveBeenCalledWith("video");
-
-      expect(
-        await act(async () => result.current.replaceTrack("audio", createTrack("audio", "a2"))),
-      ).toBe(true);
-
-      expect(result.current.hasProducer("audio")).toBe(true);
-      sfu.manager.getProducerByKind.mockReturnValue(undefined);
-      expect(result.current.hasProducer("audio")).toBe(false);
-    });
-
-    it("reject with a typed error before joining", async () => {
-      const { result } = renderConnection();
-
-      await expect(result.current.produceTrack(createTrack("audio", "a1"))).rejects.toMatchObject({
-        code: "DISCONNECTED",
-      });
-    });
-  });
   it("a leave during an in-flight join supersedes it without stale state", async () => {
     vi.useFakeTimers();
     try {
@@ -397,7 +344,6 @@ describe("useZvonokConnection", () => {
         result.current.leave();
       });
       expect(result.current.status).toBe("disconnected");
-      expect(result.current.manager).toBeNull();
       expect(lastSfu().manager.leaveRoom).toHaveBeenCalled();
 
       // The in-flight join never confirms (no ack); once its timers run out
@@ -406,9 +352,9 @@ describe("useZvonokConnection", () => {
         await vi.advanceTimersByTimeAsync(30_000);
       });
       await expect(joinPromise).resolves.toBeUndefined();
+      expect(result.current.session.store.getSnapshot().manager).toBeNull();
       expect(result.current.status).toBe("disconnected");
       expect(result.current.error).toBeNull();
-      expect(result.current.manager).toBeNull();
     } finally {
       vi.useRealTimers();
     }

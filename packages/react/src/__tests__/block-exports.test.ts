@@ -16,7 +16,6 @@ describe("block exports", () => {
         "useDeviceSwitcher",
         "useMediaControls",
         "useParticipantsPanel",
-        "useRoomStatus",
         "useStage",
         "useStageSize",
       ]),

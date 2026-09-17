@@ -6,33 +6,37 @@ import { loadDeviceSelection, useDeviceControls } from "../hooks/use-device-cont
 import { createMockMediaManager, type MockMediaManager } from "./doubles.js";
 
 const mediaHarness = vi.hoisted(() => ({
-  instances: [] as unknown[],
   enumerateResult: [] as MediaDeviceInfo[],
   permissionState: "unknown",
 }));
 
-vi.mock("@zvonok/client/media/manager-factory", () => ({
-  createMediaManager: () => {
-    const instance = createMockMediaManager();
-    const service = instance.getDeviceService();
-    service.enumerateDevices.mockResolvedValue(mediaHarness.enumerateResult);
-    service.queryPermission.mockResolvedValue({
-      state: mediaHarness.permissionState,
-      onchange: null,
-    });
-    mediaHarness.instances.push(instance);
-    return instance;
-  },
-}));
-
 import { ZvonokProvider } from "../contexts/zvonok-context.js";
 
-function Provider({ children }: { children: React.ReactNode }) {
-  return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
-}
+const mediaInstances: MockMediaManager[] = [];
 
 function lastMediaManager(): MockMediaManager {
-  return mediaHarness.instances.at(-1) as MockMediaManager;
+  return mediaInstances.at(-1) as MockMediaManager;
+}
+
+function Provider({ children }: { children: React.ReactNode }) {
+  return (
+    <ZvonokProvider
+      serverUrl="https://sfu.test"
+      createMediaManager={() => {
+        const instance = createMockMediaManager();
+        const service = instance.getDeviceService();
+        service.enumerateDevices.mockResolvedValue(mediaHarness.enumerateResult);
+        service.queryPermission.mockResolvedValue({
+          state: mediaHarness.permissionState,
+          onchange: null,
+        });
+        mediaInstances.push(instance);
+        return instance;
+      }}
+    >
+      {children}
+    </ZvonokProvider>
+  );
 }
 
 const mediaDevicesListeners = vi.hoisted(() => ({
@@ -40,7 +44,7 @@ const mediaDevicesListeners = vi.hoisted(() => ({
 }));
 
 beforeEach(() => {
-  mediaHarness.instances.length = 0;
+  mediaInstances.length = 0;
   mediaHarness.enumerateResult = [];
   mediaHarness.permissionState = "unknown";
   mediaDevicesListeners.handlers.clear();

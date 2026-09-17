@@ -28,10 +28,8 @@ function renderCapabilities() {
 
 async function attachManager(result: { current: CapabilitiesHookResult }, sfu: MockSfuManager) {
   await act(async () => {
-    result.current.session.update({
-      manager: sfu.manager as unknown as SfuManager,
-      status: "joined",
-    });
+    result.current.session.store.setManager(sfu.manager as unknown as SfuManager);
+    result.current.session.store.joined();
   });
 }
 

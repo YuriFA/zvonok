@@ -12,19 +12,11 @@ export {
   type UseZvonokConnectionResult,
 } from "./hooks/use-zvonok-connection.js";
 export { useParticipants, type UseParticipantsResult } from "./hooks/use-participants.js";
-export { useViewportQuality } from "./core/use-viewport-quality.js";
 export {
   PeerQualityProvider,
-  usePeerQualityContext,
   usePeerQualityStats,
   type PeerQualityProviderProps,
 } from "./contexts/peer-quality-context.js";
-export {
-  PeerQualityEngine,
-  STATS_INTERVAL_MS,
-  LAYER_SWITCH_DEBOUNCE_MS,
-  type PeerQualityBindOptions,
-} from "./core/peer-quality-engine.js";
 export {
   usePublishControls,
   type UsePublishControlsResult,
@@ -56,11 +48,6 @@ export {
   type CapabilitiesGateProps,
   type RequiredCapabilities,
 } from "./wrappers/capability-gate.js";
-export {
-  deriveMediaControlState,
-  type MediaControlState,
-  type DeriveMediaControlStateOptions,
-} from "./hooks/derive-media-control.js";
 export {
   mapScreenShareError,
   type ScreenShareErrorPresentation,
@@ -103,7 +90,6 @@ export {
   type UseGuestJoinRequestsResult,
 } from "./hooks/use-guest-join-requests.js";
 export { useHostControls, type UseHostControlsResult } from "./hooks/use-host-controls.js";
-export { createHostControls, type HostControls } from "./hooks/host-controls.js";
 export { useOwnCapabilities } from "./hooks/use-own-capabilities.js";
 export { useEgressState, type UseEgressStateResult } from "./hooks/use-egress-state.js";
 export { useEgressControls, type UseEgressControlsResult } from "./hooks/use-egress-controls.js";
@@ -117,7 +103,6 @@ export { EMPTY_ROOM_STATE, RoomTracker, type RoomTrackerState } from "./hooks/ro
 export { useStoreSelector, type ExternalStore } from "./hooks/use-store-selector.js";
 export {
   useDeviceControls,
-  loadDeviceSelection,
   type UseDeviceControlsResult,
   type UseDeviceControlsOptions,
   type ZvonokCaptureControl,
@@ -174,10 +159,7 @@ export {
   type DeviceSwitcherPresetProps,
 } from "./components/device-switcher/device-switcher-preset.js";
 export {
-  useRoomStatus,
   StatusCardsPreset,
-  type RoomStatus,
-  type UseRoomStatusOptions,
   type StatusCardsPresetProps,
 } from "./components/status-cards/status-cards.js";
 export {

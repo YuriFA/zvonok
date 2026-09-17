@@ -209,7 +209,7 @@ describe("Tile visibility plumbing", () => {
   }
 
   const attach = async (manager: SfuManager) => {
-    sessionRef?.update({ manager });
+    sessionRef?.store.setManager(manager);
     await act(async () => {});
   };
 
