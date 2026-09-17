@@ -15,8 +15,8 @@
 
 ## 4. Client package: manager split
 
-- [ ] 4.1 Extract the join/session lifecycle slice from `sfu/manager.ts` into its own unit under `sfu/`; `createSfuManager` seam and `SfuManager` type unchanged; existing `sfu/__tests__` green
-- [ ] 4.2 Extract publish and subscribe slices into their own units; same seam; tests green
+- [x] 4.1 Extract the join/session lifecycle slice from `sfu/manager.ts` into its own unit under `sfu/`; `createSfuManager` seam and `SfuManager` type unchanged; existing `sfu/__tests__` green
+- [x] 4.2 Extract publish and subscribe slices into their own units; same seam; tests green
 - [x] 4.3 Extract host/guest actions slice beside `event-router.ts`; same seam; tests green; `manager.ts` reduced to composition of the units (or deleted if fully decomposed)
 
 ## 5. App cutover
