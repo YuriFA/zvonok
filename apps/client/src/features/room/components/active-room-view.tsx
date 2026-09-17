@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { VideoGrid } from "@/components/video-grid";
 import { ChatPanel } from "@/features/chat/components/chat-panel";
 import { ChatProvider, useChatContext } from "@/features/chat/contexts/chat.context";
-import { useCallRecording } from "@/features/media/hooks/use-call-recording";
 import { RoomCenterControls } from "@/features/room/components/room-center-controls";
 import { RoomVideo } from "@/features/room/components/room-video";
 import { ScreenShareSpotlight } from "@/features/room/components/screen-share-spotlight";
@@ -23,7 +22,6 @@ import { roomPanels } from "@/features/room/room-panels";
 import { useElementSize } from "@/hooks/use-element-size";
 
 import { useGuestRequests } from "../contexts/guest-requests.context";
-import { useActiveSpeakerId } from "../contexts/room-audio.context";
 import { useRoomIdentity } from "../contexts/room-identity.context";
 import { useRoomSession, useRoomToggles } from "../contexts/room-session.context";
 import type { Room } from "../types/room.types";
@@ -46,9 +44,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
   const chat = useChatContext();
   const call = useRoomSession();
   const { toggleVideo, toggleAudio } = useRoomToggles();
-  const { localVideoStream, localAudioStream, participants, localUserId, isRoomLocked } = call;
-  // The call projection lists the local participant first.
-  const remotePeers = participants.slice(1);
+  const { localUserId, isRoomLocked } = call;
 
   const { ref: containerRef, size: dimensions } = useElementSize<HTMLDivElement>();
 
@@ -83,40 +79,6 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     localName: currentUsername ?? "You",
   });
   const isSpotlightMode = spotlight !== null;
-
-  const activeSpeakerId = useActiveSpeakerId();
-
-  const recorder = useCallRecording({
-    roomSlug: room.slug,
-    localUserId,
-    localDisplayName: currentUsername ?? "You",
-    localVideoStream,
-    localAudioStream,
-    remotePeers,
-    activeScreenShare:
-      spotlight === null || spotlight.stream === null
-        ? null
-        : {
-            userId: spotlight.isLocal ? localUserId : (spotlight.userId ?? spotlight.key),
-            label: spotlight.name,
-            stream: spotlight.stream,
-          },
-    activeSpeakerId,
-  });
-
-  // Recording is possible as long as anyone in the room publishes media.
-  const isRecordingEnabled =
-    (localVideoStream?.getTracks() ?? []).some((track) => track.readyState === "live") ||
-    (localAudioStream?.getTracks() ?? []).some((track) => track.readyState === "live") ||
-    remotePeers.some((peer) => peer.isCameraEnabled || peer.isAudioEnabled || peer.isScreenSharing);
-
-  const handleToggleRecord = () => {
-    if (recorder.state === "recording") {
-      recorder.stop();
-    } else {
-      recorder.start();
-    }
-  };
 
   const isOwner = currentUserId === room.ownerId;
 
@@ -276,11 +238,6 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
           isScreenShareBlocked={isScreenShareBlocked}
           screenShareState={screenShareState}
           onToggleScreenShare={handleToggleScreenShare}
-          recordingState={recorder.state}
-          elapsedSeconds={recorder.elapsedSeconds}
-          isRecordingSupported={recorder.isSupported}
-          isRecordingEnabled={isRecordingEnabled}
-          onToggleRecord={handleToggleRecord}
         />
         <RoomRightControls
           pendingRequestsCount={isOwner ? pendingRequests.length : undefined}

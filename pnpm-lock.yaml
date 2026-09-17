@@ -49,9 +49,6 @@ importers:
       '@zvonok/react':
         specifier: workspace:*
         version: link:../../packages/react
-      '@zvonok/video-layout':
-        specifier: workspace:*
-        version: link:../../packages/video-layout
       '@zvonok/whiteboard-react':
         specifier: workspace:*
         version: link:../../packages/whiteboard-react

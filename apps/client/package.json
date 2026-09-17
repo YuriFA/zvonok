@@ -27,7 +27,6 @@
     "@tanstack/react-query": "^5.90.20",
     "@zvonok/client": "workspace:*",
     "@zvonok/react": "workspace:*",
-    "@zvonok/video-layout": "workspace:*",
     "@zvonok/whiteboard-react": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
