@@ -75,57 +75,25 @@
         "types": "./dist/audio/audio-level-sampler.d.ts",
         "default": "./dist/audio/audio-level-sampler.js"
       },
-      "./audio/audio-utils": {
-        "types": "./dist/audio/audio-utils.d.ts",
-        "default": "./dist/audio/audio-utils.js"
-      },
       "./audio/remote-audio-mixer": {
         "types": "./dist/audio/remote-audio-mixer.d.ts",
         "default": "./dist/audio/remote-audio-mixer.js"
-      },
-      "./config/media": {
-        "types": "./dist/config/media.d.ts",
-        "default": "./dist/config/media.js"
       },
       "./helpers/concurrency": {
         "types": "./dist/helpers/concurrency.d.ts",
         "default": "./dist/helpers/concurrency.js"
       },
-      "./media/capture": {
-        "types": "./dist/media/capture.d.ts",
-        "default": "./dist/media/capture.js"
-      },
       "./media/capture-state": {
         "types": "./dist/media/capture-state.d.ts",
         "default": "./dist/media/capture-state.js"
-      },
-      "./media/device-service": {
-        "types": "./dist/media/device-service.d.ts",
-        "default": "./dist/media/device-service.js"
-      },
-      "./media/error-classifier": {
-        "types": "./dist/media/error-classifier.d.ts",
-        "default": "./dist/media/error-classifier.js"
       },
       "./media/interfaces": {
         "types": "./dist/media/interfaces.d.ts",
         "default": "./dist/media/interfaces.js"
       },
-      "./media/manager": {
-        "types": "./dist/media/manager.d.ts",
-        "default": "./dist/media/manager.js"
-      },
       "./media/manager-factory": {
         "types": "./dist/media/manager-factory.d.ts",
         "default": "./dist/media/manager-factory.js"
-      },
-      "./media/types": {
-        "types": "./dist/media/types.d.ts",
-        "default": "./dist/media/types.js"
-      },
-      "./screen-share/__mocks__/service": {
-        "types": "./dist/screen-share/__mocks__/service.d.ts",
-        "default": "./dist/screen-share/__mocks__/service.js"
       },
       "./screen-share/service": {
         "types": "./dist/screen-share/service.d.ts",
@@ -135,22 +103,6 @@
         "types": "./dist/screen-share/types.d.ts",
         "default": "./dist/screen-share/types.js"
       },
-      "./sfu/__mocks__/manager": {
-        "types": "./dist/sfu/__mocks__/manager.d.ts",
-        "default": "./dist/sfu/__mocks__/manager.js"
-      },
-      "./sfu/connection": {
-        "types": "./dist/sfu/connection.d.ts",
-        "default": "./dist/sfu/connection.js"
-      },
-      "./sfu/event-router": {
-        "types": "./dist/sfu/event-router.d.ts",
-        "default": "./dist/sfu/event-router.js"
-      },
-      "./sfu/interfaces": {
-        "types": "./dist/sfu/interfaces.d.ts",
-        "default": "./dist/sfu/interfaces.js"
-      },
       "./sfu/manager": {
         "types": "./dist/sfu/manager.d.ts",
         "default": "./dist/sfu/manager.js"
@@ -158,10 +110,6 @@
       "./sfu/quality-score": {
         "types": "./dist/sfu/quality-score.d.ts",
         "default": "./dist/sfu/quality-score.js"
-      },
-      "./sfu/stats-collector": {
-        "types": "./dist/sfu/stats-collector.d.ts",
-        "default": "./dist/sfu/stats-collector.js"
       },
       "./sfu/types": {
         "types": "./dist/sfu/types.d.ts",

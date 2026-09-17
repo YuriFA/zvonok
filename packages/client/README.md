@@ -15,12 +15,13 @@ npm i @zvonok/client
 No barrel file - import from subpaths:
 
 ```ts
-import { SfuManager } from "@zvonok/client/sfu/manager";
-import { MediaStreamManager } from "@zvonok/client/media/manager";
+import { createSfuManager } from "@zvonok/client/sfu/manager";
+import { createMediaManager } from "@zvonok/client/media/manager-factory";
 ```
 
-Test doubles for the SFU manager and the screen-share service ship under
-`sfu/__mocks__` and `screen-share/__mocks__` for use in your own test suites.
+The public surface is exactly the `exports` map in `package.json`; modules
+outside it are implementation details. There are no published test doubles -
+drive the real modules with fake transports instead.
 
 ## Docs
 
