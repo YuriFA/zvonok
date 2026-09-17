@@ -96,11 +96,11 @@ export function ParticipantItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-7"
-          aria-label={`Mute ${username}`}
+          className="size-7 text-muted-foreground hover:text-destructive"
           onClick={() => onMute(id)}
+          aria-label={`Mute ${username}`}
         >
-          <MicOff className="size-3.5" />
+          <MicOff className="size-4" />
         </Button>
       )}
 
@@ -108,11 +108,11 @@ export function ParticipantItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 text-red-500 hover:text-red-600"
-          aria-label={`Kick ${username}`}
+          className="size-7 text-muted-foreground hover:text-destructive"
           onClick={() => onKick(id)}
+          aria-label={`Kick ${username}`}
         >
-          <UserX className="size-3.5" />
+          <UserX className="size-4" />
         </Button>
       )}
     </li>

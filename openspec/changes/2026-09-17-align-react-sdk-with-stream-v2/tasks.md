@@ -27,6 +27,6 @@
 
 ## 6. Verification
 
-- [ ] 6.1 `pnpm -C packages/react test`, `pnpm -C packages/client test`, app test suite, typecheck, and lint clean
+- [x] 6.1 `pnpm -C packages/react test`, `pnpm -C packages/client test`, app test suite, typecheck, and lint clean
 - [ ] 6.2 Local smoke: embedder page with `ZvonokEmbeddedRoom` (join, device switch, host actions) and app room regression pass
-- [ ] 6.3 `pnpm openspec:validate` clean
+- [x] 6.3 `pnpm openspec:validate` clean
