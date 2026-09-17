@@ -43,31 +43,14 @@ vi.mock("@/features/room/services/room-api", () => ({
 
 const mockJoin = vi.hoisted(() => vi.fn(async () => {}));
 
-const mockSfuManagerValue = {
-  getProducerByKind: () => undefined,
-  replaceTrack: vi.fn(async () => true),
-  onQualityStats: () => () => {},
-  onParticipantLeft: () => () => {},
-  onStateChange: () => () => {},
-  startStatsCollection: vi.fn(),
-  stopStatsCollection: vi.fn(),
-};
-
 const mockConnection = {
   status: "joined",
   error: null,
   join: mockJoin,
   leave: vi.fn(),
-  manager: mockSfuManagerValue,
   isRoomLocked: false,
   wasKicked: false,
   roomEnded: false,
-  produceTrack: vi.fn(async () => true),
-  pauseProducer: vi.fn(),
-  resumeProducer: vi.fn(),
-  closeProducer: vi.fn(),
-  replaceTrack: vi.fn(async () => true),
-  hasProducer: () => false,
 };
 
 const mockMediaManager = {
@@ -100,168 +83,90 @@ const mockMediaManager = {
   }),
 };
 
-vi.mock("@zvonok/react", () => ({
-  ZvonokProvider: ({ children }: { children: React.ReactNode }) => children,
-  useZvonokSession: () => ({
-    manager: mockSfuManagerValue,
-    mediaManager: mockMediaManager,
-    status: "joined",
-    error: null,
-    locked: false,
-    roomEnded: false,
-    update: vi.fn(),
-  }),
-  useZvonokConnection: () => mockConnection,
-  useZvonokCall: () => mockUseZvonokCall(),
-  useDeviceControls: () => ({
-    devices: [],
-    camera: {
-      state: 2,
-      stream: null,
-      toggle: vi.fn(async () => true),
-      switchDevice: vi.fn(async () => true),
-    },
-    mic: {
-      state: 2,
-      stream: null,
-      toggle: vi.fn(async () => true),
-      switchDevice: vi.fn(async () => true),
-    },
-    start: vi.fn(async () => {}),
-    stop: vi.fn(),
-    isLoading: false,
-    selectedDevices: { videoDeviceId: null, audioDeviceId: null, speakerDeviceId: null },
-    selectVideoDevice: vi.fn(),
-    selectAudioDevice: vi.fn(),
-    selectSpeakerDevice: vi.fn(),
-    permissions: { video: "granted", audio: "granted" },
-  }),
-  useParticipants: () => ({ participants: [] }),
-  useOwnCapabilities: () => [],
-  useEgressState: () => ({ isRecording: false }),
-  useEgressControls: () => ({ start: vi.fn(async () => {}), stop: vi.fn(async () => {}) }),
-  useScreenShare: () => ({
-    sharing: false,
-    screenStream: null,
-    blocked: false,
-    start: vi.fn(async () => {}),
-    stop: vi.fn(),
-  }),
-  useGuestJoinRequests: () => ({ pendingRequests: [], removeRequest: vi.fn() }),
-  createHostControls: () => ({
-    muteAll: vi.fn(async () => {}),
-    lockRoom: vi.fn(async () => {}),
-    mutePeer: vi.fn(async () => {}),
-  }),
-  EMPTY_ROOM_STATE: { participants: [], locked: false, mutedByHost: false },
-  PeerQualityProvider: ({ children }: { children: React.ReactNode }) => children,
-  usePeerQualityStats: () => undefined,
-  usePrejoin: (options?: {
-    initialName?: string;
-    onConfirm: (o: { displayName: string }) => Promise<void> | void;
-  }) => ({
-    phase: "confirming",
-    displayName: options?.initialName ?? "",
-    setDisplayName: () => {},
-    canConfirm: true,
-    confirm: async () => {
-      await options?.onConfirm?.({ displayName: options?.initialName ?? "" });
-    },
-    reset: () => {},
-  }),
-  deriveMediaControlState: (options: { isEnabled: boolean; isMutedByHost?: boolean }) => ({
-    isOn: options.isEnabled && !options.isMutedByHost,
-    hasError: false,
-    isLoading: false,
-    isForcedOff: options.isMutedByHost ?? false,
-    display: { tooltip: "toggle", status: "off", statusText: null },
-  }),
-  hasCapabilities: () => true,
-  mapScreenShareError: () => undefined,
-  useViewportQuality: () => {},
-  useRoomLayout: () => ({
-    mode: "grid",
-    spotlight: null,
-    tiles: [],
-  }),
-  useStage: () => ({ tiles: [], spotlight: null }),
-  useMediaControls: () => ({
-    video: {
-      isOn: true,
-      hasError: false,
-      isLoading: false,
-      isForcedOff: false,
-      display: { tooltip: "Toggle video", status: "on", statusText: null },
-    },
-    audio: {
-      isOn: true,
-      hasError: false,
-      isLoading: false,
-      isForcedOff: false,
-      display: { tooltip: "Toggle audio", status: "on", statusText: null },
-    },
-  }),
-  useParticipantsPanel: (options?: {
-    call?: ReturnType<typeof mockUseZvonokCall>;
-    currentUserId?: string | null;
-    isOwner?: boolean;
-    pendingRequests?: Array<{ requestId: string; displayName: string }>;
-    onApproveRequest?: (requestId: string) => Promise<void>;
-    onDenyRequest?: (requestId: string) => Promise<void>;
-  }) => {
-    const call = options?.call ?? mockUseZvonokCall();
-    const currentUserId = options?.currentUserId ?? null;
-    const isOwner = options?.isOwner ?? false;
-    const participants = (call.participants ?? []).map(
-      (participant: {
-        userId: string;
-        displayName?: string;
-        isAudioEnabled: boolean;
-        isCameraEnabled: boolean;
-        isConnected: boolean;
-        mutedByHost?: boolean;
-      }) => ({
-        id: participant.userId,
-        userId: participant.userId,
-        username: participant.displayName || participant.userId,
-        isMuted: !participant.isAudioEnabled,
-        isVideoOff: !participant.isCameraEnabled,
-        isConnected: participant.isConnected,
-        isMutedByHost: participant.mutedByHost,
-      }),
-    );
-    const sorted = [...participants].sort((a, b) => {
-      if (a.id === currentUserId) return -1;
-      if (b.id === currentUserId) return 1;
-      if (a.isConnected !== b.isConnected) return a.isConnected ? -1 : 1;
-      return a.username.localeCompare(b.username);
-    });
-    const pendingRequests = options?.pendingRequests ?? [];
-    return {
-      participants: sorted,
-      isRoomLocked: call.isRoomLocked,
-      canMuteAll: isOwner,
-      canLockRoom: isOwner,
-      muteAll: () => call.hostControls.muteAll(),
-      toggleLock: () => call.hostControls.lockRoom(!call.isRoomLocked),
-      canMuteParticipant: (participant: { id: string; isMutedByHost?: boolean }) =>
-        isOwner && participant.id !== currentUserId && !participant.isMutedByHost,
-      canKickParticipant: (participant: { id: string }) =>
-        isOwner && participant.id !== currentUserId,
-      muteParticipant: (userId: string) => call.hostControls.mutePeer(userId),
-      kickParticipant: (userId: string) => call.kickPeer(userId),
-      pendingRequests,
-      hasPendingRequests: isOwner && pendingRequests.length > 0,
-      canReviewRequests: isOwner,
-      approveRequest: async (requestId: string) => {
-        await options?.onApproveRequest?.(requestId);
+vi.mock("@zvonok/react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@zvonok/react")>();
+  return {
+    ...actual,
+
+    // Component shells: the real providers only wire session state that the
+    // data doubles below already stand in for.
+    ZvonokProvider: ({ children }: { children: React.ReactNode }) => children,
+    PeerQualityProvider: ({ children }: { children: React.ReactNode }) => children,
+
+    // Transport data seams.
+    useZvonokSession: () => ({
+      serverUrl: "https://sfu.test",
+      mediaManager: mockMediaManager,
+      manager: null,
+      status: "joined",
+      error: null,
+      locked: false,
+      roomEnded: false,
+      kicked: false,
+      store: { getSnapshot: () => ({}), subscribe: () => () => {} },
+    }),
+    useZvonokConnection: () => mockConnection,
+    useZvonokCall: () => mockUseZvonokCall(),
+    useParticipants: () => ({ participants: [] }),
+    useOwnCapabilities: () => [
+      "send-audio",
+      "send-video",
+      "send-screenshare",
+      "mute-users",
+      "remove-participants",
+      "lock-room",
+      "start-recording",
+      "start-broadcast",
+    ],
+    useDeviceControls: () => ({
+      devices: [],
+      camera: {
+        state: 2,
+        stream: null,
+        toggle: vi.fn(async () => true),
+        switchDevice: vi.fn(async () => true),
       },
-      denyRequest: async (requestId: string) => {
-        await options?.onDenyRequest?.(requestId);
+      mic: {
+        state: 2,
+        stream: null,
+        toggle: vi.fn(async () => true),
+        switchDevice: vi.fn(async () => true),
       },
-    };
-  },
-}));
+      start: vi.fn(async () => {}),
+      stop: vi.fn(),
+      isLoading: false,
+      selectedDevices: { videoDeviceId: null, audioDeviceId: null, speakerDeviceId: null },
+      selectVideoDevice: vi.fn(),
+      selectAudioDevice: vi.fn(),
+      selectSpeakerDevice: vi.fn(),
+      permissions: { video: "granted", audio: "granted" },
+    }),
+    useEgressState: () => ({ isRecording: false }),
+    useEgressControls: () => ({ start: vi.fn(async () => {}), stop: vi.fn(async () => {}) }),
+    useScreenShare: () => ({
+      sharing: false,
+      screenStream: null,
+      blocked: false,
+      start: vi.fn(async () => {}),
+      stop: vi.fn(),
+    }),
+    useGuestJoinRequests: () => ({ pendingRequests: [], removeRequest: vi.fn() }),
+    usePrejoin: (options?: {
+      initialName?: string;
+      onConfirm: (o: { displayName: string }) => Promise<void> | void;
+    }) => ({
+      phase: "confirming",
+      displayName: options?.initialName ?? "",
+      setDisplayName: () => {},
+      canConfirm: true,
+      confirm: async () => {
+        await options?.onConfirm?.({ displayName: options?.initialName ?? "" });
+      },
+      reset: () => {},
+    }),
+    usePeerQualityStats: () => undefined,
+  };
+});
 
 vi.mock("@/components/local-video", () => ({
   LocalVideo: ({ stream }: { stream: MediaStream | null }) => (

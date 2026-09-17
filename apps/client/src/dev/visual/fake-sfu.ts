@@ -5,8 +5,6 @@
  * sees the same room state.
  */
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
 type Unsubscribe = () => void;
 
 /**
@@ -135,22 +133,15 @@ export interface FakePeer {
   screenShare?: boolean;
 }
 
-export function createFakeConnection(manager: FakeSfuManager, options?: { wasKicked?: boolean }) {
+export function createFakeConnection(options?: { wasKicked?: boolean }) {
   const connection = {
     status: "joined" as const,
     error: null,
     isRoomLocked: false,
     wasKicked: options?.wasKicked ?? false,
     roomEnded: false,
-    manager: manager as unknown as SfuManager,
     join: async () => {},
     leave: () => {},
-    produceTrack: async () => true,
-    pauseProducer: () => {},
-    resumeProducer: () => {},
-    closeProducer: () => {},
-    replaceTrack: async () => true,
-    hasProducer: () => false,
   };
   return connection;
 }

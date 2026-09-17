@@ -7,7 +7,6 @@ import { RoomAudioContextProvider } from "../contexts/room-audio.context";
 import { useRoomIdentity } from "../contexts/room-identity.context";
 import { RoomSessionProvider, useRoomSession } from "../contexts/room-session.context";
 import { useEndRoom } from "../hooks/use-end-room";
-import { useRoomVisibilityPause } from "../hooks/use-room-visibility";
 import type { Room } from "../types/room.types";
 import { ActiveRoomHeader } from "./active-room-header";
 import { ActiveRoomView } from "./active-room-view";
@@ -20,18 +19,12 @@ interface Props {
 
 export const RoomView = ({ room, connection }: Props) => (
   <RoomSessionProvider connection={connection}>
-    <RoomViewContent room={room} connection={connection} />
+    <RoomViewContent room={room} />
   </RoomSessionProvider>
 );
 
 /** Inside the session provider: composes the providers and chrome around the room. */
-function RoomViewContent({
-  room,
-  connection,
-}: {
-  room: Room;
-  connection: UseZvonokConnectionResult;
-}) {
+function RoomViewContent({ room }: { room: Room }) {
   const navigate = useNavigate();
   const endRoom = useEndRoom({
     onSuccess: () => navigate("/"),
@@ -55,16 +48,9 @@ function RoomViewContent({
 
           <RoomAlerts endRoomError={!!endRoom.error} wasKicked={wasKicked} />
 
-          <RoomVisibilityPause connection={connection} />
           <ActiveRoomView room={room} />
         </div>
       </RoomAudioContextProvider>
     </PeerQualityProvider>
   );
-}
-
-/** Inside the quality provider: the suspend clamp needs the engine's store. */
-function RoomVisibilityPause({ connection }: { connection: UseZvonokConnectionResult }) {
-  useRoomVisibilityPause(connection);
-  return null;
 }

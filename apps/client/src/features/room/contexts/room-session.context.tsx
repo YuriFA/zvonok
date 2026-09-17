@@ -27,6 +27,7 @@ export function RoomSessionProvider({ connection, children }: RoomSessionProvide
     connection,
     localUserId: userId,
     localDisplayName: displayName,
+    pauseVideoWhenHidden: true,
     onHostMuted: () => toast.info("Muted by the room host"),
   });
 

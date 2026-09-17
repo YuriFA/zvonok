@@ -90,8 +90,8 @@ function RoomScene({ scene }: { scene: string }) {
   const manager = useMemo(() => createFakeSfuManager(), []);
   const options = useMemo(() => sceneOptions(scene), [scene]);
   const connection = useMemo(
-    () => createFakeConnection(manager, { wasKicked: options.wasKicked }),
-    [manager, options.wasKicked],
+    () => createFakeConnection({ wasKicked: options.wasKicked }),
+    [options.wasKicked],
   );
   return (
     <div data-testid="visual-root" className="contents">
