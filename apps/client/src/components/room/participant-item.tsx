@@ -1,4 +1,4 @@
-import type { QualityScore, QualityStats } from "@zvonok/client/sfu/types";
+import type { PanelParticipant } from "@zvonok/react";
 import { Mic, MicOff, Video, VideoOff, UserX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,36 +8,32 @@ import { getAvatarColor } from "@/lib/utils/display-name";
 import { QualityIndicator } from "./quality-indicator";
 
 export interface ParticipantItemProps {
-  id: string;
-  username: string;
-  isMuted: boolean;
-  isVideoOff: boolean;
-  isConnected: boolean;
+  participant: PanelParticipant;
   isLocalUser?: boolean;
-  isMutedByHost?: boolean;
   canKick?: boolean;
   onKick?: (id: string) => void;
   canMute?: boolean;
   onMute?: (id: string) => void;
-  qualityScore?: QualityScore;
-  qualityStats?: QualityStats;
 }
 
 export function ParticipantItem({
-  id,
-  username,
-  isMuted,
-  isVideoOff,
-  isConnected,
+  participant,
   isLocalUser,
-  isMutedByHost,
   canKick,
   onKick,
   canMute,
   onMute,
-  qualityScore,
-  qualityStats,
 }: ParticipantItemProps) {
+  const {
+    id,
+    username,
+    isMuted,
+    isVideoOff,
+    isConnected,
+    isMutedByHost,
+    qualityScore,
+    qualityStats,
+  } = participant;
   const initial = username.charAt(0).toUpperCase() || "?";
   const avatarColor = getAvatarColor(username);
 
@@ -100,11 +96,11 @@ export function ParticipantItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground hover:text-destructive"
-          onClick={() => onMute(id)}
+          className="size-7"
           aria-label={`Mute ${username}`}
+          onClick={() => onMute(id)}
         >
-          <MicOff className="size-4" />
+          <MicOff className="size-3.5" />
         </Button>
       )}
 
@@ -112,11 +108,11 @@ export function ParticipantItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 text-muted-foreground hover:text-destructive"
-          onClick={() => onKick(id)}
+          className="size-7 text-red-500 hover:text-red-600"
           aria-label={`Kick ${username}`}
+          onClick={() => onKick(id)}
         >
-          <UserX className="size-4" />
+          <UserX className="size-3.5" />
         </Button>
       )}
     </li>

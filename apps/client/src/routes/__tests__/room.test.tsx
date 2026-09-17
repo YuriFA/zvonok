@@ -184,6 +184,83 @@ vi.mock("@zvonok/react", () => ({
     spotlight: null,
     tiles: [],
   }),
+  useStage: () => ({ tiles: [], spotlight: null }),
+  useMediaControls: () => ({
+    video: {
+      isOn: true,
+      hasError: false,
+      isLoading: false,
+      isForcedOff: false,
+      display: { tooltip: "Toggle video", status: "on", statusText: null },
+    },
+    audio: {
+      isOn: true,
+      hasError: false,
+      isLoading: false,
+      isForcedOff: false,
+      display: { tooltip: "Toggle audio", status: "on", statusText: null },
+    },
+  }),
+  useParticipantsPanel: (options?: {
+    call?: ReturnType<typeof mockUseZvonokCall>;
+    currentUserId?: string | null;
+    isOwner?: boolean;
+    pendingRequests?: Array<{ requestId: string; displayName: string }>;
+    onApproveRequest?: (requestId: string) => Promise<void>;
+    onDenyRequest?: (requestId: string) => Promise<void>;
+  }) => {
+    const call = options?.call ?? mockUseZvonokCall();
+    const currentUserId = options?.currentUserId ?? null;
+    const isOwner = options?.isOwner ?? false;
+    const participants = (call.participants ?? []).map(
+      (participant: {
+        userId: string;
+        displayName?: string;
+        isAudioEnabled: boolean;
+        isCameraEnabled: boolean;
+        isConnected: boolean;
+        mutedByHost?: boolean;
+      }) => ({
+        id: participant.userId,
+        userId: participant.userId,
+        username: participant.displayName || participant.userId,
+        isMuted: !participant.isAudioEnabled,
+        isVideoOff: !participant.isCameraEnabled,
+        isConnected: participant.isConnected,
+        isMutedByHost: participant.mutedByHost,
+      }),
+    );
+    const sorted = [...participants].sort((a, b) => {
+      if (a.id === currentUserId) return -1;
+      if (b.id === currentUserId) return 1;
+      if (a.isConnected !== b.isConnected) return a.isConnected ? -1 : 1;
+      return a.username.localeCompare(b.username);
+    });
+    const pendingRequests = options?.pendingRequests ?? [];
+    return {
+      participants: sorted,
+      isRoomLocked: call.isRoomLocked,
+      canMuteAll: isOwner,
+      canLockRoom: isOwner,
+      muteAll: () => call.hostControls.muteAll(),
+      toggleLock: () => call.hostControls.lockRoom(!call.isRoomLocked),
+      canMuteParticipant: (participant: { id: string; isMutedByHost?: boolean }) =>
+        isOwner && participant.id !== currentUserId && !participant.isMutedByHost,
+      canKickParticipant: (participant: { id: string }) =>
+        isOwner && participant.id !== currentUserId,
+      muteParticipant: (userId: string) => call.hostControls.mutePeer(userId),
+      kickParticipant: (userId: string) => call.kickPeer(userId),
+      pendingRequests,
+      hasPendingRequests: isOwner && pendingRequests.length > 0,
+      canReviewRequests: isOwner,
+      approveRequest: async (requestId: string) => {
+        await options?.onApproveRequest?.(requestId);
+      },
+      denyRequest: async (requestId: string) => {
+        await options?.onDenyRequest?.(requestId);
+      },
+    };
+  },
 }));
 
 vi.mock("@/components/local-video", () => ({

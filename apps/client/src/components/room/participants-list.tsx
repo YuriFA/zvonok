@@ -1,80 +1,44 @@
-import type { SfuGuestJoinRequestPayload } from "@zvonok/client/sfu/types";
-import type { QualityScore, QualityStats } from "@zvonok/client/sfu/types";
+import type { ParticipantsPanel } from "@zvonok/react";
 
 import { Button } from "@/components/ui/button";
 
 import { ParticipantItem } from "./participant-item";
 
-export interface Participant {
-  id: string;
-  userId?: string;
-  username: string;
-  isMuted: boolean;
-  isVideoOff: boolean;
-  isConnected: boolean;
-  isSpeaking?: boolean;
-  isMutedByHost?: boolean;
-  qualityScore?: QualityScore;
-  qualityStats?: QualityStats;
-}
-
 export interface ParticipantsListProps {
-  className?: string;
-  participants: Participant[];
+  /** The package panel projection: roster ordering, capability gating, actions. */
+  panel: ParticipantsPanel;
+  /** Local participant identity, for the "(you)" marker. */
   currentUserId?: string;
-  roomOwnerId?: string;
-  onKickParticipant?: (participantId: string) => void;
-  onMuteParticipant?: (participantId: string) => void;
-  pendingRequests?: SfuGuestJoinRequestPayload[];
-  onApproveRequest?: (requestId: string) => Promise<void>;
-  onDenyRequest?: (requestId: string) => Promise<void>;
+  className?: string;
 }
 
-export function ParticipantsList({
-  participants,
-  currentUserId,
-  roomOwnerId,
-  onKickParticipant,
-  onMuteParticipant,
-  pendingRequests,
-  onApproveRequest,
-  onDenyRequest,
-  className,
-}: ParticipantsListProps) {
-  const isOwner = currentUserId === roomOwnerId;
-
-  const sortedParticipants = [...participants].sort((a, b) => {
-    if (a.id === currentUserId) return -1;
-    if (b.id === currentUserId) return 1;
-    if (a.isConnected !== b.isConnected) {
-      return a.isConnected ? -1 : 1;
-    }
-    return a.username.localeCompare(b.username);
-  });
-
-  const hasPendingRequests = isOwner && pendingRequests && pendingRequests.length > 0;
-
+/**
+ * App markup for the participants panel. All behavior - ordering, mute/kick
+ * capability gating, host actions, guest-request queue - comes from the
+ * package's `ParticipantsPanel`; this component renders it in app style.
+ */
+export function ParticipantsList({ panel, currentUserId, className }: ParticipantsListProps) {
   return (
     <div className={className}>
-      {participants.length === 0 ? (
+      {panel.participants.length === 0 ? (
         <p className="px-2 py-4 text-center text-sm text-muted-foreground">No participants</p>
       ) : (
         <ul className="space-y-1" aria-label="Participants list">
-          {sortedParticipants.map((participant) => (
+          {panel.participants.map((participant) => (
             <ParticipantItem
               key={participant.id}
-              {...participant}
+              participant={participant}
               isLocalUser={participant.id === currentUserId}
-              canKick={Boolean(onKickParticipant)}
-              onKick={onKickParticipant}
-              canMute={Boolean(onMuteParticipant)}
-              onMute={onMuteParticipant}
+              canMute={panel.canMuteParticipant(participant)}
+              onMute={(id) => void panel.muteParticipant(id)}
+              canKick={panel.canKickParticipant(participant)}
+              onKick={(id) => void panel.kickParticipant(id)}
             />
           ))}
         </ul>
       )}
 
-      {hasPendingRequests && (
+      {panel.hasPendingRequests && (
         <div className="border-t">
           <div className="px-4 py-2">
             <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -82,7 +46,7 @@ export function ParticipantsList({
             </span>
           </div>
           <ul className="space-y-1 px-2 pb-2" aria-label="Pending join requests">
-            {pendingRequests.map((req) => (
+            {panel.pendingRequests.map((req) => (
               <li
                 key={req.requestId}
                 className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5"
@@ -92,7 +56,7 @@ export function ParticipantsList({
                   <Button
                     size="sm"
                     className="h-6 px-2 text-xs"
-                    onClick={() => onApproveRequest?.(req.requestId)}
+                    onClick={() => void panel.approveRequest(req.requestId)}
                   >
                     Approve
                   </Button>
@@ -100,7 +64,7 @@ export function ParticipantsList({
                     size="sm"
                     variant="outline"
                     className="h-6 px-2 text-xs"
-                    onClick={() => onDenyRequest?.(req.requestId)}
+                    onClick={() => void panel.denyRequest(req.requestId)}
                   >
                     Deny
                   </Button>

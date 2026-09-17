@@ -250,23 +250,7 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                   </Button>
                 </div>
               )}
-              <ParticipantsList
-                participants={panel.participants}
-                currentUserId={currentUserId}
-                roomOwnerId={room.ownerId}
-                onKickParticipant={
-                  panel.participants.some((participant) => panel.canKickParticipant(participant))
-                    ? (id) => void panel.kickParticipant(id)
-                    : undefined
-                }
-                onMuteParticipant={
-                  panel.participants.some((participant) => panel.canMuteParticipant(participant))
-                    ? (id) => void panel.muteParticipant(id)
-                    : undefined
-                }
-                onApproveRequest={isOwner ? approveRequest : undefined}
-                onDenyRequest={isOwner ? denyRequest : undefined}
-              />
+              <ParticipantsList panel={panel} currentUserId={currentUserId} />
             </AsidePanel>
           )}
 

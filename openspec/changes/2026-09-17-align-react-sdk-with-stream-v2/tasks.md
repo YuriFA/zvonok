@@ -21,9 +21,9 @@
 
 ## 5. App cutover
 
-- [ ] 5.1 `apps/client` `participants-list.tsx` consumes the `ParticipantsPanel` projection (or `PanelParticipant[]` derived from it): delete the local `Participant` interface and `sortedParticipants` sort; `participant-item.tsx` consumes `PanelParticipant`; app list test updated, ordering assertions live in package tests
-- [ ] 5.2 Audit remaining app room components against the single-source rule: each renders markup over package hooks/panels with no local control-state derivation, host-action handling, or status derivation; delete any found duplicates and their tests
-- [ ] 5.3 Grep gate: no app import of package-private paths (`@zvonok/react/src/...`, `@zvonok/client/src/...`); app builds and tests green
+- [x] 5.1 `apps/client` `participants-list.tsx` consumes the `ParticipantsPanel` projection (or `PanelParticipant[]` derived from it): delete the local `Participant` interface and `sortedParticipants` sort; `participant-item.tsx` consumes `PanelParticipant`; app list test updated, ordering assertions live in package tests
+- [x] 5.2 Audit remaining app room components against the single-source rule: each renders markup over package hooks/panels with no local control-state derivation, host-action handling, or status derivation; delete any found duplicates and their tests
+- [x] 5.3 Grep gate: no app import of package-private paths (`@zvonok/react/src/...`, `@zvonok/client/src/...`); app builds and tests green
 
 ## 6. Verification
 
