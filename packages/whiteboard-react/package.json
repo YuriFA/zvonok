@@ -1,7 +1,19 @@
 {
   "name": "@zvonok/whiteboard-react",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YuriFA/zvonOK.git",
+    "directory": "packages/whiteboard-react"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
   "exports": {
     "./package.json": "./package.json",
     "./binding": {
@@ -40,7 +52,11 @@
     "test": "vitest",
     "test:run": "vitest run",
     "lint:ts": "tsc --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "lint": "oxlint . && pnpm fmt:check",
+    "lint:fix": "oxlint . --fix && pnpm fmt",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
@@ -49,29 +65,21 @@
     "socket.io-client": "^4.8.3",
     "yjs": "^13.6.32"
   },
-  "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18"
-  },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "jsdom": "^28.1.0",
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typescript": "~5.8.3",
     "vitest": "^4.0.18"
   },
-  "files": [
-    "dist"
-  ],
-  "license": "MIT",
-  "sideEffects": ["*.css"],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/YuriFA/zvonOK.git",
-    "directory": "packages/whiteboard-react"
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
   }
 }

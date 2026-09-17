@@ -3,12 +3,7 @@
  */
 
 /** Lifecycle status of the room connection. */
-export type ZvonokStatus =
-  | "disconnected"
-  | "connecting"
-  | "joined"
-  | "reconnecting"
-  | "error";
+export type ZvonokStatus = "disconnected" | "connecting" | "joined" | "reconnecting" | "error";
 
 /** A remote participant with their media grouped by source. */
 export interface ZvonokParticipant {

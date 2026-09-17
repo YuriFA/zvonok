@@ -1,12 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
+import {
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { ZvonokError } from "../errors.js";
 import { useQualityControls } from "../hooks/use-quality-controls.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
@@ -19,16 +22,12 @@ interface QualityHookResult {
 }
 
 function renderQualityControls() {
-  return renderHook(
-    () => ({ controls: useQualityControls(), session: useZvonokSession() }),
-    { wrapper: Provider },
-  );
+  return renderHook(() => ({ controls: useQualityControls(), session: useZvonokSession() }), {
+    wrapper: Provider,
+  });
 }
 
-async function attachManager(
-  result: { current: QualityHookResult },
-  sfu: MockSfuManager,
-) {
+async function attachManager(result: { current: QualityHookResult }, sfu: MockSfuManager) {
   await act(async () => {
     result.current.session.update({
       manager: sfu.manager as unknown as SfuManager,

@@ -69,7 +69,6 @@ function device(id: string, kind: MediaDeviceInfo["kind"], label = id): MediaDev
 }
 
 describe("useDeviceControls", () => {
-
   it("shares the provider media manager and exposes capture snapshots", () => {
     const { result } = renderHook(() => useDeviceControls(), { wrapper: Provider });
 
@@ -95,7 +94,11 @@ describe("useDeviceControls", () => {
   it("fills the start call with the persisted selection when ids are omitted", async () => {
     localStorage.setItem(
       "zvonok:device-selection",
-      JSON.stringify({ videoDeviceId: "cam-kept", audioDeviceId: "mic-kept", speakerDeviceId: null }),
+      JSON.stringify({
+        videoDeviceId: "cam-kept",
+        audioDeviceId: "mic-kept",
+        speakerDeviceId: null,
+      }),
     );
     const { result } = renderHook(() => useDeviceControls(), { wrapper: Provider });
     const media = lastMediaManager();

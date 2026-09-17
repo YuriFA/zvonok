@@ -1,15 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
+import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
 import {
   AudioActivityEngine,
   useActiveSpeaker,
   useAudioLevels,
 } from "../hooks/use-audio-activity.js";
-import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 /** Scriptable stand-in for AudioLevelSampler's engine-facing surface. */
@@ -24,9 +23,7 @@ function createFakeSampler() {
       levels = next;
     },
     addOwned: vi.fn((id: string, stream: unknown) => owned.set(id, stream)),
-    addBorrowed: vi.fn((id: string, analyser: unknown) =>
-      borrowed.set(id, analyser),
-    ),
+    addBorrowed: vi.fn((id: string, analyser: unknown) => borrowed.set(id, analyser)),
     remove: vi.fn((id: string) => {
       owned.delete(id);
       borrowed.delete(id);
@@ -187,9 +184,7 @@ describe("AudioActivityEngine", () => {
 });
 
 function Provider({ children }: { children: ReactNode }) {
-  return (
-    <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
-  );
+  return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
 }
 
 function renderAudioHooks() {

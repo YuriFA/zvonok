@@ -1,13 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { SfuBroadcastError } from "@zvonok/client/sfu/types";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { SfuBroadcastError } from "@zvonok/client/sfu/types";
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
+import {
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { ZvonokBroadcastError } from "../errors.js";
 import { useBroadcast, useBroadcasts } from "../hooks/use-broadcast.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
@@ -31,10 +34,7 @@ function renderBroadcasts(topic: string) {
   );
 }
 
-async function attachManager(
-  result: { current: BroadcastHookResult },
-  sfu: MockSfuManager,
-) {
+async function attachManager(result: { current: BroadcastHookResult }, sfu: MockSfuManager) {
   await act(async () => {
     result.current.session.update({
       manager: sfu.manager as unknown as SfuManager,
@@ -43,7 +43,9 @@ async function attachManager(
   });
 }
 
-function message(overrides: Partial<Parameters<MockSfuManager["manager"]["simulateBroadcast"]>[0]> = {}) {
+function message(
+  overrides: Partial<Parameters<MockSfuManager["manager"]["simulateBroadcast"]>[0]> = {},
+) {
   return {
     senderId: "user-2",
     topic: "reactions",
@@ -68,10 +70,7 @@ describe("useBroadcast / useBroadcasts", () => {
       await result.current.send.send("reactions", { emoji: "wave" });
     });
 
-    expect(sfu.manager.sendBroadcast).toHaveBeenCalledWith(
-      "reactions",
-      { emoji: "wave" },
-    );
+    expect(sfu.manager.sendBroadcast).toHaveBeenCalledWith("reactions", { emoji: "wave" });
   });
 
   it("rejects with the typed SDK error carrying the server's code", async () => {
@@ -83,9 +82,7 @@ describe("useBroadcast / useBroadcasts", () => {
 
     let caught: unknown;
     await act(async () => {
-      caught = await result.current.send
-        .send("reactions", 1)
-        .catch((error: unknown) => error);
+      caught = await result.current.send.send("reactions", 1).catch((error: unknown) => error);
     });
 
     expect(caught).toBeInstanceOf(ZvonokBroadcastError);
@@ -97,9 +94,7 @@ describe("useBroadcast / useBroadcasts", () => {
 
     let caught: unknown;
     await act(async () => {
-      caught = await result.current.send
-        .send("reactions", 1)
-        .catch((error: unknown) => error);
+      caught = await result.current.send.send("reactions", 1).catch((error: unknown) => error);
     });
 
     expect((caught as ZvonokBroadcastError).code).toBe("DISCONNECTED");
@@ -111,12 +106,8 @@ describe("useBroadcast / useBroadcasts", () => {
 
     act(() => {
       sfu.manager.simulateBroadcast(message({ payload: { emoji: "one" } }));
-      sfu.manager.simulateBroadcast(
-        message({ topic: "chat", payload: "off-topic" }),
-      );
-      sfu.manager.simulateBroadcast(
-        message({ payload: { emoji: "two" }, senderId: "user-3" }),
-      );
+      sfu.manager.simulateBroadcast(message({ topic: "chat", payload: "off-topic" }));
+      sfu.manager.simulateBroadcast(message({ payload: { emoji: "two" }, senderId: "user-3" }));
     });
 
     expect(result.current.receive.messages).toEqual([

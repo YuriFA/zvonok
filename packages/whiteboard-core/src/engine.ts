@@ -1,4 +1,4 @@
-import type { WhiteboardTransport } from './transport';
+import type { WhiteboardTransport } from "./transport";
 
 /**
  * A whiteboard engine renders and edits a collaborative board. The engine

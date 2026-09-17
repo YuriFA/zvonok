@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
+import { useZvonokCall } from "../hooks/use-zvonok-call.js";
+import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 import {
   createMockMediaManager,
   createMockSfuManager,
@@ -9,7 +10,6 @@ import {
   type MockMediaManager,
   type MockSfuManager,
 } from "./doubles.js";
-import { useZvonokCall } from "../hooks/use-zvonok-call.js";
 
 const sessionDouble = vi.hoisted(() => ({ mediaManager: null as unknown }));
 
@@ -24,9 +24,7 @@ function mockOf(connection: UseZvonokConnectionResult): MockSfuManager["manager"
   return connection.manager as unknown as MockSfuManager["manager"];
 }
 
-function createConnection(
-  overrides: Record<string, unknown> = {},
-): UseZvonokConnectionResult {
+function createConnection(overrides: Record<string, unknown> = {}): UseZvonokConnectionResult {
   const { manager } = createMockSfuManager();
   return {
     status: "joined",

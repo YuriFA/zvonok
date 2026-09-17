@@ -10,12 +10,9 @@
  * below.
  */
 
+import type { Producer, RtpEncodingParameters, Transport } from "mediasoup-client/types";
 import type { Socket } from "socket.io-client";
-import type {
-  Producer,
-  RtpEncodingParameters,
-  Transport,
-} from "mediasoup-client/types";
+
 import { singleFlight, withoutConcurrency } from "../helpers/concurrency.js";
 import { createLogger } from "../helpers/logger.js";
 import type {
@@ -108,9 +105,7 @@ export class SfuPublish {
     source?: SfuMediaSource;
     options: { isMobile?: boolean };
   }> = [];
-  private produceErrorCallbacks = new Set<
-    (code: SfuProduceErrorCode) => void
-  >();
+  private produceErrorCallbacks = new Set<(code: SfuProduceErrorCode) => void>();
   private producerStateCallbacks = new Set<SfuProducerStateCallback>();
 
   constructor(host: SfuPublishHost) {
@@ -122,13 +117,9 @@ export class SfuPublish {
     track: MediaStreamTrack,
     { isMobile }: { isMobile?: boolean } = {},
   ): Promise<Producer | null> {
-    return this.produceWithSource(
-      track,
-      track.kind === "video" ? "camera" : undefined,
-      {
-        isMobile,
-      },
-    );
+    return this.produceWithSource(track, track.kind === "video" ? "camera" : undefined, {
+      isMobile,
+    });
   }
 
   async produceScreen(track: MediaStreamTrack): Promise<Producer | null> {
@@ -157,8 +148,7 @@ export class SfuPublish {
         this.log.warn("[SFU] Not queueing produce for an ended track");
         return null;
       }
-      this.log.debug("[SFU] Send transport not ready yet, buffering produce for:",
-      track.kind,);
+      this.log.debug("[SFU] Send transport not ready yet, buffering produce for:", track.kind);
       return new Promise<Producer | null>((resolve, reject) => {
         this.pendingLocalProduces.push({
           track,
@@ -231,10 +221,7 @@ export class SfuPublish {
       });
 
       this.producers.set(producer.id, producer);
-      this.log.debug("[SFU] Produced track:",
-      track.kind,
-      producer.id,
-      source ?? "",);
+      this.log.debug("[SFU] Produced track:", track.kind, producer.id, source ?? "");
 
       producer.on("transportclose", () => {
         this.producers.delete(producer.id);
@@ -260,9 +247,7 @@ export class SfuPublish {
   flushPendingProduces(): void {
     if (this.pendingLocalProduces.length > 0) {
       const pending = this.pendingLocalProduces.splice(0);
-      this.log.debug("[SFU] Flushing",
-      pending.length,
-      "buffered local produce(s)",);
+      this.log.debug("[SFU] Flushing", pending.length, "buffered local produce(s)");
       for (const entry of pending) {
         this.produceWithSource(entry.track, entry.source, entry.options).then(
           entry.resolve,
@@ -277,10 +262,7 @@ export class SfuPublish {
    * "produce" request; settled by the producer-created ack or a produce
    * error.
    */
-  createProduceRequest(
-    requestId: string,
-    source: SfuMediaSource,
-  ): Promise<string> {
+  createProduceRequest(requestId: string, source: SfuMediaSource): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       this.pendingProduceRequests.set(requestId, {
         resolve,
@@ -296,9 +278,7 @@ export class SfuPublish {
 
     producer.close();
     this.producers.delete(producer.id);
-    this.host
-      .getSocket()
-      ?.emit("sfu:close-producer", { producerId: producer.id });
+    this.host.getSocket()?.emit("sfu:close-producer", { producerId: producer.id });
     this.host.updateState({ screenProducerId: null });
   }
 
@@ -311,8 +291,7 @@ export class SfuPublish {
     for (const producer of this.producers.values()) {
       if (
         producer.kind === "video" &&
-        (producer.appData as Record<string, unknown> | undefined)?.source ===
-          "screen"
+        (producer.appData as Record<string, unknown> | undefined)?.source === "screen"
       ) {
         return producer;
       }
@@ -342,9 +321,7 @@ export class SfuPublish {
 
     producer.close();
     this.producers.delete(producer.id);
-    this.host
-      .getSocket()
-      ?.emit("sfu:close-producer", { producerId: producer.id });
+    this.host.getSocket()?.emit("sfu:close-producer", { producerId: producer.id });
 
     if (kind === "audio") {
       this.host.updateState({ audioProducerId: null });
@@ -353,10 +330,7 @@ export class SfuPublish {
     }
   }
 
-  async replaceTrack(
-    kind: "audio" | "video",
-    newTrack: MediaStreamTrack | null,
-  ): Promise<boolean> {
+  async replaceTrack(kind: "audio" | "video", newTrack: MediaStreamTrack | null): Promise<boolean> {
     const producer = this.getProducerByKind(kind);
     if (!producer) return true;
     // Two callers can request the same swap (the track-sync hook reacts to
@@ -379,8 +353,7 @@ export class SfuPublish {
       if (producer.kind !== kind) continue;
       if (
         kind === "video" &&
-        (producer.appData as Record<string, unknown> | undefined)?.source ===
-          "screen"
+        (producer.appData as Record<string, unknown> | undefined)?.source === "screen"
       ) {
         continue;
       }
@@ -442,10 +415,12 @@ export class SfuPublish {
   }
 
   handleProducerStateChanged(payload: SfuProducerStateChangedPayload): void {
-    this.log.debug("[SFU] Producer state changed:",
-    payload.userId,
-    payload.kind,
-    payload.paused ? "paused" : "resumed",);
+    this.log.debug(
+      "[SFU] Producer state changed:",
+      payload.userId,
+      payload.kind,
+      payload.paused ? "paused" : "resumed",
+    );
     this.producerStateCallbacks.forEach((callback) => {
       callback(payload);
     });
@@ -460,8 +435,9 @@ export class SfuPublish {
     for (const producer of this.producers.values()) {
       const track = producer.track;
       if (!track || track.readyState !== "live") continue;
-      const source = (producer.appData as Record<string, unknown> | undefined)
-        ?.source as SfuMediaSource | undefined;
+      const source = (producer.appData as Record<string, unknown> | undefined)?.source as
+        | SfuMediaSource
+        | undefined;
       this.retainedLocalProduces.push({
         track,
         source: source ?? (producer.kind === "video" ? "camera" : undefined),
@@ -483,9 +459,7 @@ export class SfuPublish {
   replayRetainedProduces(): void {
     if (this.retainedLocalProduces.length === 0) return;
     const retained = this.retainedLocalProduces.splice(0);
-    this.log.info("[SFU] Replaying",
-    retained.length,
-    "retained local produce(s)",);
+    this.log.info("[SFU] Replaying", retained.length, "retained local produce(s)");
     for (const entry of retained) {
       void this.produceWithSource(entry.track, entry.source, entry.options);
     }

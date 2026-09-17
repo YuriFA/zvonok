@@ -1,17 +1,13 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { UseDeviceControlsResult } from "../hooks/use-device-controls.js";
-import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 import { useDeviceSwitcher } from "../components/device-switcher/device-switcher.js";
 import { useRoomStatus } from "../components/status-cards/status-cards.js";
+import type { UseDeviceControlsResult } from "../hooks/use-device-controls.js";
 import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
+import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
-function device(
-  kind: MediaDeviceInfo["kind"],
-  deviceId: string,
-  label: string,
-): MediaDeviceInfo {
+function device(kind: MediaDeviceInfo["kind"], deviceId: string, label: string): MediaDeviceInfo {
   return { kind, deviceId, label, groupId: "g1", toJSON: () => ({}) };
 }
 

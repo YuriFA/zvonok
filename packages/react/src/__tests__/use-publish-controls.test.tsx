@@ -1,13 +1,10 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
-import {
-  usePublishControls,
-  type PublishToggleResult,
-} from "../hooks/use-publish-controls.js";
-import type { CapturePort } from "../hooks/capture-port.js";
 import { useSfuTrackSync } from "../core/use-sfu-track-sync.js";
+import type { CapturePort } from "../hooks/capture-port.js";
+import { usePublishControls, type PublishToggleResult } from "../hooks/use-publish-controls.js";
+import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
 // Session double for the track-sync hook; the module mock below is
 // hoisted, so the double lives here too.
@@ -102,7 +99,7 @@ describe("usePublishControls", () => {
     const dead = createEndedTrack("cam-dead", "video");
     const fresh = createLiveTrack("cam-fresh", "video");
     const connection = createConnection();
-    const ensureTrack = vi.fn(async () => ({ getTracks: () => [fresh] } as unknown as MediaStream));
+    const ensureTrack = vi.fn(async () => ({ getTracks: () => [fresh] }) as unknown as MediaStream);
 
     const result = await toggleOnce(connection, "video", true, portWith(dead, { ensureTrack }));
 

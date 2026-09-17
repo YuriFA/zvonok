@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  createMockMediaManager,
-  type MockMediaManager,
-} from "./doubles.js";
 import { createMediaCapturePort } from "../hooks/capture-port.js";
+import { createMockMediaManager, type MockMediaManager } from "./doubles.js";
 
 function liveTrack(kind: "audio" | "video"): MediaStreamTrack {
   return { kind, id: `${kind}-1`, readyState: "live" } as unknown as MediaStreamTrack;

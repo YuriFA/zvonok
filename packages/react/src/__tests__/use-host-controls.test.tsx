@@ -1,14 +1,17 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { SfuHostActionError } from "@zvonok/client/sfu/types";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { SfuHostActionError } from "@zvonok/client/sfu/types";
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
+import {
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { ZvonokHostError } from "../errors.js";
 import type { UseHostControlsResult } from "../hooks/use-host-controls.js";
 import { useHostControls } from "../hooks/use-host-controls.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
@@ -27,13 +30,15 @@ function renderControls() {
 
 async function attachManager(result: { current: ControlsHookResult }, sfu: MockSfuManager) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 
 describe("useHostControls", () => {
   let sfu: MockSfuManager;
-
 
   beforeEach(() => {
     sfu = createMockSfuManager();

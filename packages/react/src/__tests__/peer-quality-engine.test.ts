@@ -1,7 +1,7 @@
 import { act } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
+import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import {
   LAYER_SWITCH_DEBOUNCE_MS,
@@ -123,7 +123,10 @@ describe("PeerQualityEngine adaptation", () => {
   });
 
   function bindEngine(engine: PeerQualityEngine, debounceMs?: number): void {
-    engine.bind(sfu.manager as unknown as SfuManager, debounceMs === undefined ? {} : { debounceMs });
+    engine.bind(
+      sfu.manager as unknown as SfuManager,
+      debounceMs === undefined ? {} : { debounceMs },
+    );
   }
 
   function emitStats(...entries: Array<[string, QualityLevel]>): void {

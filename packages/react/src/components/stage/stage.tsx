@@ -5,6 +5,8 @@
  * consumers render tiles with whatever markup they like.
  */
 
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
+
 import {
   PeerQualityProvider,
   Tile,
@@ -12,7 +14,6 @@ import {
   type UseScreenShareResult,
   type UseZvonokCallResult,
 } from "../../index.js";
-import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export interface StageTile {
   key: string;
@@ -46,9 +47,12 @@ export interface Stage {
   spotlight: StageTile | null;
 }
 
-function rectStyle(
-  rect: { x: number; y: number; width: number; height: number },
-): React.CSSProperties | undefined {
+function rectStyle(rect: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): React.CSSProperties | undefined {
   // A zero rect means the derivation ran without a stage size (flow grid);
   // consumers lay such tiles out themselves.
   if (rect.width === 0 && rect.height === 0) {

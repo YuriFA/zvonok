@@ -11,8 +11,8 @@ import {
 } from "@zvonok/client/screen-share/service";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ZvonokError } from "../errors.js";
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { ZvonokError } from "../errors.js";
 
 export interface UseScreenShareResult {
   /** True while this participant's screen is captured and published. */
@@ -42,11 +42,14 @@ export function useScreenShare(): UseScreenShareResult {
     [manager],
   );
 
-  const [state, setState] = useState(() => service?.getState() ?? {
-    isSharing: false,
-    screenStream: null,
-    isScreenShareBlocked: false,
-  });
+  const [state, setState] = useState(
+    () =>
+      service?.getState() ?? {
+        isSharing: false,
+        screenStream: null,
+        isScreenShareBlocked: false,
+      },
+  );
 
   useEffect(() => {
     if (!service) {
@@ -62,7 +65,9 @@ export function useScreenShare(): UseScreenShareResult {
 
   const start = useCallback((): Promise<void> => {
     if (!service) {
-      return Promise.reject(new ZvonokError("DISCONNECTED", "Join the room before sharing your screen"));
+      return Promise.reject(
+        new ZvonokError("DISCONNECTED", "Join the room before sharing your screen"),
+      );
     }
     return service.start();
   }, [service]);

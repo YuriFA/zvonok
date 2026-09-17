@@ -1,16 +1,11 @@
-import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const kitPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../css/component-kit/base.css",
-);
-const embeddedPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../css/embedded.css",
-);
+import { describe, expect, it } from "vitest";
+
+const kitPath = join(dirname(fileURLToPath(import.meta.url)), "../css/component-kit/base.css");
+const embeddedPath = join(dirname(fileURLToPath(import.meta.url)), "../css/embedded.css");
 
 /**
  * The styling contract (D6): every color, radius, and font parameter is a

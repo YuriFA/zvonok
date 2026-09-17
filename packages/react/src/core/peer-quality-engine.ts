@@ -15,8 +15,8 @@
  * is unit-testable without React.
  */
 
-import { qualityToSpatialLayer } from "@zvonok/client/sfu/quality-score";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { qualityToSpatialLayer } from "@zvonok/client/sfu/quality-score";
 import type { PeerQualityStats, SimulcastSpatialLayer } from "@zvonok/client/sfu/types";
 
 /** Stats polling cadence: phones poll slower to save radio wakeups. */
@@ -281,33 +281,28 @@ export class PeerQualityEngine {
     }
 
     // Debounce: emit after the debounce window of stability
-    const timer = setTimeout(
-      () => {
-        this.layerTimers.delete(userId);
-        // Re-check: inputs may have changed while the timer was running
-        const currentPeerStats = this.getPeerStats(userId);
-        const currentLayer = currentPeerStats
-          ? qualityToSpatialLayer(currentPeerStats.score.level)
-          : qualityToSpatialLayer(peerStats.score.level);
-        const effectiveNow = this.isViewportVisible(userId) && !this.isSuspended()
-          ? currentLayer
-          : 0;
-        const consumerId = bound.manager.getVideoConsumerIdForUserId(userId);
+    const timer = setTimeout(() => {
+      this.layerTimers.delete(userId);
+      // Re-check: inputs may have changed while the timer was running
+      const currentPeerStats = this.getPeerStats(userId);
+      const currentLayer = currentPeerStats
+        ? qualityToSpatialLayer(currentPeerStats.score.level)
+        : qualityToSpatialLayer(peerStats.score.level);
+      const effectiveNow = this.isViewportVisible(userId) && !this.isSuspended() ? currentLayer : 0;
+      const consumerId = bound.manager.getVideoConsumerIdForUserId(userId);
 
-        if (!consumerId) {
-          // Nothing to address yet: drop the memory so a later trigger
-          // re-attempts once the consumer appears.
-          this.lastEmittedLayer.delete(userId);
-          return;
-        }
+      if (!consumerId) {
+        // Nothing to address yet: drop the memory so a later trigger
+        // re-attempts once the consumer appears.
+        this.lastEmittedLayer.delete(userId);
+        return;
+      }
 
-        if (this.lastEmittedLayer.get(userId) !== effectiveNow) {
-          bound.manager.setPreferredLayers(consumerId, effectiveNow);
-          this.lastEmittedLayer.set(userId, effectiveNow);
-        }
-      },
-      bound.debounceMs,
-    );
+      if (this.lastEmittedLayer.get(userId) !== effectiveNow) {
+        bound.manager.setPreferredLayers(consumerId, effectiveNow);
+        this.lastEmittedLayer.set(userId, effectiveNow);
+      }
+    }, bound.debounceMs);
 
     this.layerTimers.set(userId, timer);
   }

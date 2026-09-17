@@ -50,9 +50,7 @@ export class SfuSession {
   private readonly log = createLogger("sfu");
   private readonly host: SfuSessionHost;
   private joinErrorCallbacks = new Set<(error: SfuJoinError) => void>();
-  private reconnectErrorCallbacks = new Set<
-    (error: SfuReconnectError) => void
-  >();
+  private reconnectErrorCallbacks = new Set<(error: SfuReconnectError) => void>();
   // Automatic recovery: the last accepted join payload is replayed after a
   // signalling drop, so the session survives blips without consumer action.
   private lastJoinPayload: SfuJoinPayload | null = null;
@@ -69,10 +67,7 @@ export class SfuSession {
   }
 
   // ISfuRoomMembership
-  async joinRoom(
-    payload: SfuJoinPayload,
-    options?: SfuJoinOptions,
-  ): Promise<void> {
+  async joinRoom(payload: SfuJoinPayload, options?: SfuJoinOptions): Promise<void> {
     const socket = this.host.getSocket();
     if (!socket) {
       throw new Error("Socket not connected");
@@ -83,9 +78,7 @@ export class SfuSession {
     // server minted it for. Callers frequently only know the room slug, and
     // sending a slug as roomId fails verification with
     // ROOM_TOKEN_ROOM_MISMATCH whenever slug !== id.
-    const tokenRoomId = payload.token
-      ? readRoomIdFromToken(payload.token)
-      : null;
+    const tokenRoomId = payload.token ? readRoomIdFromToken(payload.token) : null;
     socket.emit("sfu:join", {
       ...payload,
       roomId: tokenRoomId ?? payload.roomId,
@@ -282,9 +275,7 @@ export function readRoomIdFromToken(token: string): string | null {
     if (!payloadPart) return null;
     const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
     const payload = JSON.parse(atob(normalized)) as { sub?: unknown };
-    return typeof payload.sub === "string" && payload.sub.length > 0
-      ? payload.sub
-      : null;
+    return typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : null;
   } catch {
     return null;
   }

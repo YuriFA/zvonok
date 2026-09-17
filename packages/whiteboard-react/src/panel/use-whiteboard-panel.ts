@@ -1,15 +1,15 @@
-import type { WhiteboardHistoryState, WhiteboardSession } from '@zvonok/whiteboard-core/engine';
-import type { WhiteboardDrawMode } from '@zvonok/whiteboard-core/protocol';
-import { WHITEBOARD_NAMESPACE } from '@zvonok/whiteboard-core/protocol';
+import type { WhiteboardHistoryState, WhiteboardSession } from "@zvonok/whiteboard-core/engine";
+import type { WhiteboardDrawMode } from "@zvonok/whiteboard-core/protocol";
+import { WHITEBOARD_NAMESPACE } from "@zvonok/whiteboard-core/protocol";
 import {
   createWhiteboardTransport,
   type WhiteboardSocketLike,
   type WhiteboardTransport,
-} from '@zvonok/whiteboard-core/transport';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
+} from "@zvonok/whiteboard-core/transport";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 
-export type WhiteboardStatus = 'idle' | 'connecting' | 'open' | 'error';
+export type WhiteboardStatus = "idle" | "connecting" | "open" | "error";
 
 export interface UseWhiteboardPanelOptions {
   roomSlug: string;
@@ -47,11 +47,14 @@ export interface WhiteboardPanelController {
  * multiplayer undo/redo state.
  */
 export function useWhiteboardPanel(options: UseWhiteboardPanelOptions): WhiteboardPanelController {
-  const { roomSlug, socketUrl = '', enabled, isOwner } = options;
+  const { roomSlug, socketUrl = "", enabled, isOwner } = options;
 
-  const [status, setStatus] = useState<WhiteboardStatus>(enabled ? 'connecting' : 'idle');
-  const [mode, setMode] = useState<WhiteboardDrawMode>('owner');
-  const [history, setHistory] = useState<WhiteboardHistoryState>({ canUndo: false, canRedo: false });
+  const [status, setStatus] = useState<WhiteboardStatus>(enabled ? "connecting" : "idle");
+  const [mode, setMode] = useState<WhiteboardDrawMode>("owner");
+  const [history, setHistory] = useState<WhiteboardHistoryState>({
+    canUndo: false,
+    canRedo: false,
+  });
 
   const sessionRef = useRef<WhiteboardSession | null>(null);
   const transportRef = useRef<WhiteboardTransport | null>(null);
@@ -82,14 +85,14 @@ export function useWhiteboardPanel(options: UseWhiteboardPanelOptions): Whiteboa
     try {
       // Deliberately dynamic: keeps the 1 MB+ Excalidraw bundle out of the
       // panel chunk; a static import would pull the engine into every build.
-      const { excalidrawEngine } = await import('../engine-excalidraw/engine');
+      const { excalidrawEngine } = await import("../engine-excalidraw/engine");
       for (;;) {
         const element = pendingContainerRef.current;
         const transport = transportRef.current;
         if (!element || !transport || sessionRef.current !== null) return;
         const session = await excalidrawEngine.mount(element, {
           transport,
-          canDraw: modeRef.current === 'open' || isOwnerRef.current,
+          canDraw: modeRef.current === "open" || isOwnerRef.current,
         });
         if (pendingContainerRef.current === element && transportRef.current === transport) {
           sessionRef.current = session;
@@ -119,11 +122,11 @@ export function useWhiteboardPanel(options: UseWhiteboardPanelOptions): Whiteboa
 
   useEffect(() => {
     if (!enabled || roomSlug.length === 0) return;
-    setStatus('connecting');
+    setStatus("connecting");
 
     const socket: Socket = io(`${socketUrl}${WHITEBOARD_NAMESPACE}`, {
       withCredentials: true,
-      transports: ['websocket', 'polling'],
+      transports: ["websocket", "polling"],
       reconnection: true,
     });
     const transport = createWhiteboardTransport(
@@ -134,13 +137,13 @@ export function useWhiteboardPanel(options: UseWhiteboardPanelOptions): Whiteboa
 
     const applyMode = (nextMode: WhiteboardDrawMode): void => {
       setMode(nextMode);
-      sessionRef.current?.setReadonly(!(nextMode === 'open' || isOwnerRef.current));
+      sessionRef.current?.setReadonly(!(nextMode === "open" || isOwnerRef.current));
     };
     const offs = [
-      transport.onState(() => setStatus('open')),
+      transport.onState(() => setStatus("open")),
       transport.onMode(applyMode),
       transport.onError(({ message }) => {
-        setStatus('error');
+        setStatus("error");
         onModeErrorRef.current?.(message);
       }),
     ];
@@ -154,19 +157,19 @@ export function useWhiteboardPanel(options: UseWhiteboardPanelOptions): Whiteboa
       refreshAttemptedRef.current = true;
       void refreshSession().then((refreshed) => {
         if (!refreshed) {
-          setStatus('error');
+          setStatus("error");
           return;
         }
         if (!socket.connected) socket.connect();
       });
     };
-    socket.on('connect', () => {
+    socket.on("connect", () => {
       refreshAttemptedRef.current = false;
       transport.join();
     });
-    socket.on('connect_error', recoverAuth);
-    socket.on('disconnect', (reason: unknown) => {
-      if (reason === 'io server disconnect') recoverAuth();
+    socket.on("connect_error", recoverAuth);
+    socket.on("disconnect", (reason: unknown) => {
+      if (reason === "io server disconnect") recoverAuth();
     });
     if (socket.connected) transport.join();
     void mountEngine();
@@ -206,7 +209,7 @@ export function useWhiteboardPanel(options: UseWhiteboardPanelOptions): Whiteboa
   return {
     status,
     mode,
-    canDraw: mode === 'open' || isOwner,
+    canDraw: mode === "open" || isOwner,
     history,
     setBoardMode,
     undo,

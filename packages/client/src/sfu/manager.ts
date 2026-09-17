@@ -13,9 +13,9 @@ import type {
   RtpParameters,
   Transport,
 } from "mediasoup-client/types";
-
 import type { Socket } from "socket.io-client";
 
+import { createLogger } from "../helpers/logger.js";
 import { SfuActions } from "./actions.js";
 import { SfuConnection } from "./connection.js";
 import { SfuEventRouter, type SfuEventHandlers } from "./event-router.js";
@@ -23,7 +23,6 @@ import { SfuPublish } from "./publish.js";
 import { SfuSession } from "./session.js";
 import { SfuStatsCollector } from "./stats-collector.js";
 import { SfuSubscribe } from "./subscribe.js";
-import { createLogger } from "../helpers/logger.js";
 import type {
   SfuState,
   SfuJoinPayload,
@@ -94,16 +93,10 @@ export class SfuManager {
   private stateCallbacks = new Set<SfuStateCallback>();
   private peerJoinedCallbacks = new Set<SfuParticipantCallback>();
   private peerLeftCallbacks = new Set<(userId: string) => void>();
-  private peerMediaDetachedCallbacks = new Set<
-    (peer: SfuParticipantInfo) => void
-  >();
+  private peerMediaDetachedCallbacks = new Set<(peer: SfuParticipantInfo) => void>();
   private kickedCallbacks = new Set<(payload: SfuKickedPayload) => void>();
-  private roomEndedCallbacks = new Set<
-    (payload: SfuRoomEndedPayload) => void
-  >();
-  private roomMediaResetCallbacks = new Set<
-    (payload: SfuRoomMediaResetPayload) => void
-  >();
+  private roomEndedCallbacks = new Set<(payload: SfuRoomEndedPayload) => void>();
+  private roomMediaResetCallbacks = new Set<(payload: SfuRoomMediaResetPayload) => void>();
 
   // Publish unit: local track production and producer bookkeeping.
   private readonly publish = new SfuPublish({
@@ -136,8 +129,7 @@ export class SfuManager {
     setLocalUserId: (userId) => {
       this.localUserId = userId;
     },
-    loadDevice: (routerRtpCapabilities) =>
-      this.loadDevice(routerRtpCapabilities),
+    loadDevice: (routerRtpCapabilities) => this.loadDevice(routerRtpCapabilities),
     closeAll: () => this.closeAll(),
     resetMediaState: () => this.resetMediaState(),
     retainLocalProduces: () => this.publish.retainLocalProduces(),
@@ -197,9 +189,7 @@ export class SfuManager {
     };
   }
 
-  onRoomMediaReset(
-    callback: (payload: SfuRoomMediaResetPayload) => void,
-  ): () => void {
+  onRoomMediaReset(callback: (payload: SfuRoomMediaResetPayload) => void): () => void {
     this.roomMediaResetCallbacks.add(callback);
     return () => this.roomMediaResetCallbacks.delete(callback);
   }
@@ -210,9 +200,7 @@ export class SfuManager {
    * and re-published, producers announced on the rebuilt recv transport
    * are re-consumed, and presence/chat/room state is untouched.
    */
-  private async handleRoomMediaReset(
-    payload: SfuRoomMediaResetPayload,
-  ): Promise<void> {
+  private async handleRoomMediaReset(payload: SfuRoomMediaResetPayload): Promise<void> {
     // Pre-join reset: the join flow builds media from scratch anyway.
     if (!this.session.hasRecoverableSession()) return;
 
@@ -236,11 +224,7 @@ export class SfuManager {
     // Guard against duplicate calls while already connecting or connected.
     // socket.io's on() appends listeners, so calling teardown+setup twice
     // would double-register every handler.
-    if (
-      this.connection.isConnected() ||
-      this.state.connectionState === "connecting"
-    )
-      return;
+    if (this.connection.isConnected() || this.state.connectionState === "connecting") return;
     // Tear down before re-registering to clear any stale listeners left from a
     // previous cycle (e.g. after disconnect → reconnect).
     this.eventRouter.teardown();
@@ -266,10 +250,7 @@ export class SfuManager {
   }
 
   // ISfuRoomMembership
-  async joinRoom(
-    payload: SfuJoinPayload,
-    options?: SfuJoinOptions,
-  ): Promise<void> {
+  async joinRoom(payload: SfuJoinPayload, options?: SfuJoinOptions): Promise<void> {
     await this.session.joinRoom(payload, options);
   }
 
@@ -290,10 +271,7 @@ export class SfuManager {
     return this.session.hasJoinedSession();
   }
   // ISfuHostControls
-  async mutePeer(
-    userId: string,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  async mutePeer(userId: string, options?: { timeoutMs?: number }): Promise<void> {
     await this.actions.mutePeer(userId, options);
   }
 
@@ -301,17 +279,11 @@ export class SfuManager {
     await this.actions.muteAll(options);
   }
 
-  async lockRoom(
-    locked: boolean,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  async lockRoom(locked: boolean, options?: { timeoutMs?: number }): Promise<void> {
     await this.actions.lockRoom(locked, options);
   }
 
-  async kickPeer(
-    userId: string,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  async kickPeer(userId: string, options?: { timeoutMs?: number }): Promise<void> {
     await this.actions.kickPeer(userId, options);
   }
 
@@ -394,10 +366,7 @@ export class SfuManager {
     this.publish.closeProducer(kind);
   }
 
-  async replaceTrack(
-    kind: "audio" | "video",
-    newTrack: MediaStreamTrack | null,
-  ): Promise<boolean> {
+  async replaceTrack(kind: "audio" | "video", newTrack: MediaStreamTrack | null): Promise<boolean> {
     return this.publish.replaceTrack(kind, newTrack);
   }
 
@@ -405,10 +374,7 @@ export class SfuManager {
     return this.publish.getProducerByKind(kind);
   }
 
-  setPreferredLayers(
-    consumerId: string,
-    spatialLayer: SimulcastSpatialLayer,
-  ): void {
+  setPreferredLayers(consumerId: string, spatialLayer: SimulcastSpatialLayer): void {
     this.subscribe.setPreferredLayers(consumerId, spatialLayer);
   }
 
@@ -435,9 +401,7 @@ export class SfuManager {
     return () => this.peerLeftCallbacks.delete(callback);
   }
 
-  onPeerMediaDetached(
-    callback: (peer: SfuParticipantInfo) => void,
-  ): () => void {
+  onPeerMediaDetached(callback: (peer: SfuParticipantInfo) => void): () => void {
     this.peerMediaDetachedCallbacks.add(callback);
     return () => this.peerMediaDetachedCallbacks.delete(callback);
   }
@@ -460,9 +424,7 @@ export class SfuManager {
     return this.subscribe.onScreenShareStopped(callback);
   }
 
-  onGuestJoinRequest(
-    callback: (payload: SfuGuestJoinRequestPayload) => void,
-  ): () => void {
+  onGuestJoinRequest(callback: (payload: SfuGuestJoinRequestPayload) => void): () => void {
     return this.actions.onGuestJoinRequest(callback);
   }
 
@@ -488,9 +450,7 @@ export class SfuManager {
   }
 
   // Event handlers
-  private async handleTransportCreated(
-    payload: SfuTransportCreatedPayload,
-  ): Promise<void> {
+  private async handleTransportCreated(payload: SfuTransportCreatedPayload): Promise<void> {
     if (!this.device) return;
 
     const transportOptions = {
@@ -552,10 +512,7 @@ export class SfuManager {
             const requestId = crypto.randomUUID();
             const source = appData?.source as SfuMediaSource | undefined;
 
-            const promise = this.publish.createProduceRequest(
-              requestId,
-              source ?? "camera",
-            );
+            const promise = this.publish.createProduceRequest(requestId, source ?? "camera");
 
             this.connection.getSocket()?.emit("sfu:produce", {
               requestId,
@@ -612,9 +569,6 @@ export class SfuManager {
 
   private handleTransportConnected(payload: { transportId: string }): void {
     this.log.debug("[SFU] Transport connected:", payload.transportId);
-    if (this.sendTransport?.id === payload.transportId) {
-    } else if (this.recvTransport?.id === payload.transportId) {
-    }
   }
 
   private handlePeerJoined(payload: SfuParticipantJoinedPayload): void {
@@ -711,9 +665,7 @@ export class SfuManager {
     }
   }
 
-  private handleScreenShareStopped(
-    payload: SfuScreenShareStoppedPayload,
-  ): void {
+  private handleScreenShareStopped(payload: SfuScreenShareStoppedPayload): void {
     this.log.debug("[SFU] Screen share stopped:", payload.userId);
     if (payload.userId !== this.localUserId) {
       this.updateState({ isScreenShareBlocked: false });
@@ -724,9 +676,7 @@ export class SfuManager {
   }
 
   // Private helpers
-  private async loadDevice(
-    routerRtpCapabilities: RtpCapabilities,
-  ): Promise<void> {
+  private async loadDevice(routerRtpCapabilities: RtpCapabilities): Promise<void> {
     try {
       this.device = new Device();
       await this.device.load({ routerRtpCapabilities });
@@ -839,9 +789,7 @@ export interface SfuManagerOptions {
  * token in the join payload or from the verified browser session.
  */
 export function createSfuManager(options: SfuManagerOptions = {}): SfuManager {
-  return new SfuManager(
-    options.connection ?? new SfuConnection(options.serverUrl),
-  );
+  return new SfuManager(options.connection ?? new SfuConnection(options.serverUrl));
 }
 
 /** Singleton instance for backward compatibility */

@@ -1,13 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { SfuEgressActionError } from "@zvonok/client/sfu/types";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { SfuEgressActionError } from "@zvonok/client/sfu/types";
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
+import {
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { ZvonokEgressError } from "../errors.js";
 import { useEgressControls } from "../hooks/use-egress-controls.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
@@ -27,7 +30,10 @@ function renderControls() {
 
 async function attachManager(result: { current: ControlsHookResult }, sfu: MockSfuManager) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 

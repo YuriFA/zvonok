@@ -6,14 +6,7 @@
  */
 
 import type { PeerQualityStats } from "@zvonok/client/sfu/types";
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useSyncExternalStore } from "react";
 
 import { PeerQualityEngine, STATS_INTERVAL_MS } from "../core/peer-quality-engine.js";

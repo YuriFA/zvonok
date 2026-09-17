@@ -12,8 +12,8 @@ import { isActive } from "@zvonok/client/media/capture-state";
 import type { IMediaManager } from "@zvonok/client/media/interfaces";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useDevicePermissions, type DevicePermissionState } from "./use-device-permissions.js";
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { useDevicePermissions, type DevicePermissionState } from "./use-device-permissions.js";
 
 export interface ZvonokCaptureControl {
   state: CaptureState;

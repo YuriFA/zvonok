@@ -1,16 +1,9 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import {
-  useRoomLayout,
-  type RoomLayoutParticipant,
-} from "../hooks/use-room-layout.js";
+import { useRoomLayout, type RoomLayoutParticipant } from "../hooks/use-room-layout.js";
 
-function grid(
-  participants: RoomLayoutParticipant[],
-  width = 1280,
-  height = 720,
-) {
+function grid(participants: RoomLayoutParticipant[], width = 1280, height = 720) {
   return renderHook(() =>
     useRoomLayout({ participants, containerWidth: width, containerHeight: height }),
   ).result.current;

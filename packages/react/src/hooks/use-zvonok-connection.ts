@@ -3,15 +3,15 @@
  * publish controls passed through to the underlying SfuManager.
  */
 
-import type { Socket } from "socket.io-client";
 import { singleFlight } from "@zvonok/client/helpers/concurrency";
 import { createSfuManager, type SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Socket } from "socket.io-client";
 
-import { createDeferred } from "./deferred.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 import { ZvonokError, ZvonokJoinError } from "../errors.js";
 import type { ZvonokStatus } from "../types.js";
-import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { createDeferred } from "./deferred.js";
 
 const CONNECTION_TIMEOUT_MS = 10_000;
 const JOIN_TIMEOUT_MS = 10_000;
@@ -178,10 +178,7 @@ export function useZvonokConnection({
   const join = useCallback((): Promise<void> => {
     if (!roomId && !roomSlug) {
       return Promise.reject(
-        new ZvonokJoinError(
-          "INVALID_JOIN_PAYLOAD",
-          "Provide a room id or a room slug to join",
-        ),
+        new ZvonokJoinError("INVALID_JOIN_PAYLOAD", "Provide a room id or a room slug to join"),
       );
     }
     return singleFlight(joinLocksRef.current, "join", async () => {
@@ -209,20 +206,16 @@ export function useZvonokConnection({
 
       // Subscribe to the ack before awaiting the connection so no ack or
       // denial can slip through unnoticed.
-      const ack = createJoinAckWaiter(
-        manager.getSocket() as Socket,
-        JOIN_TIMEOUT_MS,
-        () => {
-          void manager.joinRoom(
-            {
-              ...(roomId ? { roomId } : {}),
-              ...(roomSlug ? { roomSlug } : {}),
-              ...(token ? { token } : {}),
-            },
-            { tokenProvider },
-          );
-        },
-      );
+      const ack = createJoinAckWaiter(manager.getSocket() as Socket, JOIN_TIMEOUT_MS, () => {
+        void manager.joinRoom(
+          {
+            ...(roomId ? { roomId } : {}),
+            ...(roomSlug ? { roomSlug } : {}),
+            ...(token ? { token } : {}),
+          },
+          { tokenProvider },
+        );
+      });
 
       try {
         await waitForConnectionState(manager, CONNECTION_TIMEOUT_MS);
@@ -241,7 +234,6 @@ export function useZvonokConnection({
       throw typedError;
     });
   }, [ensureManager, roomId, roomSlug, session, token, tokenProvider]);
-
 
   // Automatic recovery: mirror the manager's reconnecting/connected cycle
   // into the session status. A recovery failure surfaces typed as an error.
@@ -307,7 +299,6 @@ export function useZvonokConnection({
     };
   }, [session.manager, session]);
 
-
   // Disconnect when the owning component unmounts.
   const leaveRef = useRef(leave);
   useEffect(() => {
@@ -335,7 +326,6 @@ export function useZvonokConnection({
     },
     [requireManager],
   );
-
 
   const pauseProducer = useCallback(
     (kind: "audio" | "video"): void => {
@@ -373,12 +363,9 @@ export function useZvonokConnection({
     [requireManager],
   );
 
-  const hasProducer = useCallback(
-    (kind: "audio" | "video"): boolean => {
-      return managerRef.current?.getProducerByKind(kind) !== undefined;
-    },
-    [],
-  );
+  const hasProducer = useCallback((kind: "audio" | "video"): boolean => {
+    return managerRef.current?.getProducerByKind(kind) !== undefined;
+  }, []);
 
   return {
     status: session.status,

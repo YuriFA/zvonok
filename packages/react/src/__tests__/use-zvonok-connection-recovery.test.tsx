@@ -1,8 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useZvonokConnection } from "../hooks/use-zvonok-connection.js";
 import { ZvonokProvider } from "../contexts/zvonok-context.js";
+import { useZvonokConnection } from "../hooks/use-zvonok-connection.js";
 import { createMockSfuManager, tokenFor } from "./doubles.js";
 
 const sfuHarness = vi.hoisted(() => ({
@@ -29,15 +29,12 @@ const TOKEN = tokenFor({
 });
 
 function Provider({ children }: { children: React.ReactNode }) {
-  return (
-    <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
-  );
+  return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
 }
 
 function renderConnection(tokenProvider?: () => Promise<string>) {
   return renderHook(
-    () =>
-      useZvonokConnection({ roomSlug: "room-1", token: TOKEN, tokenProvider }),
+    () => useZvonokConnection({ roomSlug: "room-1", token: TOKEN, tokenProvider }),
     { wrapper: Provider },
   );
 }
@@ -46,9 +43,7 @@ function lastSfu() {
   return sfuHarness.instances.at(-1) as ReturnType<typeof createMockSfuManager>;
 }
 
-async function joinFully(
-  result: ReturnType<typeof renderConnection>["result"],
-) {
+async function joinFully(result: ReturnType<typeof renderConnection>["result"]) {
   let promise: Promise<void> = Promise.resolve();
   act(() => {
     promise = result.current.join();

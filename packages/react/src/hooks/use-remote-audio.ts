@@ -5,13 +5,13 @@
  * audio elements, no second sampling pipeline.
  */
 
-import { RemoteAudioMixer } from "@zvonok/client/audio/remote-audio-mixer";
 import { ActiveSpeakerDetector } from "@zvonok/client/audio/active-speaker-detector";
 import { AudioLevelSampler } from "@zvonok/client/audio/audio-level-sampler";
+import { RemoteAudioMixer } from "@zvonok/client/audio/remote-audio-mixer";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useParticipants } from "./use-participants.js";
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { useParticipants } from "./use-participants.js";
 
 const SAMPLE_INTERVAL_MS = 250;
 const ACTIVE_SPEAKER_EVERY_N_TICKS = 2;

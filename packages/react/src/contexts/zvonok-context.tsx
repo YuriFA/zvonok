@@ -4,8 +4,8 @@
  * room session state that the SDK hooks orchestrate.
  */
 
-import { createMediaManager } from "@zvonok/client/media/manager-factory";
 import type { IMediaManager } from "@zvonok/client/media/interfaces";
+import { createMediaManager } from "@zvonok/client/media/manager-factory";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 

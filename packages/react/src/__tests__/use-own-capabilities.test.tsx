@@ -1,15 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
-import { useOwnCapabilities } from "../hooks/use-own-capabilities.js";
 import {
   ZvonokProvider,
   useZvonokSession,
   type ZvonokSession,
 } from "../contexts/zvonok-context.js";
+import { useOwnCapabilities } from "../hooks/use-own-capabilities.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
@@ -22,18 +21,17 @@ interface CapabilitiesHookResult {
 }
 
 function renderCapabilities() {
-  return renderHook(
-    () => ({ capabilities: useOwnCapabilities(), session: useZvonokSession() }),
-    { wrapper: Provider },
-  );
+  return renderHook(() => ({ capabilities: useOwnCapabilities(), session: useZvonokSession() }), {
+    wrapper: Provider,
+  });
 }
 
-async function attachManager(
-  result: { current: CapabilitiesHookResult },
-  sfu: MockSfuManager,
-) {
+async function attachManager(result: { current: CapabilitiesHookResult }, sfu: MockSfuManager) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 
@@ -65,10 +63,6 @@ describe("useOwnCapabilities", () => {
       sfu.manager.simulateCapabilities(["send-audio", "mute-users", "lock-room"]);
     });
 
-    expect(result.current.capabilities).toEqual([
-      "send-audio",
-      "mute-users",
-      "lock-room",
-    ]);
+    expect(result.current.capabilities).toEqual(["send-audio", "mute-users", "lock-room"]);
   });
 });

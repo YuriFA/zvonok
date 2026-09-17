@@ -6,20 +6,20 @@
  * Keep both files in sync; the whiteboard e2e suite pins them together.
  */
 
-export type WhiteboardDrawMode = 'owner' | 'open';
+export type WhiteboardDrawMode = "owner" | "open";
 
-export const WHITEBOARD_NAMESPACE = '/whiteboard';
+export const WHITEBOARD_NAMESPACE = "/whiteboard";
 
 /** Client -> server: subscribe to a room board. Payload: WhiteboardJoinPayload. */
-export const WHITEBOARD_JOIN = 'whiteboard:join';
+export const WHITEBOARD_JOIN = "whiteboard:join";
 /** Server -> client: full document state on join. Payload: WhiteboardStatePayload. */
-export const WHITEBOARD_STATE = 'whiteboard:state';
+export const WHITEBOARD_STATE = "whiteboard:state";
 /** Bidirectional: incremental Yjs update. Payload: WhiteboardUpdatePayload. */
-export const WHITEBOARD_UPDATE = 'whiteboard:update';
+export const WHITEBOARD_UPDATE = "whiteboard:update";
 /** Bidirectional (server authoritative): draw-lock mode. Payload: WhiteboardModePayload. */
-export const WHITEBOARD_MODE = 'whiteboard:mode';
+export const WHITEBOARD_MODE = "whiteboard:mode";
 /** Server -> client: rejection. Payload: WhiteboardErrorPayload. */
-export const WHITEBOARD_ERROR = 'whiteboard:error';
+export const WHITEBOARD_ERROR = "whiteboard:error";
 
 /**
  * Cap for a single client-sent update. Yjs updates are deltas, so this is

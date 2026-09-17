@@ -1,15 +1,16 @@
 import { act, render } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
 import { useRef, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
-import type { SfuManager } from "@zvonok/client/sfu/manager";
 
+import { PeerQualityProvider, usePeerQualityContext } from "../contexts/peer-quality-context.js";
 import {
-  PeerQualityProvider,
-  usePeerQualityContext,
-} from "../contexts/peer-quality-context.js";
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { LAYER_SWITCH_DEBOUNCE_MS } from "../core/peer-quality-engine.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { useViewportQuality } from "../core/use-viewport-quality.js";
 import { createMockSfuManager, stubMatchMedia, type MockSfuManager } from "./doubles.js";
 

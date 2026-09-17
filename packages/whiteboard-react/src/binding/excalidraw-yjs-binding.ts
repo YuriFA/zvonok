@@ -1,6 +1,6 @@
-import type { WhiteboardHistoryState } from '@zvonok/whiteboard-core/engine';
-import type { WhiteboardTransport } from '@zvonok/whiteboard-core/transport';
-import * as Y from 'yjs';
+import type { WhiteboardHistoryState } from "@zvonok/whiteboard-core/engine";
+import type { WhiteboardTransport } from "@zvonok/whiteboard-core/transport";
+import * as Y from "yjs";
 
 /**
  * Minimal structural slice of an Excalidraw element. The binding works on
@@ -25,7 +25,7 @@ export type RestoreFn = (
 ) => readonly ExcalidrawElementLike[];
 
 /** Marks updates that arrived from the network; never re-sent, never undoable. */
-const REMOTE_ORIGIN = 'zvonok-whiteboard-remote';
+const REMOTE_ORIGIN = "zvonok-whiteboard-remote";
 
 export interface BindingOptions {
   /**
@@ -67,14 +67,14 @@ export class ExcalidrawYjsBinding {
   constructor(transport: WhiteboardTransport, options: BindingOptions = {}) {
     this.transport = transport;
     this.serverVector = Y.encodeStateVector(this.doc);
-    this.elements = this.doc.getMap<ExcalidrawElementLike>('elements');
-    this.order = this.doc.getArray<string>('order');
+    this.elements = this.doc.getMap<ExcalidrawElementLike>("elements");
+    this.order = this.doc.getArray<string>("order");
     this.restore = options.restore ?? ((remote) => remote);
     this.undoManager = new Y.UndoManager([this.elements, this.order], {
       trackedOrigins: new Set([this]),
     });
-    this.undoManager.on('stack-item-added', this.notifyHistory);
-    this.undoManager.on('stack-item-popped', this.notifyHistory);
+    this.undoManager.on("stack-item-added", this.notifyHistory);
+    this.undoManager.on("stack-item-popped", this.notifyHistory);
     // Outbound updates are sent explicitly (see sendLocalDiff) instead of
     // through the doc 'update' signal.
     this.elements.observe(this.handleDocChange);
@@ -168,8 +168,8 @@ export class ExcalidrawYjsBinding {
   dispose(): void {
     this.disposed = true;
     for (const off of this.transportOffs) off();
-    this.undoManager.off('stack-item-added', this.notifyHistory);
-    this.undoManager.off('stack-item-popped', this.notifyHistory);
+    this.undoManager.off("stack-item-added", this.notifyHistory);
+    this.undoManager.off("stack-item-popped", this.notifyHistory);
     this.undoManager.destroy();
     this.doc.destroy();
   }
@@ -190,7 +190,7 @@ export class ExcalidrawYjsBinding {
   }
 
   private readonly handleDocChange = (
-    _event: Y.YEvent<any>,
+    _event: Y.YMapEvent<ExcalidrawElementLike> | Y.YArrayEvent<string>,
     transaction: Y.Transaction,
   ): void => {
     // Local edits are already reflected in the scene; remote merges and
@@ -221,10 +221,13 @@ export class ExcalidrawYjsBinding {
     // previousScene must be a value snapshot: Excalidraw mutates its element
     // objects in place during a gesture, so keeping references would make
     // the stale-snapshot guard below treat the mutated gesture as "unchanged".
-    this.previousScene = this.localElements.map((element) => ({
-      ...element,
-      points: element.points ? [...(element.points as unknown[])] : undefined,
-    }) as ExcalidrawElementLike);
+    this.previousScene = this.localElements.map(
+      (element) =>
+        ({
+          ...element,
+          points: element.points ? [...(element.points as unknown[])] : undefined,
+        }) as ExcalidrawElementLike,
+    );
     this.lastAppliedScene = restored;
     this.localElements = restored;
     this.applyingRemote = true;
@@ -289,10 +292,7 @@ export class ExcalidrawYjsBinding {
 }
 
 /** Compares gesture-visible point content cheaply: count plus the ends. */
-function samePoints(
-  left: ExcalidrawElementLike,
-  right: ExcalidrawElementLike,
-): boolean {
+function samePoints(left: ExcalidrawElementLike, right: ExcalidrawElementLike): boolean {
   const a = left.points as unknown[] | undefined;
   const b = right.points as unknown[] | undefined;
   if (a === b) return true;

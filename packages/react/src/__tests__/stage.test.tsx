@@ -1,9 +1,9 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { useStage } from "../components/stage/stage.js";
 import type { UseScreenShareResult } from "../hooks/use-screen-share.js";
 import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
-import { useStage } from "../components/stage/stage.js";
 // Side-effect import: stubs MediaStream for jsdom.
 import "./doubles.js";
 

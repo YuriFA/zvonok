@@ -28,7 +28,10 @@ export function useViewportQuality(
 
     const observer = new IntersectionObserver(
       (entries) => {
-        engine.setVisibility(userId, entries.some((entry) => entry.isIntersecting));
+        engine.setVisibility(
+          userId,
+          entries.some((entry) => entry.isIntersecting),
+        );
       },
       { threshold: [INTERSECTION_THRESHOLD] },
     );

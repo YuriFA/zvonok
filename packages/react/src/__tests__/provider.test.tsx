@@ -30,7 +30,9 @@ describe("ZvonokProvider", () => {
 
   it("supplies the server url, session state, and a shared media manager", () => {
     const { result } = renderHook(() => useZvonokSession(), {
-      wrapper: ({ children }) => <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>,
+      wrapper: ({ children }) => (
+        <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
+      ),
     });
 
     expect(result.current.serverUrl).toBe("https://sfu.test");
@@ -43,7 +45,9 @@ describe("ZvonokProvider", () => {
 
   it("stops the media manager when the provider unmounts", () => {
     const { unmount } = renderHook(() => useZvonokSession(), {
-      wrapper: ({ children }) => <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>,
+      wrapper: ({ children }) => (
+        <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
+      ),
     });
 
     const mediaManager = lastMediaManager();

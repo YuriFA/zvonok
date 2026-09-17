@@ -6,6 +6,7 @@
  */
 
 import { CaptureState } from "@zvonok/client/media/capture-state";
+import { useCallback, useMemo } from "react";
 
 import {
   deriveMediaControlState,
@@ -13,7 +14,6 @@ import {
 } from "../../hooks/derive-media-control.js";
 import type { PublishToggleResult } from "../../hooks/use-publish-controls.js";
 import type { ToggleControl } from "../../hooks/use-zvonok-call.js";
-import { useCallback, useMemo } from "react";
 
 export interface UseMediaControlsOptions {
   camera: ToggleControl;
@@ -75,12 +75,7 @@ export interface MediaControlButtonProps {
 }
 
 /** Preset control button over one derived media state. */
-export function MediaControlButton({
-  state,
-  labelOn,
-  labelOff,
-  onClick,
-}: MediaControlButtonProps) {
+export function MediaControlButton({ state, labelOn, labelOff, onClick }: MediaControlButtonProps) {
   const label = state.isOn ? labelOn : labelOff;
   return (
     <button
@@ -115,11 +110,7 @@ const COPY = {
  * Preset mic/camera buttons. Toggles run through the core; a replace
  * failure (rolled-back control) surfaces a notice.
  */
-export function MediaControlsPreset({
-  controls,
-  onNotice,
-  className,
-}: MediaControlsPresetProps) {
+export function MediaControlsPreset({ controls, onNotice, className }: MediaControlsPresetProps) {
   const handleToggleAudio = useCallback(() => {
     return controls.toggleAudio().then((outcome) => {
       if (outcome === "replace-failed") {

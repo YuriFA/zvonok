@@ -1,14 +1,18 @@
-import { createRoot } from 'react-dom/client';
-import type { WhiteboardEngine, WhiteboardHistoryState, WhiteboardSession } from '@zvonok/whiteboard-core/engine';
-import type { ExcalidrawElementLike, WhiteboardSceneApi } from '../binding/excalidraw-yjs-binding';
-import { ExcalidrawYjsBinding } from '../binding/excalidraw-yjs-binding';
+import { Excalidraw, restoreElements } from "@excalidraw/excalidraw";
+import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type {
+  WhiteboardEngine,
+  WhiteboardHistoryState,
+  WhiteboardSession,
+} from "@zvonok/whiteboard-core/engine";
+import { createRoot } from "react-dom/client";
 
-import { Excalidraw, restoreElements } from '@excalidraw/excalidraw';
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
-import '@excalidraw/excalidraw/index.css';
+import type { ExcalidrawElementLike, WhiteboardSceneApi } from "../binding/excalidraw-yjs-binding";
+import { ExcalidrawYjsBinding } from "../binding/excalidraw-yjs-binding";
 
-import './engine-overrides.css';
+import "@excalidraw/excalidraw/index.css";
+import "./engine-overrides.css";
 
 interface SurfaceProps {
   binding: ExcalidrawYjsBinding;
@@ -42,7 +46,7 @@ function ExcalidrawSurface({ binding, readonly }: SurfaceProps) {
  * transport and a container.
  */
 export const excalidrawEngine: WhiteboardEngine = {
-  id: 'excalidraw',
+  id: "excalidraw",
   async mount(container: HTMLElement, options): Promise<WhiteboardSession> {
     const binding = new ExcalidrawYjsBinding(options.transport, {
       restore: (remote, local) =>
@@ -56,13 +60,13 @@ export const excalidrawEngine: WhiteboardEngine = {
     // Multiplayer undo replaces the built-in per-client history; intercept
     // the shortcut before the canvas sees it.
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
       event.preventDefault();
       event.stopPropagation();
       if (event.shiftKey) binding.redo();
       else binding.undo();
     };
-    container.addEventListener('keydown', onKeyDown, true);
+    container.addEventListener("keydown", onKeyDown, true);
 
     let readonly = !options.canDraw;
     const root = createRoot(container);
@@ -81,7 +85,7 @@ export const excalidrawEngine: WhiteboardEngine = {
       historyState: (): WhiteboardHistoryState => binding.historyState(),
       onHistoryChange: (callback) => binding.onHistoryChange(callback),
       dispose(): void {
-        container.removeEventListener('keydown', onKeyDown, true);
+        container.removeEventListener("keydown", onKeyDown, true);
         root.unmount();
         binding.dispose();
       },

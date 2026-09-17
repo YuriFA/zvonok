@@ -1,6 +1,6 @@
 import { DEFAULT_AUDIO_CONSTRAINTS, DEFAULT_VIDEO_CONSTRAINTS } from "../config/media.js";
-import { rememberAudioMuted, rememberDevice } from "./device-preferences.js";
 import { CaptureState } from "./capture-state.js";
+import { rememberAudioMuted, rememberDevice } from "./device-preferences.js";
 import type { IMediaDeviceService } from "./device-service.js";
 import type { IErrorClassifier } from "./error-classifier.js";
 import type { IMediaCapture } from "./interfaces.js";

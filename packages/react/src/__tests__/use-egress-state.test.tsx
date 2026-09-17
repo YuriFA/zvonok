@@ -1,11 +1,14 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
+import {
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { useEgressState } from "../hooks/use-egress-state.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {
@@ -14,7 +17,11 @@ function Provider({ children }: { children: ReactNode }) {
 
 interface EgressHookResult {
   state: {
-    egress: { sessionId: string; outputs: { record: boolean; hls: boolean }; status: string } | null;
+    egress: {
+      sessionId: string;
+      outputs: { record: boolean; hls: boolean };
+      status: string;
+    } | null;
     isRecording: boolean;
     isLive: boolean;
   };
@@ -29,7 +36,10 @@ function renderEgressState() {
 
 async function attachManager(result: { current: EgressHookResult }, sfu: MockSfuManager) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 

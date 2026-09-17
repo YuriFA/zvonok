@@ -1,15 +1,16 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { CaptureState } from "@zvonok/client/media/capture-state";
 import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CaptureState } from "@zvonok/client/media/capture-state";
-import { ZvonokJoinError } from "../errors.js";
 import {
   ZvonokEmbeddedRoom,
   type ZvonokEmbeddedRoomProps,
 } from "../embedded/ZvonokEmbeddedRoom.js";
+import { ZvonokJoinError } from "../errors.js";
 import {
   createMockMediaManager,
   createMockScreenShareService,
@@ -143,20 +144,9 @@ describe("ZvonokEmbeddedRoom", () => {
 
     act(() => {
       lastSfu().manager.emitPeerJoined("peer-1", "Alice");
-      lastSfu().manager.emitTrack(
-        createTrack("video", "cam-1"),
-        "video",
-        "peer-1",
-      );
-      lastSfu().manager.emitTrack(
-        createTrack("audio", "mic-1"),
-        "audio",
-        "peer-1",
-      );
-      lastMedia().emitVideoState(
-        CaptureState.ACTIVE,
-        createTrack("video", "cam-local"),
-      );
+      lastSfu().manager.emitTrack(createTrack("video", "cam-1"), "video", "peer-1");
+      lastSfu().manager.emitTrack(createTrack("audio", "mic-1"), "audio", "peer-1");
+      lastMedia().emitVideoState(CaptureState.ACTIVE, createTrack("video", "cam-local"));
     });
 
     expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
@@ -187,8 +177,8 @@ describe("ZvonokEmbeddedRoom", () => {
     await flush();
     // The join's own hasProducer checks must see no producers, while the
     // post-produce resume looks up the fresh producer ids.
-    lastSfu().manager.getProducerByKind
-      .mockReturnValueOnce(undefined)
+    lastSfu()
+      .manager.getProducerByKind.mockReturnValueOnce(undefined)
       .mockReturnValueOnce(undefined)
       .mockImplementation((kind: "audio" | "video") => ({
         id: `${kind}-producer`,
@@ -201,12 +191,8 @@ describe("ZvonokEmbeddedRoom", () => {
 
     expect(lastSfu().manager.produce).toHaveBeenCalledWith(video, undefined);
     expect(lastSfu().manager.produce).toHaveBeenCalledWith(audio, undefined);
-    expect(lastSfu().manager.resumeProducer).toHaveBeenCalledWith(
-      "video-producer",
-    );
-    expect(lastSfu().manager.resumeProducer).toHaveBeenCalledWith(
-      "audio-producer",
-    );
+    expect(lastSfu().manager.resumeProducer).toHaveBeenCalledWith("video-producer");
+    expect(lastSfu().manager.resumeProducer).toHaveBeenCalledWith("audio-producer");
   });
 
   it("renders the typed join error state and calls onError", async () => {
@@ -260,9 +246,7 @@ describe("ZvonokEmbeddedRoom", () => {
       lastMedia().emitAudioState(CaptureState.STOPPED, null);
     });
     expect(lastMedia().audioCapture.toggle).toHaveBeenCalledWith(false);
-    expect(lastSfu().manager.pauseProducer).toHaveBeenCalledWith(
-      "audio-producer",
-    );
+    expect(lastSfu().manager.pauseProducer).toHaveBeenCalledWith("audio-producer");
     expect(micButton.getAttribute("aria-pressed")).toBe("false");
 
     lastSfu().manager.getProducerByKind.mockReturnValue({
@@ -270,9 +254,7 @@ describe("ZvonokEmbeddedRoom", () => {
     });
     fireEvent.click(cameraButton);
     await flush();
-    expect(lastSfu().manager.pauseProducer).toHaveBeenCalledWith(
-      "video-producer",
-    );
+    expect(lastSfu().manager.pauseProducer).toHaveBeenCalledWith("video-producer");
 
     lastSfu().manager.getProducerByKind.mockReturnValue(undefined);
     const reacquiredTrack = createTrack("audio", "mic-2");
@@ -286,13 +268,7 @@ describe("ZvonokEmbeddedRoom", () => {
   });
 
   it("collects the name and device choices in the pre-join card", async () => {
-    render(
-      <ZvonokEmbeddedRoom
-        serverUrl="https://sfu.test"
-        roomSlug="room-1"
-        token={TOKEN}
-      />,
-    );
+    render(<ZvonokEmbeddedRoom serverUrl="https://sfu.test" roomSlug="room-1" token={TOKEN} />);
 
     fireEvent.change(screen.getByPlaceholderText("Your name"), {
       target: { value: "Alice" },
@@ -327,11 +303,7 @@ describe("ZvonokEmbeddedRoom", () => {
     await renderJoined();
 
     act(() => {
-      lastSfu().manager.simulateCapabilities([
-        "send-audio",
-        "send-video",
-        "start-recording",
-      ]);
+      lastSfu().manager.simulateCapabilities(["send-audio", "send-video", "start-recording"]);
     });
     const recordButton = screen.getByRole("button", { name: "Record" });
     expect(recordButton.getAttribute("aria-pressed")).toBe("false");
@@ -403,9 +375,7 @@ describe("ZvonokEmbeddedRoom", () => {
     await flush();
 
     const notice = screen.getByRole("alert");
-    expect(notice.textContent).toBe(
-      "Another participant is already sharing their screen",
-    );
+    expect(notice.textContent).toBe("Another participant is already sharing their screen");
 
     act(() => {
       service.setState({ isSharing: true, screenStream: new MediaStream() });
@@ -417,22 +387,16 @@ describe("ZvonokEmbeddedRoom", () => {
   });
 
   it("declares the embedded and css export paths in the manifest", () => {
-    const manifest = JSON.parse(
-      readFileSync(join(process.cwd(), "package.json"), "utf8"),
-    ) as {
+    const manifest = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
       exports: Record<string, string>;
       publishConfig: { exports: Record<string, string> };
       sideEffects: string[];
     };
 
     expect(manifest.exports["./embedded"]).toBeTruthy();
-    expect(manifest.exports["./css/component-kit.css"]).toBe(
-      "./src/css/component-kit.css",
-    );
+    expect(manifest.exports["./css/component-kit.css"]).toBe("./src/css/component-kit.css");
     expect(manifest.exports["./css/embedded.css"]).toBe("./src/css/embedded.css");
-    expect(manifest.publishConfig.exports["./css/embedded.css"]).toBe(
-      "./dist/css/embedded.css",
-    );
+    expect(manifest.publishConfig.exports["./css/embedded.css"]).toBe("./dist/css/embedded.css");
     expect(manifest.sideEffects).toContain("*.css");
   });
   it("forces the mic control off and announces a host mute", async () => {
@@ -440,9 +404,7 @@ describe("ZvonokEmbeddedRoom", () => {
     act(() => {
       lastMedia().emitAudioState(CaptureState.ACTIVE, createTrack("audio", "mic-1"));
     });
-    expect(screen.getByRole("button", { name: "Mic" }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Mic" }).getAttribute("aria-pressed")).toBe("true");
     lastSfu().manager.simulateLocalUser("participant-9");
     act(() => {
       lastSfu().socket.fire("sfu:peer-muted", { userId: "participant-9" });
@@ -466,9 +428,7 @@ describe("ZvonokEmbeddedRoom", () => {
     });
     await flush();
 
-    expect(
-      screen.getByText("You were removed from the room by the host"),
-    ).toBeTruthy();
+    expect(screen.getByText("You were removed from the room by the host")).toBeTruthy();
     expect(lastMedia().videoCapture.toggle).toHaveBeenCalledWith(false);
     expect(lastMedia().audioCapture.toggle).toHaveBeenCalledWith(false);
   });
@@ -481,9 +441,7 @@ describe("ZvonokEmbeddedRoom", () => {
     });
     await flush();
 
-    expect(
-      screen.getByText("Room is locked - new participants cannot join"),
-    ).toBeTruthy();
+    expect(screen.getByText("Room is locked - new participants cannot join")).toBeTruthy();
   });
 
   it("exposes capability-gated host actions through the participants panel", async () => {

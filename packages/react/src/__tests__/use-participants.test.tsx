@@ -1,10 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
+import {
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
 import { useParticipants } from "../hooks/use-participants.js";
 import { createMockSfuManager, createTrack, type MockSfuManager } from "./doubles.js";
 
@@ -23,9 +26,15 @@ function renderParticipants() {
   );
 }
 
-async function attachManager(result: ReturnType<typeof renderParticipants>["result"], sfu: MockSfuManager) {
+async function attachManager(
+  result: ReturnType<typeof renderParticipants>["result"],
+  sfu: MockSfuManager,
+) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 
@@ -154,9 +163,9 @@ describe("useParticipants", () => {
       isScreenSharing: true,
       isCameraEnabled: false,
     });
-    expect(result.current.participants[0].screenStream?.getTracks().map((track) => track.id)).toEqual([
-      "screen-1",
-    ]);
+    expect(
+      result.current.participants[0].screenStream?.getTracks().map((track) => track.id),
+    ).toEqual(["screen-1"]);
 
     act(() => {
       sfu.manager.emitScreenShareStopped("peer-1");
@@ -207,7 +216,9 @@ describe("useParticipants", () => {
       sfu.manager.emitPeerLeft("peer-1");
     });
 
-    expect(result.current.participants.map((participant) => participant.userId)).toEqual(["peer-2"]);
+    expect(result.current.participants.map((participant) => participant.userId)).toEqual([
+      "peer-2",
+    ]);
   });
 
   it("clears participants when the manager goes away", async () => {

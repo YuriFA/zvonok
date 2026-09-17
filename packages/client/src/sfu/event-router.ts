@@ -85,10 +85,7 @@ export class SfuEventRouter {
     const socket = this.getSocket();
     if (!socket) return;
 
-    const register = (
-      event: string,
-      handler: (...args: unknown[]) => unknown,
-    ) => {
+    const register = (event: string, handler: (...args: unknown[]) => unknown) => {
       socket.on(event, handler);
       this.registeredListeners.push({ event, handler });
     };
@@ -117,9 +114,7 @@ export class SfuEventRouter {
       this.handlers.onParticipantJoined(payload as SfuParticipantJoinedPayload),
     );
     register("sfu:existing-peers", (payload: unknown) =>
-      this.handlers.onExistingParticipants(
-        payload as SfuExistingParticipantsPayload[],
-      ),
+      this.handlers.onExistingParticipants(payload as SfuExistingParticipantsPayload[]),
     );
     register("sfu:new-producer", (payload: unknown) =>
       this.handlers.onNewProducer(payload as SfuNewProducerPayload),
@@ -131,17 +126,13 @@ export class SfuEventRouter {
       this.handlers.onConsumerClosed(payload as SfuConsumerClosedPayload),
     );
     register("sfu:producer-state-changed", (payload: unknown) =>
-      this.handlers.onProducerStateChanged(
-        payload as SfuProducerStateChangedPayload,
-      ),
+      this.handlers.onProducerStateChanged(payload as SfuProducerStateChangedPayload),
     );
     register("sfu:peer-left", (payload: unknown) =>
       this.handlers.onParticipantLeft(payload as { userId: string }),
     );
     register("sfu:peer-media-detached", (payload: unknown) =>
-      this.handlers.onPeerMediaDetached(
-        payload as SfuPeerMediaDetachedPayload,
-      ),
+      this.handlers.onPeerMediaDetached(payload as SfuPeerMediaDetachedPayload),
     );
     register("sfu:kicked", (payload: unknown) =>
       this.handlers.onKicked(payload as SfuKickedPayload),
@@ -153,14 +144,10 @@ export class SfuEventRouter {
       this.handlers.onRoomMediaReset(payload as SfuRoomMediaResetPayload),
     );
     register("sfu:screen-share-started", (payload: unknown) =>
-      this.handlers.onScreenShareStarted(
-        payload as SfuScreenShareStartedPayload,
-      ),
+      this.handlers.onScreenShareStarted(payload as SfuScreenShareStartedPayload),
     );
     register("sfu:screen-share-stopped", (payload: unknown) =>
-      this.handlers.onScreenShareStopped(
-        payload as SfuScreenShareStoppedPayload,
-      ),
+      this.handlers.onScreenShareStopped(payload as SfuScreenShareStoppedPayload),
     );
     register("sfu:guest-join-request", (payload: unknown) =>
       this.handlers.onGuestJoinRequest(payload as SfuGuestJoinRequestPayload),

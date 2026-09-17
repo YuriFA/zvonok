@@ -13,7 +13,9 @@ function missing(capabilities: readonly string[], required: RequiredCapabilities
     return false;
   }
   const owned = new Set(capabilities);
-  return (Array.isArray(required) ? required : [required]).some((capability) => !owned.has(capability));
+  return (Array.isArray(required) ? required : [required]).some(
+    (capability) => !owned.has(capability),
+  );
 }
 
 /** True when the owned capabilities cover every requirement. */

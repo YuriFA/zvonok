@@ -1,8 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { SfuManager } from "@zvonok/client/sfu/manager";
 
 import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
 import { useScreenShare } from "../hooks/use-screen-share.js";
@@ -23,14 +22,22 @@ vi.mock("@zvonok/client/screen-share/service", () => ({
   ScreenShareService: vi.fn(function () {
     const listeners = new Set<(state: unknown) => void>();
     const instance = {
-      getState: vi.fn(() => ({ isSharing: false, screenStream: null, isScreenShareBlocked: false })),
+      getState: vi.fn(() => ({
+        isSharing: false,
+        screenStream: null,
+        isScreenShareBlocked: false,
+      })),
       onStateChange: vi.fn((listener: (state: unknown) => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       }),
       start: vi.fn(async () => {
         for (const listener of listeners) {
-          listener({ isSharing: true, screenStream: new MediaStream(), isScreenShareBlocked: false });
+          listener({
+            isSharing: true,
+            screenStream: new MediaStream(),
+            isScreenShareBlocked: false,
+          });
         }
       }),
       stop: vi.fn(() => {
@@ -66,7 +73,10 @@ async function attachManager(
   sfu: MockSfuManager,
 ) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 

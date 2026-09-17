@@ -193,7 +193,8 @@ zvonok/
 | `pnpm -C packages/react build` | Build `@zvonok/react` |
 | `pnpm -C packages/video-layout build` | Build `@zvonok/video-layout` |
 | `pnpm -C packages/<pkg> test:run` | Run package unit tests (client, react) |
-| `pnpm -C packages/<pkg> lint:ts` | Type-check a package (client, react) |
+| `pnpm -C packages/<pkg> lint` | Lint and format-check a package |
+| `pnpm -C packages/<pkg> lint:ts` | Type-check a package |
 
 ## Documentation
 

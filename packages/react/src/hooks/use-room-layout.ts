@@ -87,9 +87,7 @@ function deriveRoomLayout(
         : { userId: spotlightUserId, rect: rectOf(grid.spotlightArea) },
     tiles: ordered.map((participant, index) => ({
       userId: participant.userId,
-      rect: grid.tiles[index]
-        ? rectOf(grid.tiles[index])
-        : { x: 0, y: 0, width: 0, height: 0 },
+      rect: grid.tiles[index] ? rectOf(grid.tiles[index]) : { x: 0, y: 0, width: 0, height: 0 },
     })),
   };
 }

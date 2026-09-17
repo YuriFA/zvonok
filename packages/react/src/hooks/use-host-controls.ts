@@ -7,8 +7,8 @@
 
 import { useMemo } from "react";
 
-import { createHostControls } from "./host-controls.js";
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { createHostControls } from "./host-controls.js";
 
 export interface UseHostControlsResult {
   mutePeer(userId: string): Promise<void>;

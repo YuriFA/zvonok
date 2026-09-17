@@ -7,10 +7,10 @@
 
 import type { QualityScore, QualityStats } from "@zvonok/client/sfu/types";
 import type { SfuGuestJoinRequestPayload } from "@zvonok/client/sfu/types";
-
-import { hasCapabilities } from "../../wrappers/capability-gate.js";
-import type { UseZvonokCallResult } from "../../hooks/use-zvonok-call.js";
 import { useCallback, useMemo } from "react";
+
+import type { UseZvonokCallResult } from "../../hooks/use-zvonok-call.js";
+import { hasCapabilities } from "../../wrappers/capability-gate.js";
 
 /** The projection a panel renders per participant. */
 export interface PanelParticipant {
@@ -81,9 +81,7 @@ const NOTICE_COPY: Record<PanelNoticeKey, string> = {
   "kick-participant-failed": "Could not remove the participant",
 };
 
-export function useParticipantsPanel(
-  options: UseParticipantsPanelOptions,
-): ParticipantsPanel {
+export function useParticipantsPanel(options: UseParticipantsPanelOptions): ParticipantsPanel {
   const {
     call,
     participants: participantsOverride,
@@ -129,8 +127,7 @@ export function useParticipantsPanel(
 
   const canMuteAll = canMuteAllOverride ?? hasCapabilities(call.capabilities, "mute-users");
   const canLockRoom = canLockRoomOverride ?? hasCapabilities(call.capabilities, "lock-room");
-  const canRemove =
-    canRemoveOverride ?? hasCapabilities(call.capabilities, "remove-participants");
+  const canRemove = canRemoveOverride ?? hasCapabilities(call.capabilities, "remove-participants");
 
   const runAction = useCallback(
     async (key: PanelNoticeKey, action: () => Promise<void>): Promise<boolean> => {
@@ -151,8 +148,7 @@ export function useParticipantsPanel(
   );
 
   const toggleLock = useCallback(
-    () =>
-      runAction("lock-failed", () => call.hostControls.lockRoom(!call.isRoomLocked)),
+    () => runAction("lock-failed", () => call.hostControls.lockRoom(!call.isRoomLocked)),
     [runAction, call.hostControls, call.isRoomLocked],
   );
 
@@ -173,9 +169,10 @@ export function useParticipantsPanel(
     [runAction, call.hostControls],
   );
 
+  const { kickPeer } = call;
   const kickParticipant = useCallback(
-    (userId: string) => runAction("kick-participant-failed", () => call.kickPeer(userId)),
-    [runAction, call.kickPeer],
+    (userId: string) => runAction("kick-participant-failed", () => kickPeer(userId)),
+    [runAction, kickPeer],
   );
 
   const hasPendingRequests = isOwner && pendingRequests.length > 0;

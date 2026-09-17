@@ -3,10 +3,9 @@
  * mock media manager, and a MediaStream stub for jsdom.
  */
 
-import { vi } from "vitest";
-
 import type { CaptureState } from "@zvonok/client/media/capture-state";
 import type { PeerQualityStats } from "@zvonok/client/sfu/types";
+import { vi } from "vitest";
 
 class MockMediaStream {
   private tracks: MediaStreamTrack[];
@@ -75,13 +74,9 @@ export function createMockSfuManager() {
   const socket = createMockSocket();
   const stateListeners = new Set<StateListener>();
   const trackListeners = new Set<TrackListener>();
-  const peerJoinedListeners = new Set<
-    (peer: { userId: string; username: string }) => void
-  >();
+  const peerJoinedListeners = new Set<(peer: { userId: string; username: string }) => void>();
   const peerLeftListeners = new Set<(userId: string) => void>();
-  const qualityStatsListeners = new Set<
-    (stats: Map<string, PeerQualityStats>) => void
-  >();
+  const qualityStatsListeners = new Set<(stats: Map<string, PeerQualityStats>) => void>();
   const kickedListeners = new Set<(payload: { roomId: string }) => void>();
   const roomEndedListeners = new Set<(payload: { roomId: string }) => void>();
   const producerStateListeners = new Set<
@@ -92,26 +87,15 @@ export function createMockSfuManager() {
       source?: "camera" | "screen";
     }) => void
   >();
-  const screenShareStoppedListeners = new Set<
-    (payload: { userId: string }) => void
-  >();
-  const peerMediaDetachedListeners = new Set<
-    (payload: { userId: string }) => void
-  >();
+  const screenShareStoppedListeners = new Set<(payload: { userId: string }) => void>();
+  const peerMediaDetachedListeners = new Set<(payload: { userId: string }) => void>();
   const produceErrorListeners = new Set<(code: string) => void>();
-  const reconnectErrorListeners = new Set<
-    (error: { code: string; message: string }) => void
-  >();
+  const reconnectErrorListeners = new Set<(error: { code: string; message: string }) => void>();
   const guestJoinRequestListeners = new Set<
     (payload: { requestId: string; displayName: string }) => void
   >();
   const broadcastListeners = new Set<
-    (message: {
-      senderId: string;
-      topic: string;
-      payload: unknown;
-      timestamp: string;
-    }) => void
+    (message: { senderId: string; topic: string; payload: unknown; timestamp: string }) => void
   >();
 
   let connectionState = "disconnected";
@@ -122,9 +106,7 @@ export function createMockSfuManager() {
   const manager = {
     connect: vi.fn(() => {
       connectionState = "connected";
-      stateListeners.forEach((listener) =>
-        listener({ connectionState, capabilities, egress }),
-      );
+      stateListeners.forEach((listener) => listener({ connectionState, capabilities, egress }));
     }),
     disconnect: vi.fn(),
     leaveRoom: vi.fn(),
@@ -150,11 +132,7 @@ export function createMockSfuManager() {
     resumeProducer: vi.fn(),
     replaceTrack: vi.fn(async () => true),
     getProducerByKind:
-      vi.fn<
-        (
-          kind: "audio" | "video",
-        ) => { id: string; track?: MediaStreamTrack } | undefined
-      >(),
+      vi.fn<(kind: "audio" | "video") => { id: string; track?: MediaStreamTrack } | undefined>(),
     getLocalUserId: vi.fn(() => localUserId),
     getState: vi.fn(() => ({ connectionState, capabilities, egress })),
     startStatsCollection: vi.fn(),
@@ -185,22 +163,18 @@ export function createMockSfuManager() {
       stateListeners.add(listener);
       return () => stateListeners.delete(listener);
     }),
-    onReconnectError: vi.fn(
-      (listener: (error: { code: string; message: string }) => void) => {
-        reconnectErrorListeners.add(listener);
-        return () => reconnectErrorListeners.delete(listener);
-      },
-    ),
+    onReconnectError: vi.fn((listener: (error: { code: string; message: string }) => void) => {
+      reconnectErrorListeners.add(listener);
+      return () => reconnectErrorListeners.delete(listener);
+    }),
     onTrack: vi.fn((listener: TrackListener) => {
       trackListeners.add(listener);
       return () => trackListeners.delete(listener);
     }),
-    onParticipantJoined: vi.fn(
-      (listener: (peer: { userId: string; username: string }) => void) => {
-        peerJoinedListeners.add(listener);
-        return () => peerJoinedListeners.delete(listener);
-      },
-    ),
+    onParticipantJoined: vi.fn((listener: (peer: { userId: string; username: string }) => void) => {
+      peerJoinedListeners.add(listener);
+      return () => peerJoinedListeners.delete(listener);
+    }),
     onParticipantLeft: vi.fn((listener: (userId: string) => void) => {
       peerLeftListeners.add(listener);
       return () => peerLeftListeners.delete(listener);
@@ -226,37 +200,27 @@ export function createMockSfuManager() {
         return () => producerStateListeners.delete(listener);
       },
     ),
-    onScreenShareStopped: vi.fn(
-      (listener: (payload: { userId: string }) => void) => {
-        screenShareStoppedListeners.add(listener);
-        return () => screenShareStoppedListeners.delete(listener);
-      },
-    ),
-    onPeerMediaDetached: vi.fn(
-      (listener: (payload: { userId: string }) => void) => {
-        peerMediaDetachedListeners.add(listener);
-        return () => peerMediaDetachedListeners.delete(listener);
-      },
-    ),
+    onScreenShareStopped: vi.fn((listener: (payload: { userId: string }) => void) => {
+      screenShareStoppedListeners.add(listener);
+      return () => screenShareStoppedListeners.delete(listener);
+    }),
+    onPeerMediaDetached: vi.fn((listener: (payload: { userId: string }) => void) => {
+      peerMediaDetachedListeners.add(listener);
+      return () => peerMediaDetachedListeners.delete(listener);
+    }),
     onGuestJoinRequest: vi.fn(
-      (
-        listener: (payload: { requestId: string; displayName: string }) => void,
-      ) => {
+      (listener: (payload: { requestId: string; displayName: string }) => void) => {
         guestJoinRequestListeners.add(listener);
         return () => guestJoinRequestListeners.delete(listener);
       },
     ),
     simulateCapabilities(next: string[]): void {
       capabilities = next;
-      stateListeners.forEach((listener) =>
-        listener({ connectionState, capabilities, egress }),
-      );
+      stateListeners.forEach((listener) => listener({ connectionState, capabilities, egress }));
     },
     simulateEgressStatus(next: Record<string, unknown> | null): void {
       egress = next;
-      stateListeners.forEach((listener) =>
-        listener({ connectionState, capabilities, egress }),
-      );
+      stateListeners.forEach((listener) => listener({ connectionState, capabilities, egress }));
     },
     simulateBroadcast(message: {
       senderId: string;
@@ -274,9 +238,7 @@ export function createMockSfuManager() {
       stateListeners.forEach((listener) => listener({ connectionState }));
     },
     simulateReconnectError(code: string, message: string): void {
-      reconnectErrorListeners.forEach((listener) =>
-        listener({ code, message }),
-      );
+      reconnectErrorListeners.forEach((listener) => listener({ code, message }));
     },
     emitTrack(
       track: MediaStreamTrack,
@@ -284,9 +246,7 @@ export function createMockSfuManager() {
       userId: string,
       source?: "camera" | "screen",
     ): void {
-      trackListeners.forEach((listener) =>
-        listener(track, kind, userId, source),
-      );
+      trackListeners.forEach((listener) => listener(track, kind, userId, source));
     },
     emitPeerJoined(userId: string, username: string): void {
       peerJoinedListeners.forEach((listener) => listener({ userId, username }));
@@ -303,10 +263,7 @@ export function createMockSfuManager() {
     emitRoomEnded(roomId = "room-1"): void {
       roomEndedListeners.forEach((listener) => listener({ roomId }));
     },
-    emitGuestJoinRequest(payload: {
-      requestId: string;
-      displayName: string;
-    }): void {
+    emitGuestJoinRequest(payload: { requestId: string; displayName: string }): void {
       guestJoinRequestListeners.forEach((listener) => listener(payload));
     },
     emitProducerState(payload: {
@@ -340,9 +297,7 @@ export function createMockMediaManager() {
     getState: vi.fn((): CaptureState => 0 as CaptureState),
     getTrack: vi.fn((): MediaStreamTrack | null => null),
     onStateChange: vi.fn(
-      (
-        listener: (state: CaptureState, track: MediaStreamTrack | null) => void,
-      ) => {
+      (listener: (state: CaptureState, track: MediaStreamTrack | null) => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
@@ -385,9 +340,7 @@ export interface MockScreenShareState {
   isScreenShareBlocked: boolean;
 }
 
-export type MockScreenShareService = ReturnType<
-  typeof createMockScreenShareService
->;
+export type MockScreenShareService = ReturnType<typeof createMockScreenShareService>;
 
 /** Socket-level double standing in for the client's ScreenShareService. */
 export function createMockScreenShareService() {
@@ -418,18 +371,11 @@ export function createMockScreenShareService() {
 /** Builds a syntactically valid unsigned JWT with the given payload. */
 export function tokenFor(payload: Record<string, unknown>): string {
   const encode = (value: object) =>
-    btoa(JSON.stringify(value))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
+    btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return `${encode({ alg: "HS256", typ: "JWT" })}.${encode(payload)}.signature`;
 }
 
-export function createTrack(
-  kind: "audio" | "video",
-  id: string,
-  enabled = true,
-): MediaStreamTrack {
+export function createTrack(kind: "audio" | "video", id: string, enabled = true): MediaStreamTrack {
   return {
     kind,
     id,

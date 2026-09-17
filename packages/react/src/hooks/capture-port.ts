@@ -30,10 +30,7 @@ export interface CapturePort {
    * changes outside a toggle (device loss, another surface starting capture).
    * Without it, capture-driven state changes are not observed.
    */
-  onStateChange?(
-    kind: PublishKind,
-    listener: (state: CaptureState) => void,
-  ): () => void;
+  onStateChange?(kind: PublishKind, listener: (state: CaptureState) => void): () => void;
 }
 
 export interface MediaCapturePortOptions {
@@ -68,8 +65,7 @@ export function createMediaCapturePort(
         return capture.getStream();
       }
       const saved = loadDeviceSelection(storageKey);
-      const deviceId =
-        (kind === "video" ? saved.videoDeviceId : saved.audioDeviceId) || undefined;
+      const deviceId = (kind === "video" ? saved.videoDeviceId : saved.audioDeviceId) || undefined;
       const ok = await capture.start(deviceId);
       return ok ? capture.getStream() : null;
     },

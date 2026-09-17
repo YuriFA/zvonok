@@ -62,10 +62,7 @@ export class ZvonokHostError extends ZvonokError {
 }
 
 /** Codes the server sends in host-action acknowledgement denials. */
-export type ZvonokServerHostErrorCode =
-  | "MISSING_CAPABILITY"
-  | "TARGET_NOT_FOUND"
-  | "NOT_IN_ROOM";
+export type ZvonokServerHostErrorCode = "MISSING_CAPABILITY" | "TARGET_NOT_FOUND" | "NOT_IN_ROOM";
 
 /** Client-side host action failure codes. */
 export type ZvonokHostLocalErrorCode =

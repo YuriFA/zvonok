@@ -4,20 +4,16 @@
  * audio and other subscribers are untouched.
  */
 
+import type { SimulcastSpatialLayer } from "@zvonok/client/sfu/types";
 import { useMemo } from "react";
 
-import type { SimulcastSpatialLayer } from "@zvonok/client/sfu/types";
-
-import { ZvonokError } from "../errors.js";
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { ZvonokError } from "../errors.js";
 
 /** Quality levels mapped onto simulcast spatial layers (0 = low, 2 = high). */
 export type ParticipantQualityLevel = "low" | "medium" | "high";
 
-const SPATIAL_LAYER_BY_LEVEL: Record<
-  ParticipantQualityLevel,
-  SimulcastSpatialLayer
-> = {
+const SPATIAL_LAYER_BY_LEVEL: Record<ParticipantQualityLevel, SimulcastSpatialLayer> = {
   low: 0,
   medium: 1,
   high: 2,
@@ -29,10 +25,7 @@ export interface UseQualityControlsResult {
    * Rejects with a typed error when the participant is unknown or has no
    * subscribed video to tune.
    */
-  setParticipantQuality(
-    userId: string,
-    level: ParticipantQualityLevel,
-  ): Promise<void>;
+  setParticipantQuality(userId: string, level: ParticipantQualityLevel): Promise<void>;
 }
 
 export function useQualityControls(): UseQualityControlsResult {
@@ -45,10 +38,7 @@ export function useQualityControls(): UseQualityControlsResult {
     ): Promise<void> => {
       const manager = session.manager;
       if (!manager) {
-        throw new ZvonokError(
-          "DISCONNECTED",
-          "Join the room before adjusting quality",
-        );
+        throw new ZvonokError("DISCONNECTED", "Join the room before adjusting quality");
       }
       const consumerId = manager.getVideoConsumerIdForUserId(userId);
       if (!consumerId) {
@@ -57,10 +47,7 @@ export function useQualityControls(): UseQualityControlsResult {
           `No subscribed video for participant ${userId}`,
         );
       }
-      manager.setPreferredLayers(
-        consumerId,
-        SPATIAL_LAYER_BY_LEVEL[level],
-      );
+      manager.setPreferredLayers(consumerId, SPATIAL_LAYER_BY_LEVEL[level]);
     };
 
     return { setParticipantQuality };

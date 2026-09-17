@@ -1,7 +1,17 @@
 {
   "name": "@zvonok/whiteboard-core",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YuriFA/zvonOK.git",
+    "directory": "packages/whiteboard-core"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     "./package.json": "./package.json",
     "./engine": {
@@ -49,23 +59,19 @@
     "test": "vitest",
     "test:run": "vitest run",
     "lint:ts": "tsc --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "lint": "oxlint . && pnpm fmt:check",
+    "lint:fix": "oxlint . --fix && pnpm fmt",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "dependencies": {
     "yjs": "^13.6.32"
   },
   "devDependencies": {
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
     "typescript": "~5.8.3",
     "vitest": "^4.0.18"
-  },
-  "files": [
-    "dist"
-  ],
-  "license": "MIT",
-  "sideEffects": false,
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/YuriFA/zvonOK.git",
-    "directory": "packages/whiteboard-core"
   }
 }

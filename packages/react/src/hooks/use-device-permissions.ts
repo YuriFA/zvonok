@@ -7,9 +7,8 @@
  * instead of throwing.
  */
 
-import { useEffect, useState } from "react";
-
 import type { IMediaDeviceService } from "@zvonok/client/media/interfaces";
+import { useEffect, useState } from "react";
 
 import { useZvonokSession } from "../contexts/zvonok-context.js";
 

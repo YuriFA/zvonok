@@ -59,9 +59,7 @@ describe("SfuEventRouter", () => {
   it("registers all event listeners on setup", () => {
     router.setup();
 
-    const events = socket.on.mock.calls.map(
-      (call: [string, ...unknown[]]) => call[0],
-    );
+    const events = socket.on.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
     expect(events).toContain("connect");
     expect(events).toContain("disconnect");
     expect(events).toContain("sfu:joined");
@@ -173,9 +171,7 @@ describe("SfuEventRouter", () => {
   it("removes only registered listeners on teardown without touching other listeners", () => {
     router.setup();
 
-    const registeredEvents = socket.on.mock.calls.map(
-      (call: [string, ...unknown[]]) => call[0],
-    );
+    const registeredEvents = socket.on.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
     router.teardown();
 
     // off() called once per registered listener
@@ -184,9 +180,7 @@ describe("SfuEventRouter", () => {
     expect(socket.removeAllListeners).not.toHaveBeenCalled();
 
     // Each off() call matches a registered event+handler pair
-    const offEvents = socket.off.mock.calls.map(
-      (call: [string, ...unknown[]]) => call[0],
-    );
+    const offEvents = socket.off.mock.calls.map((call: [string, ...unknown[]]) => call[0]);
     expect(offEvents.sort()).toEqual(registeredEvents.sort());
   });
 

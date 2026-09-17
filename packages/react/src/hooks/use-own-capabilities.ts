@@ -5,9 +5,8 @@
  * decoding roles client-side.
  */
 
-import { useEffect, useState } from "react";
-
 import type { CapabilityId } from "@zvonok/client/sfu/types";
+import { useEffect, useState } from "react";
 
 import { useZvonokSession } from "../contexts/zvonok-context.js";
 

@@ -24,14 +24,14 @@ export type CapabilityId =
 
 /** Coded denials the server sends in host-action acknowledgements. */
 export type SfuHostActionServerErrorCode =
-  "NOT_IN_ROOM" | "MISSING_CAPABILITY" | "TARGET_NOT_FOUND";
+  | "NOT_IN_ROOM"
+  | "MISSING_CAPABILITY"
+  | "TARGET_NOT_FOUND";
 
 /** Local host-action failure codes (no socket, no ack in time). */
-export type SfuHostActionLocalErrorCode =
-  "DISCONNECTED" | "HOST_ACTION_TIMEOUT";
+export type SfuHostActionLocalErrorCode = "DISCONNECTED" | "HOST_ACTION_TIMEOUT";
 
-export type SfuHostActionErrorCode =
-  SfuHostActionServerErrorCode | SfuHostActionLocalErrorCode;
+export type SfuHostActionErrorCode = SfuHostActionServerErrorCode | SfuHostActionLocalErrorCode;
 
 /**
  * A host-control action was refused by the server or could not reach it.
@@ -129,8 +129,7 @@ export interface SfuParticipantIdentity {
 }
 
 /** Lifecycle statuses of a room egress session, mirrored from the server. */
-export type SfuEgressSessionStatus =
-  "starting" | "live" | "stopping" | "ended" | "failed";
+export type SfuEgressSessionStatus = "starting" | "live" | "stopping" | "ended" | "failed";
 
 /** The client-visible slice of an egress session (egress:status events). */
 export interface SfuEgressStatusPayload {
@@ -150,11 +149,11 @@ export type SfuEgressActionServerErrorCode =
   | "EGRESS_UNAVAILABLE";
 
 /** Local egress action failure codes (no socket, no ack in time). */
-export type SfuEgressActionLocalErrorCode =
-  "DISCONNECTED" | "EGRESS_ACTION_TIMEOUT";
+export type SfuEgressActionLocalErrorCode = "DISCONNECTED" | "EGRESS_ACTION_TIMEOUT";
 
 export type SfuEgressActionErrorCode =
-  SfuEgressActionServerErrorCode | SfuEgressActionLocalErrorCode;
+  | SfuEgressActionServerErrorCode
+  | SfuEgressActionLocalErrorCode;
 
 /**
  * A client-initiated egress action was refused by the server or could not
@@ -187,13 +186,15 @@ export interface SfuBroadcastMessage {
 
 /** Coded denials the server sends in broadcast acknowledgements. */
 export type SfuBroadcastServerErrorCode =
-  "NOT_IN_ROOM" | "MISSING_CAPABILITY" | "PAYLOAD_TOO_LARGE" | "INVALID_TOPIC";
+  | "NOT_IN_ROOM"
+  | "MISSING_CAPABILITY"
+  | "PAYLOAD_TOO_LARGE"
+  | "INVALID_TOPIC";
 
 /** Local broadcast failure codes (no socket, no ack in time). */
 export type SfuBroadcastLocalErrorCode = "DISCONNECTED" | "BROADCAST_TIMEOUT";
 
-export type SfuBroadcastErrorCode =
-  SfuBroadcastServerErrorCode | SfuBroadcastLocalErrorCode;
+export type SfuBroadcastErrorCode = SfuBroadcastServerErrorCode | SfuBroadcastLocalErrorCode;
 
 /**
  * A data-channel broadcast was refused by the server or could not reach it.
@@ -378,10 +379,7 @@ export interface SfuParticipantInfo {
   /** Token-carried consumer correlation fields; absent on non-token paths. */
   externalId?: string;
   metadata?: unknown;
-  producers: Map<
-    string,
-    { kind: "audio" | "video"; paused?: boolean; source?: SfuMediaSource }
-  >;
+  producers: Map<string, { kind: "audio" | "video"; paused?: boolean; source?: SfuMediaSource }>;
 }
 
 // Payload for sfu:peer-joined event (peer joins after you)
@@ -404,7 +402,11 @@ export interface SfuExistingParticipantsPayload {
 
 // SFU connection state
 export type SfuConnectionState =
-  "disconnected" | "connecting" | "connected" | "reconnecting" | "failed";
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "failed";
 
 // SFU manager state
 export interface SfuState {
@@ -430,12 +432,8 @@ export type SfuTrackCallback = (
 ) => void;
 export type SfuParticipantCallback = (peer: SfuParticipantInfo) => void;
 export type SfuStateCallback = (state: SfuState) => void;
-export type SfuProducerStateCallback = (
-  payload: SfuProducerStateChangedPayload,
-) => void;
-export type SfuScreenShareStoppedCallback = (
-  payload: SfuScreenShareStoppedPayload,
-) => void;
+export type SfuProducerStateCallback = (payload: SfuProducerStateChangedPayload) => void;
+export type SfuScreenShareStoppedCallback = (payload: SfuScreenShareStoppedPayload) => void;
 
 // Quality stats types
 export interface QualityStats {
@@ -461,9 +459,7 @@ export interface PeerQualityStats {
   score: QualityScore;
 }
 
-export type QualityStatsCallback = (
-  stats: Map<string, PeerQualityStats>,
-) => void;
+export type QualityStatsCallback = (stats: Map<string, PeerQualityStats>) => void;
 
 // Simulcast spatial layer (0 = low, 1 = mid, 2 = high)
 export type SimulcastSpatialLayer = 0 | 1 | 2;

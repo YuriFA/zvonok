@@ -215,7 +215,7 @@ describe("MediaCapture", () => {
         expect.objectContaining({ deviceId: { exact: "device-2" } }),
       );
     });
-});
+  });
 
   describe("device preference integration", () => {
     beforeEach(() => {

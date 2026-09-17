@@ -1,9 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ZvonokProvider } from "../contexts/zvonok-context.js";
 import { ZvonokJoinError } from "../errors.js";
 import { useZvonokConnection } from "../hooks/use-zvonok-connection.js";
-import { ZvonokProvider } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, createTrack, tokenFor } from "./doubles.js";
 
 const sfuHarness = vi.hoisted(() => ({
@@ -15,9 +15,7 @@ vi.mock("@zvonok/client/sfu/manager", () => {
   const SfuManagerModule = {
     SfuManager: vi.fn(function () {
       if (sfuHarness.next) {
-        const seeded = sfuHarness.next as ReturnType<
-          typeof createMockSfuManager
-        >;
+        const seeded = sfuHarness.next as ReturnType<typeof createMockSfuManager>;
         sfuHarness.next = null;
         sfuHarness.instances.push(seeded);
         return seeded.manager;
@@ -44,27 +42,20 @@ const TOKEN = tokenFor({
 });
 
 function Provider({ children }: { children: React.ReactNode }) {
-  return (
-    <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
-  );
+  return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;
 }
 
 function renderConnection() {
-  return renderHook(
-    () => useZvonokConnection({ roomSlug: "room-1", token: TOKEN }),
-    {
-      wrapper: Provider,
-    },
-  );
+  return renderHook(() => useZvonokConnection({ roomSlug: "room-1", token: TOKEN }), {
+    wrapper: Provider,
+  });
 }
 
 function lastSfu() {
   return sfuHarness.instances.at(-1) as ReturnType<typeof createMockSfuManager>;
 }
 
-async function joinFully(
-  result: ReturnType<typeof renderConnection>["result"],
-) {
+async function joinFully(result: ReturnType<typeof renderConnection>["result"]) {
   let promise: Promise<void> = Promise.resolve();
   act(() => {
     promise = result.current.join();
@@ -112,9 +103,7 @@ describe("useZvonokConnection", () => {
     expect(result.current.manager).toBe(lastSfu().manager);
   });
 
-  function renderConnectionWith(
-    options: Parameters<typeof useZvonokConnection>[0],
-  ) {
+  function renderConnectionWith(options: Parameters<typeof useZvonokConnection>[0]) {
     return renderHook(() => useZvonokConnection(options), {
       wrapper: Provider,
     });
@@ -362,11 +351,9 @@ describe("useZvonokConnection", () => {
       const sfu = lastSfu();
       sfu.manager.getProducerByKind.mockReturnValue({ id: "audio-producer" });
 
-      expect(
-        await act(async () =>
-          result.current.produceTrack(createTrack("video", "v1")),
-        ),
-      ).toBe(true);
+      expect(await act(async () => result.current.produceTrack(createTrack("video", "v1")))).toBe(
+        true,
+      );
       expect(sfu.manager.produce).toHaveBeenCalled();
 
       act(() => result.current.pauseProducer("audio"));
@@ -379,9 +366,7 @@ describe("useZvonokConnection", () => {
       expect(sfu.manager.closeProducer).toHaveBeenCalledWith("video");
 
       expect(
-        await act(async () =>
-          result.current.replaceTrack("audio", createTrack("audio", "a2")),
-        ),
+        await act(async () => result.current.replaceTrack("audio", createTrack("audio", "a2"))),
       ).toBe(true);
 
       expect(result.current.hasProducer("audio")).toBe(true);
@@ -392,9 +377,7 @@ describe("useZvonokConnection", () => {
     it("reject with a typed error before joining", async () => {
       const { result } = renderConnection();
 
-      await expect(
-        result.current.produceTrack(createTrack("audio", "a1")),
-      ).rejects.toMatchObject({
+      await expect(result.current.produceTrack(createTrack("audio", "a1"))).rejects.toMatchObject({
         code: "DISCONNECTED",
       });
     });
@@ -430,5 +413,4 @@ describe("useZvonokConnection", () => {
       vi.useRealTimers();
     }
   });
-
 });

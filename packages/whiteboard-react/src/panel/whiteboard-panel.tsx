@@ -1,6 +1,6 @@
-import { Loader2, Lock, LockOpen, Redo2, Undo2, X } from 'lucide-react';
+import { Loader2, Lock, LockOpen, Redo2, Undo2, X } from "lucide-react";
 
-import { useWhiteboardPanel } from './use-whiteboard-panel';
+import { useWhiteboardPanel } from "./use-whiteboard-panel";
 
 export interface WhiteboardPanelProps {
   roomSlug: string;
@@ -17,7 +17,13 @@ export interface WhiteboardPanelProps {
  * undo/redo, and the engine canvas mounted below. All logic lives in
  * {@link useWhiteboardPanel}; the host room view only provides props.
  */
-export function WhiteboardPanel({ roomSlug, socketUrl, isOwner, refreshSession, onClose }: WhiteboardPanelProps) {
+export function WhiteboardPanel({
+  roomSlug,
+  socketUrl,
+  isOwner,
+  refreshSession,
+  onClose,
+}: WhiteboardPanelProps) {
   const board = useWhiteboardPanel({ roomSlug, socketUrl, enabled: true, isOwner, refreshSession });
   const canDraw = board.canDraw;
 
@@ -28,9 +34,9 @@ export function WhiteboardPanel({ roomSlug, socketUrl, isOwner, refreshSession, 
         <span
           className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
           role="status"
-          aria-label={board.mode === 'open' ? 'Drawing open to all' : 'Drawing locked to host'}
+          aria-label={board.mode === "open" ? "Drawing open to all" : "Drawing locked to host"}
         >
-          {board.mode === 'open' ? (
+          {board.mode === "open" ? (
             <>
               <LockOpen className="size-3" /> Drawing open
             </>
@@ -65,10 +71,10 @@ export function WhiteboardPanel({ roomSlug, socketUrl, isOwner, refreshSession, 
         {isOwner && (
           <button
             type="button"
-            onClick={() => board.setBoardMode(board.mode === 'open' ? 'owner' : 'open')}
+            onClick={() => board.setBoardMode(board.mode === "open" ? "owner" : "open")}
             className="flex h-7 items-center gap-1.5 rounded-md border bg-background px-2.5 text-xs font-medium hover:bg-accent"
           >
-            {board.mode === 'open' ? (
+            {board.mode === "open" ? (
               <>
                 <Lock className="size-3.5" /> Lock drawing
               </>
@@ -90,18 +96,23 @@ export function WhiteboardPanel({ roomSlug, socketUrl, isOwner, refreshSession, 
       </div>
 
       <div className="relative min-h-0 flex-1">
-        {board.status === 'connecting' && (
+        {board.status === "connecting" && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/80">
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
             <span className="ml-2 text-sm text-muted-foreground">Connecting to board...</span>
           </div>
         )}
-        {board.status === 'error' ? (
+        {board.status === "error" ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             The board is unavailable in this room.
           </div>
         ) : (
-          <div className="size-full" data-testid="board-canvas" data-readonly={!canDraw} ref={board.setContainer} />
+          <div
+            className="size-full"
+            data-testid="board-canvas"
+            data-readonly={!canDraw}
+            ref={board.setContainer}
+          />
         )}
       </div>
     </div>

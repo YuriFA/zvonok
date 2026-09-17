@@ -3,9 +3,8 @@
  * broadcasts, with recording/live derivations for UI gating.
  */
 
-import { useEffect, useState } from "react";
-
 import type { SfuEgressStatusPayload } from "@zvonok/client/sfu/types";
+import { useEffect, useState } from "react";
 
 import { useZvonokSession } from "../contexts/zvonok-context.js";
 
@@ -37,8 +36,7 @@ export function useEgressState(): UseEgressStateResult {
     return manager.onStateChange((state) => setEgress(state.egress));
   }, [session.manager]);
 
-  const isSessionActive =
-    egress !== null && !TERMINAL_STATUSES.has(egress.status);
+  const isSessionActive = egress !== null && !TERMINAL_STATUSES.has(egress.status);
   return {
     egress,
     isRecording: isSessionActive && egress.outputs.record,

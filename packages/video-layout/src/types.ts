@@ -6,7 +6,6 @@ export interface VideoTile {
   height: number;
 }
 
-
 export interface LayoutOptions {
   containerWidth: number;
   containerHeight: number;
@@ -34,5 +33,5 @@ export interface GridLayout {
   /** Present only in spotlight mode: the area reserved for the screen share */
   spotlightArea?: SpotlightArea;
   /** 'right' | 'bottom' — which side the participant strip is on (spotlight mode only) */
-  stripPosition?: 'right' | 'bottom';
+  stripPosition?: "right" | "bottom";
 }

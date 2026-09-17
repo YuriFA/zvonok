@@ -80,7 +80,11 @@ function trackUpdate(
   if (kind === "video") {
     return {
       ...current,
-      cameraStream: withStream(current.cameraStream, track, (existing) => existing.kind !== "video"),
+      cameraStream: withStream(
+        current.cameraStream,
+        track,
+        (existing) => existing.kind !== "video",
+      ),
       isCameraEnabled: track.enabled,
     };
   }
@@ -283,7 +287,6 @@ export class RoomTracker {
     this.bindSocket();
   }
 
-
   /** Idempotently attaches sfu:peer-muted / sfu:room-locked listeners. */
   private bindSocket(): void {
     if (this.socketBound) {
@@ -337,10 +340,7 @@ export class RoomTracker {
       socket.off("sfu:room-locked", onRoomLocked);
     });
   }
-  private update(
-    userId: string,
-    updater: (current: ZvonokParticipant) => ZvonokParticipant,
-  ): void {
+  private update(userId: string, updater: (current: ZvonokParticipant) => ZvonokParticipant): void {
     this.participants = upsertParticipant(this.participants, userId, updater);
     this.recompute();
   }

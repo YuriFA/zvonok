@@ -5,14 +5,14 @@ import type {
   WhiteboardModePayload,
   WhiteboardStatePayload,
   WhiteboardUpdatePayload,
-} from './protocol';
+} from "./protocol";
 import {
   WHITEBOARD_ERROR,
   WHITEBOARD_JOIN,
   WHITEBOARD_MODE,
   WHITEBOARD_STATE,
   WHITEBOARD_UPDATE,
-} from './protocol';
+} from "./protocol";
 
 /**
  * Structural slice of a Socket.io socket the transport needs. Keeps core
@@ -60,7 +60,7 @@ export function createWhiteboardTransport(
   // The server answers join with the full state while the engine is still
   // loading (dynamic import); frames arriving before a consumer subscribes
   // must be queued, not dropped, or late joiners render an empty board.
-  const pending: Array<{ kind: 'state' | 'update'; update: Uint8Array }> = [];
+  const pending: Array<{ kind: "state" | "update"; update: Uint8Array }> = [];
   let pendingFlushed = false;
   const flushPending = (): void => {
     if (pendingFlushed) return;
@@ -69,7 +69,7 @@ export function createWhiteboardTransport(
     // same tick (the binding does) both receive the queued frames.
     queueMicrotask(() => {
       for (const frame of pending.splice(0)) {
-        const listeners = frame.kind === 'state' ? stateListeners : updateListeners;
+        const listeners = frame.kind === "state" ? stateListeners : updateListeners;
         for (const listener of listeners) listener(frame.update);
       }
     });
@@ -80,7 +80,7 @@ export function createWhiteboardTransport(
     const update = toUpdate(payload?.update);
     if (!update) return;
     if (!pendingFlushed) {
-      pending.push({ kind: 'state', update });
+      pending.push({ kind: "state", update });
       return;
     }
     for (const listener of stateListeners) listener(update);
@@ -90,19 +90,19 @@ export function createWhiteboardTransport(
     const update = toUpdate(payload?.update);
     if (!update) return;
     if (!pendingFlushed) {
-      pending.push({ kind: 'update', update });
+      pending.push({ kind: "update", update });
       return;
     }
     for (const listener of updateListeners) listener(update);
   };
   const handleMode = (...args: never[]): void => {
     const payload = args[0] as unknown as WhiteboardModePayload | undefined;
-    if (payload?.mode !== 'owner' && payload?.mode !== 'open') return;
+    if (payload?.mode !== "owner" && payload?.mode !== "open") return;
     for (const listener of modeListeners) listener(payload.mode);
   };
   const handleError = (...args: never[]): void => {
     const payload = args[0] as unknown as WhiteboardErrorPayload | undefined;
-    if (!payload || typeof payload.message !== 'string') return;
+    if (!payload || typeof payload.message !== "string") return;
     for (const listener of errorListeners) listener(payload);
   };
 

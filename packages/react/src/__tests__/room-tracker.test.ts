@@ -141,9 +141,8 @@ describe("RoomTracker", () => {
 
     (harness.manager.getSocket as ReturnType<typeof vi.fn>).mockReturnValue(harness.socket);
     harness.emitState({ connectionState: "connected" });
-    const joined = (
-      harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>
-    ).mock.calls[0]?.[0] as (peer: unknown) => void;
+    const joined = (harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as (peer: unknown) => void;
     joined({ userId: "peer-2", username: "Peer" });
     harness.emitSocketEvent("sfu:peer-muted", { userId: "peer-2" });
     const snapshot = tracker.getSnapshot();
@@ -165,9 +164,8 @@ describe("RoomTracker", () => {
 
     (harness.manager.getSocket as ReturnType<typeof vi.fn>).mockReturnValue(harness.socket);
     harness.emitState({ connectionState: "connected" });
-    const joined = (
-      harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>
-    ).mock.calls[0]?.[0] as (peer: unknown) => void;
+    const joined = (harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as (peer: unknown) => void;
     joined({ userId: "peer-1", username: "One" });
     joined({ userId: "peer-2", username: "Two" });
 
@@ -196,12 +194,10 @@ describe("RoomTracker", () => {
 
     (harness.manager.getSocket as ReturnType<typeof vi.fn>).mockReturnValue(harness.socket);
     harness.emitState({ connectionState: "connected" });
-    const joined = (
-      harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>
-    ).mock.calls[0]?.[0] as (peer: unknown) => void;
-    const detached = (
-      harness.manager.onPeerMediaDetached as ReturnType<typeof vi.fn>
-    ).mock.calls[0]?.[0] as (payload: unknown) => void;
+    const joined = (harness.manager.onParticipantJoined as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as (peer: unknown) => void;
+    const detached = (harness.manager.onPeerMediaDetached as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as (payload: unknown) => void;
 
     joined({ userId: "peer-2", username: "Peer" });
     detached({ userId: "peer-2" });
@@ -225,9 +221,8 @@ describe("RoomTracker", () => {
 
     (harness.manager.getSocket as ReturnType<typeof vi.fn>).mockReturnValue(harness.socket);
     harness.emitState({ connectionState: "connected" });
-    const detached = (
-      harness.manager.onPeerMediaDetached as ReturnType<typeof vi.fn>
-    ).mock.calls[0]?.[0] as (payload: unknown) => void;
+    const detached = (harness.manager.onPeerMediaDetached as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as (payload: unknown) => void;
     detached({ userId: "never-seen-peer" });
 
     expect(tracker.getSnapshot().participants).toEqual([]);

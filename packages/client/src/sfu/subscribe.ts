@@ -48,8 +48,7 @@ export class SfuSubscribe {
   private consumers = new Map<string, Consumer>();
   private pendingNewProducers: SfuNewProducerPayload[] = [];
   private trackCallbacks = new Set<SfuTrackCallback>();
-  private screenShareStoppedCallbacks =
-    new Set<SfuScreenShareStoppedCallback>();
+  private screenShareStoppedCallbacks = new Set<SfuScreenShareStoppedCallback>();
 
   constructor(host: SfuSubscribeHost) {
     this.host = host;
@@ -59,13 +58,8 @@ export class SfuSubscribe {
    * Emit sfu:set-preferred-layers to the server to request a simulcast layer switch.
    * Should only be called for video consumers.
    */
-  setPreferredLayers(
-    consumerId: string,
-    spatialLayer: SimulcastSpatialLayer,
-  ): void {
-    this.host
-      .getSocket()
-      ?.emit("sfu:set-preferred-layers", { consumerId, spatialLayer });
+  setPreferredLayers(consumerId: string, spatialLayer: SimulcastSpatialLayer): void {
+    this.host.getSocket()?.emit("sfu:set-preferred-layers", { consumerId, spatialLayer });
   }
 
   /**
@@ -109,18 +103,13 @@ export class SfuSubscribe {
   handleNewProducer(payload: SfuNewProducerPayload): void {
     this.log.debug("[SFU] New producer:", payload.userId, payload.kind);
     // A screen-share producer from another peer means the room is blocked for us.
-    if (
-      payload.appData?.source === "screen" &&
-      payload.userId !== this.host.getLocalUserId()
-    ) {
+    if (payload.appData?.source === "screen" && payload.userId !== this.host.getLocalUserId()) {
       this.host.updateState({ isScreenShareBlocked: true });
     }
     void this.consumeProducer(payload);
   }
 
-  async handleConsumerCreated(
-    payload: SfuConsumerCreatedPayload,
-  ): Promise<void> {
+  async handleConsumerCreated(payload: SfuConsumerCreatedPayload): Promise<void> {
     const recvTransport = this.host.getRecvTransport();
     if (!recvTransport || !this.host.getDevice()) return;
 
@@ -138,14 +127,10 @@ export class SfuSubscribe {
       // Resume the consumer  -  delay for audio to let jitter buffer initialise
       if (payload.kind === "audio") {
         setTimeout(() => {
-          this.host
-            .getSocket()
-            ?.emit("sfu:resume-consumer", { consumerId: consumer.id });
+          this.host.getSocket()?.emit("sfu:resume-consumer", { consumerId: consumer.id });
         }, 150);
       } else {
-        this.host
-          .getSocket()
-          ?.emit("sfu:resume-consumer", { consumerId: consumer.id });
+        this.host.getSocket()?.emit("sfu:resume-consumer", { consumerId: consumer.id });
       }
 
       // Find the peer userId for this consumer
@@ -165,10 +150,7 @@ export class SfuSubscribe {
         callback(consumer.track, payload.kind, userId, source);
       }
 
-      const producerInfo = this.host
-        .getPeers()
-        .get(userId)
-        ?.producers.get(payload.producerId);
+      const producerInfo = this.host.getPeers().get(userId)?.producers.get(payload.producerId);
       if (producerInfo?.paused) {
         this.host.notifyProducerState({
           producerId: payload.producerId,
@@ -213,9 +195,7 @@ export class SfuSubscribe {
   flushPendingProducers(): void {
     if (this.pendingNewProducers.length > 0) {
       const pending = this.pendingNewProducers.splice(0);
-      this.log.debug("[SFU] Processing",
-      pending.length,
-      "buffered new-producer(s)",);
+      this.log.debug("[SFU] Processing", pending.length, "buffered new-producer(s)");
       for (const pendingPayload of pending) {
         void this.consumeProducer(pendingPayload);
       }
@@ -260,8 +240,7 @@ export class SfuSubscribe {
     const device = this.host.getDevice();
     const recvTransport = this.host.getRecvTransport();
     if (!socket || !device || !recvTransport) {
-      this.log.warn("[SFU] Recv transport not ready, buffering new-producer:",
-      payload.producerId,);
+      this.log.warn("[SFU] Recv transport not ready, buffering new-producer:", payload.producerId);
       this.pendingNewProducers.push(payload);
       return;
     }

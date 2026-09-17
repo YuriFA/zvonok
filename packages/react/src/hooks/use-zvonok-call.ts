@@ -11,20 +11,20 @@ import { CaptureState, isActive } from "@zvonok/client/media/capture-state";
 import type { SfuConnectionState } from "@zvonok/client/sfu/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { useSfuTrackSync } from "../core/use-sfu-track-sync.js";
+import type { ZvonokParticipant } from "../types.js";
 import { createMediaCapturePort, type CapturePort } from "./capture-port.js";
 import { createHostControls, type HostControls } from "./host-controls.js";
 import { EMPTY_ROOM_STATE, RoomTracker, type RoomTrackerState } from "./room-tracker.js";
-import type { ZvonokParticipant } from "../types.js";
 import {
   usePublishControls,
   type PublishKind,
   type PublishToggleResult,
   type UsePublishControlsResult,
 } from "./use-publish-controls.js";
-import { useSfuTrackSync } from "../core/use-sfu-track-sync.js";
-import type { UseZvonokConnectionResult } from "./use-zvonok-connection.js";
 import { useStoreSelector } from "./use-store-selector.js";
-import { useZvonokSession } from "../contexts/zvonok-context.js";
+import type { UseZvonokConnectionResult } from "./use-zvonok-connection.js";
 
 export interface UseZvonokCallOptions {
   connection: UseZvonokConnectionResult;

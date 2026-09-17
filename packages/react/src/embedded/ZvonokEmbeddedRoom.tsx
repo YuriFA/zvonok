@@ -9,15 +9,14 @@
 
 import "../css/component-kit.css";
 import "../css/embedded.css";
-
 import { useCallback, useEffect, useState } from "react";
 
-import { hasCapabilities, usePrejoin } from "../index.js";
 import { ControlBarPreset } from "../components/control-bar/control-bar.js";
 import { DeviceSwitcherPreset } from "../components/device-switcher/device-switcher-preset.js";
 import { ParticipantsPanelPreset } from "../components/participants-panel/participants-panel-preset.js";
 import { StagePreset } from "../components/stage/stage.js";
 import { StatusCardsPreset, useRoomStatus } from "../components/status-cards/status-cards.js";
+import { ZvonokProvider } from "../contexts/zvonok-context.js";
 import { useDeviceControls } from "../hooks/use-device-controls.js";
 import { useEgressControls } from "../hooks/use-egress-controls.js";
 import { useEgressState } from "../hooks/use-egress-state.js";
@@ -25,10 +24,8 @@ import { useOwnCapabilities } from "../hooks/use-own-capabilities.js";
 import { useRemoteAudio } from "../hooks/use-remote-audio.js";
 import { useScreenShare } from "../hooks/use-screen-share.js";
 import { useZvonokCall } from "../hooks/use-zvonok-call.js";
-import {
-  useZvonokConnection,
-} from "../hooks/use-zvonok-connection.js";
-import { ZvonokProvider } from "../contexts/zvonok-context.js";
+import { useZvonokConnection } from "../hooks/use-zvonok-connection.js";
+import { hasCapabilities, usePrejoin } from "../index.js";
 import { JoinErrorCard } from "./join-error-card.js";
 import { PreJoinCard } from "./prejoin-card.js";
 
@@ -135,7 +132,6 @@ function EmbeddedRoomSurface({
       await joinRoom({ video: prejoinCameraOn, audio: prejoinMicOn });
     },
   });
-
 
   useEffect(() => {
     if (connection.error) {

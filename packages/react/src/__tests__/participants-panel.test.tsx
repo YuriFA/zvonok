@@ -1,8 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  useParticipantsPanel,
+  type PanelParticipant,
+} from "../components/participants-panel/participants-panel.js";
 import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
-import { useParticipantsPanel, type PanelParticipant } from "../components/participants-panel/participants-panel.js";
 
 function participant(overrides: Partial<PanelParticipant> = {}): PanelParticipant {
   return {
@@ -45,24 +48,17 @@ describe("useParticipantsPanel", () => {
       useParticipantsPanel({
         call: call({
           localUserId: "me",
-          participants: (
-            [
-              { userId: "zoe", displayName: "Zoe", isConnected: true },
-              { userId: "al", displayName: "Al", isConnected: false },
-              { userId: "me", displayName: "Me", isConnected: true },
-              { userId: "bea", displayName: "Bea", isConnected: true },
-            ]
-          ) as UseZvonokCallResult["participants"],
+          participants: [
+            { userId: "zoe", displayName: "Zoe", isConnected: true },
+            { userId: "al", displayName: "Al", isConnected: false },
+            { userId: "me", displayName: "Me", isConnected: true },
+            { userId: "bea", displayName: "Bea", isConnected: true },
+          ] as UseZvonokCallResult["participants"],
         }),
       }),
     );
 
-    expect(result.current.participants.map((p) => p.id)).toEqual([
-      "me",
-      "bea",
-      "zoe",
-      "al",
-    ]);
+    expect(result.current.participants.map((p) => p.id)).toEqual(["me", "bea", "zoe", "al"]);
   });
 
   it("derives capability gates from the call's server capabilities", () => {
@@ -73,9 +69,7 @@ describe("useParticipantsPanel", () => {
     expect(result.current.canKickParticipant(participant())).toBe(false);
 
     const remover = call({ capabilities: ["remove-participants"] });
-    const { result: removeResult } = renderHook(() =>
-      useParticipantsPanel({ call: remover }),
-    );
+    const { result: removeResult } = renderHook(() => useParticipantsPanel({ call: remover }));
     expect(removeResult.current.canMuteAll).toBe(false);
     expect(removeResult.current.canKickParticipant(participant())).toBe(true);
   });
@@ -90,9 +84,9 @@ describe("useParticipantsPanel", () => {
 
     expect(result.current.canMuteParticipant(participant({ id: "me" }))).toBe(false);
     expect(result.current.canKickParticipant(participant({ id: "me" }))).toBe(false);
-    expect(
-      result.current.canMuteParticipant(participant({ id: "r2", isMutedByHost: true })),
-    ).toBe(false);
+    expect(result.current.canMuteParticipant(participant({ id: "r2", isMutedByHost: true }))).toBe(
+      false,
+    );
     expect(result.current.canMuteParticipant(participant({ id: "r2" }))).toBe(true);
   });
 
@@ -107,9 +101,7 @@ describe("useParticipantsPanel", () => {
         kickPeer: vi.fn().mockResolvedValue(undefined),
       },
     });
-    const { result } = renderHook(() =>
-      useParticipantsPanel({ call: failing, onNotice }),
-    );
+    const { result } = renderHook(() => useParticipantsPanel({ call: failing, onNotice }));
 
     expect(await result.current.muteAll()).toBe(false);
     expect(await result.current.toggleLock()).toBe(false);

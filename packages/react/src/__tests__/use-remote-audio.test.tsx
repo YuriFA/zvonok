@@ -1,9 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
-
-import type { SfuManager } from "@zvonok/client/sfu/manager";
 
 import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
 import { useRemoteAudio } from "../hooks/use-remote-audio.js";
@@ -96,7 +95,10 @@ async function attachManager(
   sfu: MockSfuManager,
 ) {
   await act(async () => {
-    result.current.session.update({ manager: sfu.manager as unknown as SfuManager, status: "joined" });
+    result.current.session.update({
+      manager: sfu.manager as unknown as SfuManager,
+      status: "joined",
+    });
   });
 }
 

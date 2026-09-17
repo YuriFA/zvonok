@@ -4,10 +4,11 @@
  * approval policy and custom item markup stay with the consumer.
  */
 
+import { Fragment } from "react";
+
+import type { UseZvonokCallResult } from "../../index.js";
 import type { PanelNotice, PanelParticipant } from "./participants-panel.js";
 import { useParticipantsPanel } from "./participants-panel.js";
-import type { UseZvonokCallResult } from "../../index.js";
-import { Fragment } from "react";
 
 export interface ParticipantsPanelPresetProps {
   call: UseZvonokCallResult;

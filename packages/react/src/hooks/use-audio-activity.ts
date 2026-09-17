@@ -32,10 +32,7 @@ export interface AudioActivityEngineOptions {
   /** Injectable for tests; defaults to the browser AudioContext. */
   audioContextFactory?: () => AudioContext;
   /** Injectable for tests; defaults to the core primitives. */
-  sampler?: Pick<
-    AudioLevelSampler,
-    "addOwned" | "addBorrowed" | "remove" | "sample" | "clear"
-  >;
+  sampler?: Pick<AudioLevelSampler, "addOwned" | "addBorrowed" | "remove" | "sample" | "clear">;
 }
 
 interface RemoteNodes {
@@ -68,8 +65,7 @@ export class AudioActivityEngine {
     this.manager = manager;
     this.sampler = options.sampler ?? new AudioLevelSampler();
     this.intervalMs = options.intervalMs ?? TICK_MS;
-    this.audioContextFactory =
-      options.audioContextFactory ?? (() => new AudioContext());
+    this.audioContextFactory = options.audioContextFactory ?? (() => new AudioContext());
   }
 
   /** Stable reference between ticks; safe for useSyncExternalStore. */
@@ -184,9 +180,7 @@ export class AudioActivityEngine {
       if (ids.length !== Object.keys(previous).length) {
         changed = true;
       } else {
-        changed = ids.some(
-          (id) => Math.abs((previous[id] ?? 0) - levels[id]) > LEVEL_EPSILON,
-        );
+        changed = ids.some((id) => Math.abs((previous[id] ?? 0) - levels[id]) > LEVEL_EPSILON);
       }
     }
 

@@ -1,16 +1,17 @@
 import { act, render } from "@testing-library/react";
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
 import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
-import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { LAYER_SWITCH_DEBOUNCE_MS } from "../core/peer-quality-engine.js";
+import { PeerQualityProvider, usePeerQualityContext } from "../contexts/peer-quality-context.js";
 import {
-  PeerQualityProvider,
-  usePeerQualityContext,
-} from "../contexts/peer-quality-context.js";
+  ZvonokProvider,
+  useZvonokSession,
+  type ZvonokSession,
+} from "../contexts/zvonok-context.js";
+import { LAYER_SWITCH_DEBOUNCE_MS } from "../core/peer-quality-engine.js";
 import { Tile, useTileContext } from "../core/tile.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, stubMatchMedia, type MockSfuManager } from "./doubles.js";
 
 type IntersectionEntry = { isIntersecting: boolean };
@@ -77,9 +78,7 @@ describe("Tile", () => {
   });
 
   it("covers the video with the default overlay while the camera is off", () => {
-    const { container } = renderTile(
-      <Tile userId="ada" stream={null} isVideoEnabled={false} />,
-    );
+    const { container } = renderTile(<Tile userId="ada" stream={null} isVideoEnabled={false} />);
 
     const overlay = container.querySelector("div div");
     expect(overlay?.textContent).toBe("A");
@@ -111,7 +110,11 @@ describe("Tile", () => {
   it("swaps the overlay for a custom ComponentType reading the context", () => {
     function CustomOverlay() {
       const { userId, isVideoEnabled } = useTileContext();
-      return <span data-testid="ctx">{userId}:{String(isVideoEnabled)}</span>;
+      return (
+        <span data-testid="ctx">
+          {userId}:{String(isVideoEnabled)}
+        </span>
+      );
     }
     const { container } = renderTile(
       <Tile userId="u1" stream={null} isVideoEnabled={false} OverlayUI={CustomOverlay} />,
@@ -247,7 +250,9 @@ describe("Tile visibility plumbing", () => {
     await attach(sfu.manager as unknown as SfuManager);
 
     act(() => {
-      sfu.manager.emitQualityStats(new Map([["peer-1", createQualityStats("peer-1", "excellent")]]));
+      sfu.manager.emitQualityStats(
+        new Map([["peer-1", createQualityStats("peer-1", "excellent")]]),
+      );
     });
     vi.advanceTimersByTime(LAYER_SWITCH_DEBOUNCE_MS);
     expect(setPreferredLayers).toHaveBeenLastCalledWith("consumer-1", 2);

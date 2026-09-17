@@ -12,8 +12,8 @@ vi.mock("@zvonok/client/media/manager-factory", () => ({
 }));
 
 import "./doubles.js";
-import { useDevicePermissions } from "../hooks/use-device-permissions.js";
 import { ZvonokProvider } from "../contexts/zvonok-context.js";
+import { useDevicePermissions } from "../hooks/use-device-permissions.js";
 import { createMockMediaManager } from "./doubles.js";
 
 function makeStatus(state: string): PermissionStatus {
@@ -31,7 +31,9 @@ function queryMock(service: ReturnType<typeof lastService>) {
 
 function renderPermissions(kind: "video" | "audio") {
   return renderHook(() => useDevicePermissions(kind), {
-    wrapper: ({ children }) => <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>,
+    wrapper: ({ children }) => (
+      <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>
+    ),
   });
 }
 

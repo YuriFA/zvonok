@@ -9,9 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import * as pkg from "../../package.json";
 
-const EXPORTS = (
-  pkg as { exports: Record<string, { default?: string } | string> }
-).exports;
+const EXPORTS = (pkg as { exports: Record<string, { default?: string } | string> }).exports;
 
 const PUBLIC_SUBPATHS = [
   "./audio/active-speaker-detector",
@@ -35,9 +33,7 @@ const DELETED_FILES = ["../sfu/interfaces.js"];
 // intentionally exercises module loading of map targets and deleted files.
 describe("public exports map", () => {
   it("enumerates exactly the public set", () => {
-    expect(Object.keys(EXPORTS).sort()).toEqual(
-      ["./package.json", ...PUBLIC_SUBPATHS].sort(),
-    );
+    expect(Object.keys(EXPORTS).sort()).toEqual(["./package.json", ...PUBLIC_SUBPATHS].sort());
   });
 
   it.each(PUBLIC_SUBPATHS)("resolves and imports %s", async (subpath) => {
@@ -53,10 +49,7 @@ describe("public exports map", () => {
     expect(true).toBe(true);
   });
 
-  it.each(DELETED_FILES)(
-    "keeps internal module unimportable: %s",
-    async (specifier) => {
-      await expect(import(/* @vite-ignore */ specifier)).rejects.toBeTruthy();
-    },
-  );
+  it.each(DELETED_FILES)("keeps internal module unimportable: %s", async (specifier) => {
+    await expect(import(/* @vite-ignore */ specifier)).rejects.toBeTruthy();
+  });
 });

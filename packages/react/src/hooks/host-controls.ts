@@ -36,10 +36,7 @@ function toZvonokHostError(error: unknown): ZvonokHostError {
 export function createHostControls(manager: SfuManager | null): HostControls {
   const requireManager = (): SfuManager => {
     if (!manager) {
-      throw new ZvonokHostError(
-        "DISCONNECTED",
-        "Join the room before using host controls",
-      );
+      throw new ZvonokHostError("DISCONNECTED", "Join the room before using host controls");
     }
     return manager;
   };

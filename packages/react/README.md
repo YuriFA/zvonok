@@ -23,7 +23,7 @@ import { ZvonokEmbeddedRoom } from "@zvonok/react/embedded";
   serverUrl="https://your-zvonok-server.example"
   roomSlug="my-room"
   token="<minted room token>"
-/>
+/>;
 ```
 
 ## Headless hooks

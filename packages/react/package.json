@@ -1,16 +1,19 @@
 {
   "name": "@zvonok/react",
   "version": "0.2.0",
-  "type": "module",
   "license": "MIT",
-  "sideEffects": [
-    "*.css"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/YuriFA/zvonOK.git",
     "directory": "packages/react"
   },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -38,33 +41,36 @@
       "./css/embedded.css": "./dist/css/embedded.css"
     }
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "clean": "rm -rf dist",
     "build": "tsc -p tsconfig.build.json && mkdir -p dist/css && cp -R src/css/. dist/css/",
     "test:run": "vitest run",
     "lint:ts": "tsc --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "lint": "oxlint . && pnpm fmt:check",
+    "lint:fix": "oxlint . --fix && pnpm fmt",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "dependencies": {
     "@zvonok/client": "workspace:*",
     "@zvonok/video-layout": "workspace:*"
-  },
-  "peerDependencies": {
-    "react": ">=18"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "jsdom": "^28.1.0",
+    "oxfmt": "^0.43.0",
+    "oxlint": "^1.58.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "socket.io-client": "^4.8.3",
     "typescript": "~5.8.3",
     "vite": "^7.1.6",
     "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "react": ">=18"
   }
 }

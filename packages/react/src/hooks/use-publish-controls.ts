@@ -36,11 +36,7 @@ export interface UsePublishControlsOptions {
 }
 
 export interface UsePublishControlsResult {
-  toggle(
-    kind: PublishKind,
-    enabled: boolean,
-    port: CapturePort,
-  ): Promise<PublishToggleResult>;
+  toggle(kind: PublishKind, enabled: boolean, port: CapturePort): Promise<PublishToggleResult>;
 }
 
 export function usePublishControls(

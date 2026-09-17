@@ -5,16 +5,12 @@
  * ZvonokEgressError carrying the server's coded error.
  */
 
+import type { SfuManager } from "@zvonok/client/sfu/manager";
+import { SfuEgressActionError, type SfuEgressOutputRequest } from "@zvonok/client/sfu/types";
 import { useMemo } from "react";
 
-import type { SfuManager } from "@zvonok/client/sfu/manager";
-import {
-  SfuEgressActionError,
-  type SfuEgressOutputRequest,
-} from "@zvonok/client/sfu/types";
-
-import { ZvonokEgressError } from "../errors.js";
 import { useZvonokSession } from "../contexts/zvonok-context.js";
+import { ZvonokEgressError } from "../errors.js";
 
 export interface UseEgressControlsResult {
   start(outputs: SfuEgressOutputRequest): Promise<void>;
@@ -39,10 +35,7 @@ export function useEgressControls(): UseEgressControlsResult {
     const requireManager = (): SfuManager => {
       const manager = session.manager;
       if (!manager) {
-        throw new ZvonokEgressError(
-          "DISCONNECTED",
-          "Join the room before controlling egress",
-        );
+        throw new ZvonokEgressError("DISCONNECTED", "Join the room before controlling egress");
       }
       return manager;
     };

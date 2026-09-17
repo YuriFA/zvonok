@@ -1,9 +1,9 @@
-import { CaptureState } from "@zvonok/client/media/capture-state";
 import { act, renderHook } from "@testing-library/react";
+import { CaptureState } from "@zvonok/client/media/capture-state";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ToggleControl } from "../hooks/use-zvonok-call.js";
 import { useMediaControls } from "../components/media-controls/media-controls.js";
+import type { ToggleControl } from "../hooks/use-zvonok-call.js";
 
 function control(overrides: Partial<ToggleControl> = {}): ToggleControl {
   return {

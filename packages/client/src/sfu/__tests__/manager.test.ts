@@ -145,6 +145,11 @@ vi.mock("socket.io-client", () => ({
   io: vi.fn(() => testContext.mockSocket),
 }));
 
+function invokeAck(call: readonly unknown[] | undefined, payload: unknown): void {
+  const ack = call?.[2] as (ack: unknown) => void;
+  ack(payload);
+}
+
 vi.mock("mediasoup-client", () => ({
   Device: class MockDevice {
     load = testContext.mockDeviceLoad;
@@ -198,12 +203,8 @@ describe("SfuManager", () => {
       });
     });
 
-    expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
-      "sfu:create-send-transport",
-    );
-    expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
-      "sfu:create-recv-transport",
-    );
+    expect(testContext.mockSocket.emit).toHaveBeenCalledWith("sfu:create-send-transport");
+    expect(testContext.mockSocket.emit).toHaveBeenCalledWith("sfu:create-recv-transport");
     expect(stateCallback).toHaveBeenCalledWith(
       expect.objectContaining({
         connectionState: "connected",
@@ -261,12 +262,9 @@ describe("SfuManager", () => {
       kind: "video",
       rtpParameters: { codecs: [] },
     });
-    expect(testContext.mockSocket.emit).toHaveBeenCalledWith(
-      "sfu:resume-consumer",
-      {
-        consumerId: "consumer-1",
-      },
-    );
+    expect(testContext.mockSocket.emit).toHaveBeenCalledWith("sfu:resume-consumer", {
+      consumerId: "consumer-1",
+    });
     expect(onTrack).toHaveBeenCalledWith(
       testContext.mockConsumerTrack,
       "video",
@@ -416,11 +414,8 @@ describe("SfuManager", () => {
     });
     await manager.produce({ kind: "video" } as MediaStreamTrack);
 
-    const { promise: firstSwap, resolve: releaseFirst } =
-      Promise.withResolvers<void>();
-    testContext.mockProducer.replaceTrack.mockImplementationOnce(
-      () => firstSwap,
-    );
+    const { promise: firstSwap, resolve: releaseFirst } = Promise.withResolvers<void>();
+    testContext.mockProducer.replaceTrack.mockImplementationOnce(() => firstSwap);
 
     const firstTrack = { kind: "video" } as MediaStreamTrack;
     const secondTrack = { kind: "video" } as MediaStreamTrack;
@@ -729,9 +724,7 @@ describe("SfuManager", () => {
         id: "screen-consumer",
         producerId: "screen-producer",
       };
-      testContext.mockRecvTransport.consume.mockResolvedValueOnce(
-        screenConsumer,
-      );
+      testContext.mockRecvTransport.consume.mockResolvedValueOnce(screenConsumer);
 
       await testContext.emitSocketEvent("sfu:new-producer", {
         producerId: "screen-producer",
@@ -777,9 +770,7 @@ describe("SfuManager", () => {
     it("returns undefined when no video consumer exists for the peer", async () => {
       await setupWithRecvTransport();
 
-      expect(
-        manager.getVideoConsumerIdForUserId("user-unknown"),
-      ).toBeUndefined();
+      expect(manager.getVideoConsumerIdForUserId("user-unknown")).toBeUndefined();
     });
   });
 
@@ -814,7 +805,7 @@ describe("SfuManager", () => {
         (args) => args[0] === "egress:start",
       );
       expect(call?.[1]).toEqual({ record: true, hls: false });
-      (call?.[2] as (ack: unknown) => void)({ ok: true });
+      invokeAck(call, { ok: true });
 
       await expect(promise).resolves.toBeUndefined();
     });
@@ -826,7 +817,7 @@ describe("SfuManager", () => {
       const call = testContext.mockSocket.emit.mock.calls.find(
         (args) => args[0] === "egress:start",
       );
-      (call?.[2] as (ack: unknown) => void)({
+      invokeAck(call, {
         ok: false,
         code: "MISSING_CAPABILITY",
         message: "Missing start-broadcast capability",
@@ -851,10 +842,8 @@ describe("SfuManager", () => {
       manager.connect();
 
       const promise = manager.stopEgress();
-      const call = testContext.mockSocket.emit.mock.calls.find(
-        (args) => args[0] === "egress:stop",
-      );
-      (call?.[2] as (ack: unknown) => void)({ ok: true });
+      const call = testContext.mockSocket.emit.mock.calls.find((args) => args[0] === "egress:stop");
+      invokeAck(call, { ok: true });
 
       await expect(promise).resolves.toBeUndefined();
     });
@@ -991,11 +980,9 @@ describe("SfuManager", () => {
       // No further recovery: a late connect must not replay a join.
       testContext.mockSocket.emit.mockClear();
       await testContext.emitSocketEvent("connect");
-      expect(
-        testContext.mockSocket.emit.mock.calls.some(
-          (args) => args[0] === "sfu:join",
-        ),
-      ).toBe(false);
+      expect(testContext.mockSocket.emit.mock.calls.some((args) => args[0] === "sfu:join")).toBe(
+        false,
+      );
     });
 
     it("gives up recovery when rejoins exceed the sliding-window limit", async () => {
@@ -1077,11 +1064,9 @@ describe("SfuManager", () => {
       testContext.mockSocket.emit.mockClear();
       await testContext.emitSocketEvent("connect");
 
-      expect(
-        testContext.mockSocket.emit.mock.calls.some(
-          (args) => args[0] === "sfu:join",
-        ),
-      ).toBe(false);
+      expect(testContext.mockSocket.emit.mock.calls.some((args) => args[0] === "sfu:join")).toBe(
+        false,
+      );
       expect(manager.getState().connectionState).toBe("connected");
     });
   });
@@ -1115,7 +1100,7 @@ describe("SfuManager", () => {
         topic: "reactions",
         payload: { emoji: "wave" },
       });
-      (call?.[2] as (ack: unknown) => void)({ ok: true });
+      invokeAck(call, { ok: true });
 
       await expect(promise).resolves.toBeUndefined();
     });
@@ -1127,7 +1112,7 @@ describe("SfuManager", () => {
       const call = testContext.mockSocket.emit.mock.calls.find(
         (args) => args[0] === "sfu:broadcast",
       );
-      (call?.[2] as (ack: unknown) => void)({
+      invokeAck(call, {
         ok: false,
         code: "PAYLOAD_TOO_LARGE",
         message: "payload must serialize to at most 8192 bytes",
@@ -1149,12 +1134,10 @@ describe("SfuManager", () => {
     });
 
     it("rejects immediately when disconnected", async () => {
-      await expect(manager.sendBroadcast("reactions", 1)).rejects.toMatchObject(
-        {
-          name: "SfuBroadcastError",
-          code: "DISCONNECTED",
-        },
-      );
+      await expect(manager.sendBroadcast("reactions", 1)).rejects.toMatchObject({
+        name: "SfuBroadcastError",
+        code: "DISCONNECTED",
+      });
     });
   });
 });
@@ -1231,10 +1214,7 @@ describe("SfuManager room media reset", () => {
     });
 
     // No new join round-trip: presence and room lifetime are untouched.
-    expect(testContext.mockSocket.emit).not.toHaveBeenCalledWith(
-      "sfu:join",
-      expect.anything(),
-    );
+    expect(testContext.mockSocket.emit).not.toHaveBeenCalledWith("sfu:join", expect.anything());
     // Both transports re-created against the replacement router.
     expect(testContext.mockCreateSendTransport).toHaveBeenCalledTimes(2);
     expect(testContext.mockCreateRecvTransport).toHaveBeenCalledTimes(2);
@@ -1242,9 +1222,7 @@ describe("SfuManager room media reset", () => {
     await waitFor(() => {
       expect(testContext.mockSendTransport.produce).toHaveBeenCalledTimes(2);
     });
-    expect(onMediaReset).toHaveBeenCalledWith(
-      expect.objectContaining({ roomId: "room-1" }),
-    );
+    expect(onMediaReset).toHaveBeenCalledWith(expect.objectContaining({ roomId: "room-1" }));
   });
 
   it("ignores a reset that arrives before a session is established", async () => {

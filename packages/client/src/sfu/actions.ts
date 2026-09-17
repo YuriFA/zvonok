@@ -15,12 +15,7 @@ import type {
   SfuGuestJoinRequestPayload,
   SfuState,
 } from "./types.js";
-
-import {
-  SfuHostActionError,
-  SfuEgressActionError,
-  SfuBroadcastError,
-} from "./types.js";
+import { SfuHostActionError, SfuEgressActionError, SfuBroadcastError } from "./types.js";
 
 /** How the unit reaches the socket and the shared manager state. */
 export interface SfuActionsHost {
@@ -31,19 +26,14 @@ export interface SfuActionsHost {
 export class SfuActions {
   private readonly host: SfuActionsHost;
   private broadcastCallbacks = new Set<(message: SfuBroadcastMessage) => void>();
-  private guestJoinRequestCallbacks = new Set<
-    (payload: SfuGuestJoinRequestPayload) => void
-  >();
+  private guestJoinRequestCallbacks = new Set<(payload: SfuGuestJoinRequestPayload) => void>();
 
   constructor(host: SfuActionsHost) {
     this.host = host;
   }
 
   // ISfuHostControls
-  mutePeer(
-    userId: string,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  mutePeer(userId: string, options?: { timeoutMs?: number }): Promise<void> {
     return this.emitHostAction("sfu:mute-peer", { userId }, options?.timeoutMs);
   }
 
@@ -51,17 +41,11 @@ export class SfuActions {
     return this.emitHostAction("sfu:mute-all", {}, options?.timeoutMs);
   }
 
-  lockRoom(
-    locked: boolean,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  lockRoom(locked: boolean, options?: { timeoutMs?: number }): Promise<void> {
     return this.emitHostAction("sfu:lock-room", { locked }, options?.timeoutMs);
   }
 
-  kickPeer(
-    userId: string,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  kickPeer(userId: string, options?: { timeoutMs?: number }): Promise<void> {
     return this.emitHostAction("sfu:kick-peer", { userId }, options?.timeoutMs);
   }
 
@@ -82,10 +66,7 @@ export class SfuActions {
     const socket = this.host.getSocket();
     if (!socket) {
       return Promise.reject(
-        new SfuHostActionError(
-          "DISCONNECTED",
-          "Join the room before using host controls",
-        ),
+        new SfuHostActionError("DISCONNECTED", "Join the room before using host controls"),
       );
     }
 
@@ -121,10 +102,7 @@ export class SfuActions {
   }
 
   // Egress control (client-initiated sessions; RTMP stays server-side)
-  startEgress(
-    outputs: SfuEgressOutputRequest,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  startEgress(outputs: SfuEgressOutputRequest, options?: { timeoutMs?: number }): Promise<void> {
     return this.emitEgressAction(
       "egress:start",
       { record: outputs.record === true, hls: outputs.hls === true },
@@ -151,10 +129,7 @@ export class SfuActions {
     const socket = this.host.getSocket();
     if (!socket) {
       return Promise.reject(
-        new SfuEgressActionError(
-          "DISCONNECTED",
-          "Join the room before controlling egress",
-        ),
+        new SfuEgressActionError("DISCONNECTED", "Join the room before controlling egress"),
       );
     }
 
@@ -190,18 +165,11 @@ export class SfuActions {
   }
 
   // Data channel (ephemeral topic-scoped broadcasts)
-  sendBroadcast(
-    topic: string,
-    payload: unknown,
-    options?: { timeoutMs?: number },
-  ): Promise<void> {
+  sendBroadcast(topic: string, payload: unknown, options?: { timeoutMs?: number }): Promise<void> {
     const socket = this.host.getSocket();
     if (!socket) {
       return Promise.reject(
-        new SfuBroadcastError(
-          "DISCONNECTED",
-          "Join the room before broadcasting",
-        ),
+        new SfuBroadcastError("DISCONNECTED", "Join the room before broadcasting"),
       );
     }
 
@@ -257,9 +225,7 @@ export class SfuActions {
     this.host.updateState({ egress: payload });
   }
 
-  onGuestJoinRequest(
-    callback: (payload: SfuGuestJoinRequestPayload) => void,
-  ): () => void {
+  onGuestJoinRequest(callback: (payload: SfuGuestJoinRequestPayload) => void): () => void {
     this.guestJoinRequestCallbacks.add(callback);
     return () => this.guestJoinRequestCallbacks.delete(callback);
   }
