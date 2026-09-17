@@ -13,11 +13,11 @@ import "../css/embedded.css";
 import { useCallback, useEffect, useState } from "react";
 
 import { hasCapabilities, usePrejoin } from "../index.js";
-import { ControlBarPreset } from "../prebuilt/control-bar.js";
-import { DeviceSwitcherPreset } from "../prebuilt/device-switcher-preset.js";
-import { ParticipantsPanelPreset } from "../prebuilt/participants-panel-preset.js";
-import { StagePreset } from "../prebuilt/stage.js";
-import { StatusCardsPreset, useRoomStatus } from "../prebuilt/status-cards.js";
+import { ControlBarPreset } from "../components/control-bar/control-bar.js";
+import { DeviceSwitcherPreset } from "../components/device-switcher/device-switcher-preset.js";
+import { ParticipantsPanelPreset } from "../components/participants-panel/participants-panel-preset.js";
+import { StagePreset } from "../components/stage/stage.js";
+import { StatusCardsPreset, useRoomStatus } from "../components/status-cards/status-cards.js";
 import { useDeviceControls } from "../hooks/use-device-controls.js";
 import { useEgressControls } from "../hooks/use-egress-controls.js";
 import { useEgressState } from "../hooks/use-egress-state.js";

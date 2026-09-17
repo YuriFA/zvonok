@@ -3,7 +3,7 @@
  * Persistence and permissions come from useDeviceControls.
  */
 
-import type { UseDeviceControlsResult } from "../hooks/use-device-controls.js";
+import type { UseDeviceControlsResult } from "../../hooks/use-device-controls.js";
 import { useDeviceSwitcher } from "./device-switcher.js";
 
 export interface DeviceSwitcherPresetProps {

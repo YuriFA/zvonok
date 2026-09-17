@@ -1,11 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { UseScreenShareResult } from "../../hooks/use-screen-share.js";
-import type { UseZvonokCallResult } from "../../hooks/use-zvonok-call.js";
-import { useStage } from "../stage.js";
+import type { UseScreenShareResult } from "../hooks/use-screen-share.js";
+import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
+import { useStage } from "../components/stage/stage.js";
 // Side-effect import: stubs MediaStream for jsdom.
-import "../../__tests__/doubles.js";
+import "./doubles.js";
 
 function remote(userId: string, overrides: Record<string, unknown> = {}) {
   return {

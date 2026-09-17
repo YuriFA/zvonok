@@ -163,3 +163,55 @@ export {
   type ZvonokServerJoinErrorCode,
 } from "./errors.js";
 export type { ZvonokParticipant, ZvonokStatus } from "./types.js";
+
+// Composition blocks (one folder per block: behavior core + preset variant).
+export {
+  useMediaControls,
+  MediaControlButton,
+  MediaControlsPreset,
+  type MediaControls,
+  type UseMediaControlsOptions,
+  type MediaControlButtonProps,
+  type MediaControlsPresetProps,
+} from "./components/media-controls/media-controls.js";
+export {
+  useParticipantsPanel,
+  type PanelParticipant,
+  type PanelNotice,
+  type PanelNoticeKey,
+  type ParticipantsPanel,
+  type UseParticipantsPanelOptions,
+} from "./components/participants-panel/participants-panel.js";
+export {
+  ParticipantsPanelPreset,
+  type ParticipantsPanelPresetProps,
+} from "./components/participants-panel/participants-panel-preset.js";
+export {
+  useDeviceSwitcher,
+  type DeviceSwitcher,
+  type UseDeviceSwitcherOptions,
+} from "./components/device-switcher/device-switcher.js";
+export {
+  DeviceSwitcherPreset,
+  type DeviceSwitcherPresetProps,
+} from "./components/device-switcher/device-switcher-preset.js";
+export {
+  useRoomStatus,
+  StatusCardsPreset,
+  type RoomStatus,
+  type UseRoomStatusOptions,
+  type StatusCardsPresetProps,
+} from "./components/status-cards/status-cards.js";
+export {
+  useStage,
+  useStageSize,
+  StagePreset,
+  type Stage,
+  type StageTile,
+  type UseStageOptions,
+  type StagePresetProps,
+} from "./components/stage/stage.js";
+export {
+  ControlBarPreset,
+  type ControlBarPresetProps,
+} from "./components/control-bar/control-bar.js";

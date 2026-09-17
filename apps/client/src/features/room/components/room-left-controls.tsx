@@ -1,4 +1,4 @@
-import { useMediaControls } from "@zvonok/react/prebuilt";
+import { useMediaControls } from "@zvonok/react";
 import { AlertTriangle, Loader2, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

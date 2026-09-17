@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import * as prebuilt from "../index.js";
+import * as entry from "../index.js";
 
-describe("prebuilt entry", () => {
-  it("exposes the block cores and presets", () => {
-    expect(Object.keys(prebuilt).sort()).toEqual(
-      [
+describe("block exports", () => {
+  it("exposes the block cores and presets from the package entry", () => {
+    expect(Object.keys(entry)).toEqual(
+      expect.arrayContaining([
         "ControlBarPreset",
         "DeviceSwitcherPreset",
         "MediaControlButton",
@@ -19,7 +19,7 @@ describe("prebuilt entry", () => {
         "useRoomStatus",
         "useStage",
         "useStageSize",
-      ].sort(),
+      ]),
     );
   });
 });

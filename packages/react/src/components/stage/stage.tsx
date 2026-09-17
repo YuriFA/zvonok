@@ -11,7 +11,7 @@ import {
   useRoomLayout,
   type UseScreenShareResult,
   type UseZvonokCallResult,
-} from "../index.js";
+} from "../../index.js";
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export interface StageTile {

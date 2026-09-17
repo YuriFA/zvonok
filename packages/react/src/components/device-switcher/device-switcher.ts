@@ -5,11 +5,11 @@
  * shapes them for a UI.
  */
 
-import type { DevicePermissionState } from "../hooks/use-device-permissions.js";
+import type { DevicePermissionState } from "../../hooks/use-device-permissions.js";
 import type {
   DeviceSelection,
   UseDeviceControlsResult,
-} from "../hooks/use-device-controls.js";
+} from "../../hooks/use-device-controls.js";
 import { useMemo } from "react";
 
 export interface UseDeviceSwitcherOptions {

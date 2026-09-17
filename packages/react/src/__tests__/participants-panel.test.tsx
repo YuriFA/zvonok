@@ -1,8 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { UseZvonokCallResult } from "../../hooks/use-zvonok-call.js";
-import { useParticipantsPanel, type PanelParticipant } from "../participants-panel.js";
+import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
+import { useParticipantsPanel, type PanelParticipant } from "../components/participants-panel/participants-panel.js";
 
 function participant(overrides: Partial<PanelParticipant> = {}): PanelParticipant {
   return {

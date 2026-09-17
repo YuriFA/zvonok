@@ -6,7 +6,7 @@
 
 import type { SfuConnectionState } from "@zvonok/client/sfu/types";
 
-import type { UseZvonokCallResult, UseZvonokConnectionResult } from "../index.js";
+import type { UseZvonokCallResult, UseZvonokConnectionResult } from "../../index.js";
 import { useMemo } from "react";
 
 export interface UseRoomStatusOptions {

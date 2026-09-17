@@ -8,8 +8,8 @@
 import type { QualityScore, QualityStats } from "@zvonok/client/sfu/types";
 import type { SfuGuestJoinRequestPayload } from "@zvonok/client/sfu/types";
 
-import { hasCapabilities } from "../wrappers/capability-gate.js";
-import type { UseZvonokCallResult } from "../hooks/use-zvonok-call.js";
+import { hasCapabilities } from "../../wrappers/capability-gate.js";
+import type { UseZvonokCallResult } from "../../hooks/use-zvonok-call.js";
 import { useCallback, useMemo } from "react";
 
 /** The projection a panel renders per participant. */

@@ -8,10 +8,10 @@ import {
   mapScreenShareError,
   type UseScreenShareResult,
   type UseZvonokCallResult,
-} from "../index.js";
+} from "../../index.js";
 import { useCallback } from "react";
 
-import { MediaControlButton, useMediaControls } from "./media-controls.js";
+import { MediaControlButton, useMediaControls } from "../media-controls/media-controls.js";
 
 export interface ControlBarPresetProps {
   call: UseZvonokCallResult;

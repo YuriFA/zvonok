@@ -21,11 +21,7 @@
       "default": "./src/embedded/ZvonokEmbeddedRoom.tsx"
     },
     "./css/component-kit.css": "./src/css/component-kit.css",
-    "./css/embedded.css": "./src/css/embedded.css",
-    "./prebuilt": {
-      "types": "./src/prebuilt/index.ts",
-      "default": "./src/prebuilt/index.ts"
-    }
+    "./css/embedded.css": "./src/css/embedded.css"
   },
   "publishConfig": {
     "access": "public",

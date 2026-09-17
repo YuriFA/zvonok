@@ -5,8 +5,8 @@
 
 ## 2. React package: blocks into components/
 
-- [ ] 2.1 Move each `prebuilt/` block into its own folder `src/components/<block>/` (behavior core + `-preset` together): `control-bar`, `media-controls`, `participants-panel`, `device-switcher`, `stage`, `status-cards`; delete `prebuilt/index.ts`; update `src/index.ts` to export the same public names from the new paths; `@zvonok/react/prebuilt` export surface either kept as a subpath re-export or removed together with app updates in the same commit
-- [ ] 2.2 Embedded room imports and package tests updated to `components/<block>/` paths; grep shows no `prebuilt/` references left in `packages/react`
+- [x] 2.1 Move each `prebuilt/` block into its own folder `src/components/<block>/` (behavior core + `-preset` together): `control-bar`, `media-controls`, `participants-panel`, `device-switcher`, `stage`, `status-cards`; delete `prebuilt/index.ts`; update `src/index.ts` to export the same public names from the new paths; `@zvonok/react/prebuilt` export surface either kept as a subpath re-export or removed together with app updates in the same commit
+- [x] 2.2 Embedded room imports and package tests updated to `components/<block>/` paths; grep shows no `prebuilt/` references left in `packages/react`
 - [ ] 2.3 Split `embedded/ZvonokEmbeddedRoom.tsx`: extract `PreJoinCard` and the failure/status card compositions into `embedded/` files; the room file remains the composer; embedded tests still green; `@zvonok/react/embedded` entry and props unchanged
 
 ## 3. React package: stylesheets

@@ -1,5 +1,10 @@
-import { mapScreenShareError, useScreenShare } from "@zvonok/react";
-import { useParticipantsPanel, useStage, type PanelNotice } from "@zvonok/react/prebuilt";
+import {
+  mapScreenShareError,
+  useParticipantsPanel,
+  useScreenShare,
+  useStage,
+  type PanelNotice,
+} from "@zvonok/react";
 import { Lock, LockOpen, MessageSquare, MicOff, Users } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
