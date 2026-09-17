@@ -28,8 +28,9 @@ import { useZvonokCall } from "../hooks/use-zvonok-call.js";
 import {
   useZvonokConnection,
 } from "../hooks/use-zvonok-connection.js";
-import { ZvonokError } from "../errors.js";
 import { ZvonokProvider } from "../contexts/zvonok-context.js";
+import { JoinErrorCard } from "./join-error-card.js";
+import { PreJoinCard } from "./prejoin-card.js";
 
 export interface ZvonokEmbeddedRoomProps {
   /** Base URL of the Zvonok server, e.g. "https://sfu.example.com". */
@@ -63,101 +64,6 @@ export interface ZvonokEmbeddedRoomProps {
   children?: React.ReactNode;
   /** Extra class for the room root, composed with the `zk` namespace. */
   className?: string;
-}
-
-interface PreJoinCardProps {
-  showNameInput: boolean;
-  name: string;
-  micOn: boolean;
-  cameraOn: boolean;
-  onNameChange: (name: string) => void;
-  onToggleMic: () => void;
-  onToggleCamera: () => void;
-  onJoin: () => void;
-}
-
-function PreJoinCard({
-  showNameInput,
-  name,
-  micOn,
-  cameraOn,
-  onNameChange,
-  onToggleMic,
-  onToggleCamera,
-  onJoin,
-}: PreJoinCardProps) {
-  return (
-    <div className="zk zk-room zk-prejoin">
-      <form
-        className="zk-card"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onJoin();
-        }}
-      >
-        <h1 className="zk-title">Join room</h1>
-        {showNameInput && (
-          <label className="zk-field">
-            <span>Display name</span>
-            <input
-              className="zk-input"
-              name="displayName"
-              placeholder="Your name"
-              value={name}
-              onChange={(event) => onNameChange(event.target.value)}
-            />
-          </label>
-        )}
-        <div className="zk-toggle-row">
-          <button
-            type="button"
-            className={micOn ? "zk-button" : "zk-button zk-button-off"}
-            aria-pressed={micOn}
-            onClick={onToggleMic}
-          >
-            Mic
-          </button>
-          <button
-            type="button"
-            className={cameraOn ? "zk-button" : "zk-button zk-button-off"}
-            aria-pressed={cameraOn}
-            onClick={onToggleCamera}
-          >
-            Camera
-          </button>
-        </div>
-        <button type="submit" className="zk-button zk-button-join">
-          Join
-        </button>
-      </form>
-    </div>
-  );
-}
-
-interface JoinErrorCardProps {
-  error: Error;
-  onBack: () => void;
-}
-
-/**
- * Typed join failures surface here instead of a blank room. The error is
- * always a ZvonokError subclass by the time status is "error", but the
- * card degrades gracefully for anything else.
- */
-function JoinErrorCard({ error, onBack }: JoinErrorCardProps) {
-  const code = error instanceof ZvonokError ? error.code : null;
-  return (
-    <div className="zk zk-room zk-error" role="alert">
-      <div className="zk-error-card">
-        <h1 className="zk-title">Could not join the room</h1>
-        {code && <span className="zk-error-code">{code}</span>}
-        <p className="zk-error-message">{error.message}</p>
-        <button type="button" className="zk-button" onClick={onBack}>
-          Back
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function EmbeddedRoomSurface({
