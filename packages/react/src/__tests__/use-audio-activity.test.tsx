@@ -8,8 +8,8 @@ import {
   AudioActivityEngine,
   useActiveSpeaker,
   useAudioLevels,
-} from "../use-audio-activity.js";
-import { ZvonokProvider, useZvonokSession } from "../zvonok-context.js";
+} from "../hooks/use-audio-activity.js";
+import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 /** Scriptable stand-in for AudioLevelSampler's engine-facing surface. */

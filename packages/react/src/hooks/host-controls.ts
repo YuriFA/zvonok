@@ -8,7 +8,7 @@
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { SfuHostActionError } from "@zvonok/client/sfu/types";
 
-import { ZvonokHostError } from "./errors.js";
+import { ZvonokHostError } from "../errors.js";
 
 export interface HostControls {
   mutePeer(userId: string): Promise<void>;

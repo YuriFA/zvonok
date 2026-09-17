@@ -7,7 +7,7 @@ import {
   LAYER_SWITCH_DEBOUNCE_MS,
   PeerQualityEngine,
   STATS_INTERVAL_MS,
-} from "../peer-quality-engine.js";
+} from "../core/peer-quality-engine.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function createQualityStats(userId: string, level: QualityLevel): PeerQualityStats {

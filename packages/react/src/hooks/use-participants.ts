@@ -7,9 +7,9 @@
 import { useEffect, useMemo } from "react";
 
 import { EMPTY_ROOM_STATE, RoomTracker, type RoomTrackerState } from "./room-tracker.js";
-import type { ZvonokParticipant } from "./types.js";
+import type { ZvonokParticipant } from "../types.js";
 import { useStoreSelector } from "./use-store-selector.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export interface UseParticipantsResult {
   participants: ZvonokParticipant[];

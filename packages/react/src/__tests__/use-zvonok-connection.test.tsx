@@ -2,8 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ZvonokJoinError } from "../errors.js";
-import { useZvonokConnection } from "../use-zvonok-connection.js";
-import { ZvonokProvider } from "../zvonok-context.js";
+import { useZvonokConnection } from "../hooks/use-zvonok-connection.js";
+import { ZvonokProvider } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, createTrack, tokenFor } from "./doubles.js";
 
 const sfuHarness = vi.hoisted(() => ({

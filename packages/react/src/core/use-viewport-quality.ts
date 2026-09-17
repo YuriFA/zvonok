@@ -9,7 +9,7 @@
 
 import { useEffect, type RefObject } from "react";
 
-import { usePeerQualityContext } from "./peer-quality-context.js";
+import { usePeerQualityContext } from "../contexts/peer-quality-context.js";
 
 /** A tile counts as visible once this fraction of it enters the viewport. */
 const INTERSECTION_THRESHOLD = 0.25;

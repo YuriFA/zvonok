@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 
 import type { CapabilityId } from "@zvonok/client/sfu/types";
 
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export function useOwnCapabilities(): CapabilityId[] {
   const session = useZvonokSession();

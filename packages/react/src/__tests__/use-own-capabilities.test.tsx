@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { useOwnCapabilities } from "../use-own-capabilities.js";
+import { useOwnCapabilities } from "../hooks/use-own-capabilities.js";
 import {
   ZvonokProvider,
   useZvonokSession,
   type ZvonokSession,
-} from "../zvonok-context.js";
+} from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {

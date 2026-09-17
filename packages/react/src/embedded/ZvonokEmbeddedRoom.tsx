@@ -18,18 +18,18 @@ import { DeviceSwitcherPreset } from "../prebuilt/device-switcher-preset.js";
 import { ParticipantsPanelPreset } from "../prebuilt/participants-panel-preset.js";
 import { StagePreset } from "../prebuilt/stage.js";
 import { StatusCardsPreset, useRoomStatus } from "../prebuilt/status-cards.js";
-import { useDeviceControls } from "../use-device-controls.js";
-import { useEgressControls } from "../use-egress-controls.js";
-import { useEgressState } from "../use-egress-state.js";
-import { useOwnCapabilities } from "../use-own-capabilities.js";
-import { useRemoteAudio } from "../use-remote-audio.js";
-import { useScreenShare } from "../use-screen-share.js";
-import { useZvonokCall } from "../use-zvonok-call.js";
+import { useDeviceControls } from "../hooks/use-device-controls.js";
+import { useEgressControls } from "../hooks/use-egress-controls.js";
+import { useEgressState } from "../hooks/use-egress-state.js";
+import { useOwnCapabilities } from "../hooks/use-own-capabilities.js";
+import { useRemoteAudio } from "../hooks/use-remote-audio.js";
+import { useScreenShare } from "../hooks/use-screen-share.js";
+import { useZvonokCall } from "../hooks/use-zvonok-call.js";
 import {
   useZvonokConnection,
-} from "../use-zvonok-connection.js";
+} from "../hooks/use-zvonok-connection.js";
 import { ZvonokError } from "../errors.js";
-import { ZvonokProvider } from "../zvonok-context.js";
+import { ZvonokProvider } from "../contexts/zvonok-context.js";
 
 export interface ZvonokEmbeddedRoomProps {
   /** Base URL of the Zvonok server, e.g. "https://sfu.example.com". */

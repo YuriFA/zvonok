@@ -10,9 +10,9 @@ import { CaptureState } from "@zvonok/client/media/capture-state";
 import {
   deriveMediaControlState,
   type MediaControlState,
-} from "../derive-media-control.js";
-import type { PublishToggleResult } from "../use-publish-controls.js";
-import type { ToggleControl } from "../use-zvonok-call.js";
+} from "../hooks/derive-media-control.js";
+import type { PublishToggleResult } from "../hooks/use-publish-controls.js";
+import type { ToggleControl } from "../hooks/use-zvonok-call.js";
 import { useCallback, useMemo } from "react";
 
 export interface UseMediaControlsOptions {

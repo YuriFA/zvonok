@@ -8,7 +8,7 @@
 import type { SfuGuestJoinRequestPayload } from "@zvonok/client/sfu/types";
 import { useCallback, useEffect, useState } from "react";
 
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export type GuestJoinRequest = SfuGuestJoinRequestPayload;
 

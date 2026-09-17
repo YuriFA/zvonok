@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 import type { SfuEgressStatusPayload } from "@zvonok/client/sfu/types";
 
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export interface UseEgressStateResult {
   /** Latest session state broadcast; null while no session was announced. */

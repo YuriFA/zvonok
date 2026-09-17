@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { useEgressState } from "../use-egress-state.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
+import { useEgressState } from "../hooks/use-egress-state.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {

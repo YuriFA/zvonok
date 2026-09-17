@@ -9,7 +9,7 @@ import { AudioLevelSampler } from "@zvonok/client/audio/audio-level-sampler";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { useEffect, useMemo } from "react";
 
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 import { useStoreSelector } from "./use-store-selector.js";
 
 const TICK_MS = 100;

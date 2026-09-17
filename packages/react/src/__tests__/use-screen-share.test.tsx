@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { ZvonokProvider, useZvonokSession } from "../zvonok-context.js";
-import { useScreenShare } from "../use-screen-share.js";
+import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
+import { useScreenShare } from "../hooks/use-screen-share.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 const serviceHarness = vi.hoisted(() => {

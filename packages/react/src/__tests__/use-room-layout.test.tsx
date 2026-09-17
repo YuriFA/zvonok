@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   useRoomLayout,
   type RoomLayoutParticipant,
-} from "../use-room-layout.js";
+} from "../hooks/use-room-layout.js";
 
 function grid(
   participants: RoomLayoutParticipant[],

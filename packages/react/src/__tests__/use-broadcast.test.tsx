@@ -6,8 +6,8 @@ import { SfuBroadcastError } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
 import { ZvonokBroadcastError } from "../errors.js";
-import { useBroadcast, useBroadcasts } from "../use-broadcast.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
+import { useBroadcast, useBroadcasts } from "../hooks/use-broadcast.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {

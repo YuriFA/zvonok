@@ -8,7 +8,7 @@
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 import type { SfuMediaSource } from "@zvonok/client/sfu/types";
 
-import type { ZvonokParticipant } from "./types.js";
+import type { ZvonokParticipant } from "../types.js";
 
 export interface RoomTrackerState {
   participants: ZvonokParticipant[];

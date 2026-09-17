@@ -1,13 +1,13 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { UseZvonokConnectionResult } from "../use-zvonok-connection.js";
+import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
 import {
   usePublishControls,
   type PublishToggleResult,
-} from "../use-publish-controls.js";
-import type { CapturePort } from "../capture-port.js";
-import { useSfuTrackSync } from "../use-sfu-track-sync.js";
+} from "../hooks/use-publish-controls.js";
+import type { CapturePort } from "../hooks/capture-port.js";
+import { useSfuTrackSync } from "../core/use-sfu-track-sync.js";
 
 // Session double for the track-sync hook; the module mock below is
 // hoisted, so the double lives here too.
@@ -19,7 +19,7 @@ const sessionDouble = vi.hoisted(() => ({
   manager: null as unknown,
 }));
 
-vi.mock("../zvonok-context.js", () => ({
+vi.mock("../contexts/zvonok-context.js", () => ({
   useZvonokSession: () => sessionDouble,
 }));
 

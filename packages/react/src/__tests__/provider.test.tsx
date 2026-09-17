@@ -13,7 +13,7 @@ vi.mock("@zvonok/client/media/manager-factory", () => ({
   },
 }));
 
-import { useZvonokSession, ZvonokProvider } from "../zvonok-context.js";
+import { useZvonokSession, ZvonokProvider } from "../contexts/zvonok-context.js";
 
 function lastMediaManager() {
   return mediaHarness.instances.at(-1) as ReturnType<typeof createMockMediaManager>;

@@ -5,8 +5,8 @@ import type { MockInstance } from "vitest";
 
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { ZvonokProvider, useZvonokSession } from "../zvonok-context.js";
-import { useRemoteAudio } from "../use-remote-audio.js";
+import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
+import { useRemoteAudio } from "../hooks/use-remote-audio.js";
 import { createMockSfuManager, createTrack, type MockSfuManager } from "./doubles.js";
 
 const mixerHarness = vi.hoisted(() => {

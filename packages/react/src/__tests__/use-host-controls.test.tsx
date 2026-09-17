@@ -6,9 +6,9 @@ import { SfuHostActionError } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
 import { ZvonokHostError } from "../errors.js";
-import type { UseHostControlsResult } from "../use-host-controls.js";
-import { useHostControls } from "../use-host-controls.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
+import type { UseHostControlsResult } from "../hooks/use-host-controls.js";
+import { useHostControls } from "../hooks/use-host-controls.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {

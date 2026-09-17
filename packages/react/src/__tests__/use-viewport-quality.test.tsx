@@ -7,10 +7,10 @@ import type { SfuManager } from "@zvonok/client/sfu/manager";
 import {
   PeerQualityProvider,
   usePeerQualityContext,
-} from "../peer-quality-context.js";
-import { LAYER_SWITCH_DEBOUNCE_MS } from "../peer-quality-engine.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
-import { useViewportQuality } from "../use-viewport-quality.js";
+} from "../contexts/peer-quality-context.js";
+import { LAYER_SWITCH_DEBOUNCE_MS } from "../core/peer-quality-engine.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
+import { useViewportQuality } from "../core/use-viewport-quality.js";
 import { createMockSfuManager, stubMatchMedia, type MockSfuManager } from "./doubles.js";
 
 type IntersectionEntry = { isIntersecting: boolean };

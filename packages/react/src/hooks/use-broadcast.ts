@@ -13,8 +13,8 @@ import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { SfuBroadcastError } from "@zvonok/client/sfu/types";
 import type { SfuBroadcastMessage } from "@zvonok/client/sfu/types";
 
-import { ZvonokBroadcastError } from "./errors.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { ZvonokBroadcastError } from "../errors.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export interface UseBroadcastResult {
   send(topic: string, payload: unknown): Promise<void>;

@@ -12,8 +12,8 @@ vi.mock("@zvonok/client/media/manager-factory", () => ({
 }));
 
 import "./doubles.js";
-import { useDevicePermissions } from "../use-device-permissions.js";
-import { ZvonokProvider } from "../zvonok-context.js";
+import { useDevicePermissions } from "../hooks/use-device-permissions.js";
+import { ZvonokProvider } from "../contexts/zvonok-context.js";
 import { createMockMediaManager } from "./doubles.js";
 
 function makeStatus(state: string): PermissionStatus {

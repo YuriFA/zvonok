@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 
 import type { IMediaDeviceService } from "@zvonok/client/media/interfaces";
 
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export type DevicePermissionState = "granted" | "denied" | "prompting" | "unknown";
 

@@ -2,10 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 import { CaptureState } from "@zvonok/client/media/capture-state";
 import { describe, expect, it, vi } from "vitest";
 
-import { CapabilitiesGate, hasCapabilities } from "../capability-gate.js";
-import { deriveMediaControlState } from "../derive-media-control.js";
-import { mapScreenShareError } from "../map-screen-share-error.js";
-import { usePrejoin } from "../use-prejoin.js";
+import { CapabilitiesGate, hasCapabilities } from "../wrappers/capability-gate.js";
+import { deriveMediaControlState } from "../hooks/derive-media-control.js";
+import { mapScreenShareError } from "../hooks/map-screen-share-error.js";
+import { usePrejoin } from "../hooks/use-prejoin.js";
 
 describe("usePrejoin", () => {
   it("confirms with the drafted name and lands on confirmed", async () => {

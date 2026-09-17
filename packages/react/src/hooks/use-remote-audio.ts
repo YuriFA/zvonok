@@ -11,7 +11,7 @@ import { AudioLevelSampler } from "@zvonok/client/audio/audio-level-sampler";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useParticipants } from "./use-participants.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 const SAMPLE_INTERVAL_MS = 250;
 const ACTIVE_SPEAKER_EVERY_N_TICKS = 2;

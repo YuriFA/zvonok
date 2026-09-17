@@ -16,7 +16,7 @@ import {
 } from "react";
 import { useSyncExternalStore } from "react";
 
-import { PeerQualityEngine, STATS_INTERVAL_MS } from "./peer-quality-engine.js";
+import { PeerQualityEngine, STATS_INTERVAL_MS } from "../core/peer-quality-engine.js";
 import { useZvonokSession } from "./zvonok-context.js";
 
 export interface PeerQualityProviderProps {

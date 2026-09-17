@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "./doubles.js";
-import { useVideoStream } from "../use-video-stream.js";
+import { useVideoStream } from "../core/use-video-stream.js";
 
 function Harness({ stream }: { stream: MediaStream | null }) {
   const ref = useRef<HTMLVideoElement>(null);

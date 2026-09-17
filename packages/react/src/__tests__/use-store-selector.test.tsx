@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { useStoreSelector, type ExternalStore } from "../use-store-selector.js";
+import { useStoreSelector, type ExternalStore } from "../hooks/use-store-selector.js";
 
 interface FakeState {
   name: string;

@@ -4,7 +4,7 @@ import {
   createMockMediaManager,
   type MockMediaManager,
 } from "./doubles.js";
-import { createMediaCapturePort } from "../capture-port.js";
+import { createMediaCapturePort } from "../hooks/capture-port.js";
 
 function liveTrack(kind: "audio" | "video"): MediaStreamTrack {
   return { kind, id: `${kind}-1`, readyState: "live" } as unknown as MediaStreamTrack;

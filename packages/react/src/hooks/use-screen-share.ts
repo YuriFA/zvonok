@@ -11,8 +11,8 @@ import {
 } from "@zvonok/client/screen-share/service";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ZvonokError } from "./errors.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { ZvonokError } from "../errors.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export interface UseScreenShareResult {
   /** True while this participant's screen is captured and published. */

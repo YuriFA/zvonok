@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 import type { PeerQualityStats, QualityLevel } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { LAYER_SWITCH_DEBOUNCE_MS } from "../peer-quality-engine.js";
+import { LAYER_SWITCH_DEBOUNCE_MS } from "../core/peer-quality-engine.js";
 import {
   PeerQualityProvider,
   usePeerQualityContext,
-} from "../peer-quality-context.js";
-import { Tile, useTileContext } from "../tile.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
+} from "../contexts/peer-quality-context.js";
+import { Tile, useTileContext } from "../core/tile.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, stubMatchMedia, type MockSfuManager } from "./doubles.js";
 
 type IntersectionEntry = { isIntersecting: boolean };

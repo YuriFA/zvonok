@@ -8,8 +8,8 @@ import { useMemo } from "react";
 
 import type { SimulcastSpatialLayer } from "@zvonok/client/sfu/types";
 
-import { ZvonokError } from "./errors.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { ZvonokError } from "../errors.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 /** Quality levels mapped onto simulcast spatial layers (0 = low, 2 = high). */
 export type ParticipantQualityLevel = "low" | "medium" | "high";

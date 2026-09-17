@@ -9,9 +9,9 @@ import { createSfuManager, type SfuManager } from "@zvonok/client/sfu/manager";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createDeferred } from "./deferred.js";
-import { ZvonokError, ZvonokJoinError } from "./errors.js";
-import type { ZvonokStatus } from "./types.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { ZvonokError, ZvonokJoinError } from "../errors.js";
+import type { ZvonokStatus } from "../types.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 const CONNECTION_TIMEOUT_MS = 10_000;
 const JOIN_TIMEOUT_MS = 10_000;

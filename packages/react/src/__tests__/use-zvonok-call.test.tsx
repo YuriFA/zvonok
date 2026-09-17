@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UseZvonokConnectionResult } from "../use-zvonok-connection.js";
+import type { UseZvonokConnectionResult } from "../hooks/use-zvonok-connection.js";
 
 import {
   createMockMediaManager,
@@ -9,11 +9,11 @@ import {
   type MockMediaManager,
   type MockSfuManager,
 } from "./doubles.js";
-import { useZvonokCall } from "../use-zvonok-call.js";
+import { useZvonokCall } from "../hooks/use-zvonok-call.js";
 
 const sessionDouble = vi.hoisted(() => ({ mediaManager: null as unknown }));
 
-vi.mock("../zvonok-context.js", () => ({
+vi.mock("../contexts/zvonok-context.js", () => ({
   useZvonokSession: () => sessionDouble,
 }));
 

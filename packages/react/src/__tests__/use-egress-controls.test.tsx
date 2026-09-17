@@ -6,8 +6,8 @@ import { SfuEgressActionError } from "@zvonok/client/sfu/types";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
 import { ZvonokEgressError } from "../errors.js";
-import { useEgressControls } from "../use-egress-controls.js";
-import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../zvonok-context.js";
+import { useEgressControls } from "../hooks/use-egress-controls.js";
+import { ZvonokProvider, useZvonokSession, type ZvonokSession } from "../contexts/zvonok-context.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {

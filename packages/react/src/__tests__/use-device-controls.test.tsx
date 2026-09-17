@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { CaptureState } from "@zvonok/client/media/capture-state";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadDeviceSelection, useDeviceControls } from "../use-device-controls.js";
+import { loadDeviceSelection, useDeviceControls } from "../hooks/use-device-controls.js";
 import { createMockMediaManager, type MockMediaManager } from "./doubles.js";
 
 const mediaHarness = vi.hoisted(() => ({
@@ -25,7 +25,7 @@ vi.mock("@zvonok/client/media/manager-factory", () => ({
   },
 }));
 
-import { ZvonokProvider } from "../zvonok-context.js";
+import { ZvonokProvider } from "../contexts/zvonok-context.js";
 
 function Provider({ children }: { children: React.ReactNode }) {
   return <ZvonokProvider serverUrl="https://sfu.test">{children}</ZvonokProvider>;

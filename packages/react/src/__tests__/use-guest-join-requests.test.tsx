@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 
-import { ZvonokProvider, useZvonokSession } from "../zvonok-context.js";
-import { useGuestJoinRequests } from "../use-guest-join-requests.js";
+import { ZvonokProvider, useZvonokSession } from "../contexts/zvonok-context.js";
+import { useGuestJoinRequests } from "../hooks/use-guest-join-requests.js";
 import { createMockSfuManager, type MockSfuManager } from "./doubles.js";
 
 function Provider({ children }: { children: ReactNode }) {

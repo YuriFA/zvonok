@@ -9,7 +9,7 @@ import type { IMediaManager } from "@zvonok/client/media/interfaces";
 import type { SfuManager } from "@zvonok/client/sfu/manager";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { ZvonokStatus } from "./types.js";
+import type { ZvonokStatus } from "../types.js";
 
 export interface ZvonokSessionState {
   manager: SfuManager | null;

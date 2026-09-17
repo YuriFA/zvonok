@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { RoomTracker } from "../room-tracker.js";
+import { RoomTracker } from "../hooks/room-tracker.js";
 
 type Listener = (...args: unknown[]) => void;
 

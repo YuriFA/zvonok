@@ -13,8 +13,8 @@ import {
   type SfuEgressOutputRequest,
 } from "@zvonok/client/sfu/types";
 
-import { ZvonokEgressError } from "./errors.js";
-import { useZvonokSession } from "./zvonok-context.js";
+import { ZvonokEgressError } from "../errors.js";
+import { useZvonokSession } from "../contexts/zvonok-context.js";
 
 export interface UseEgressControlsResult {
   start(outputs: SfuEgressOutputRequest): Promise<void>;
