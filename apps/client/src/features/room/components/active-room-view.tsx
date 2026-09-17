@@ -1,6 +1,7 @@
-import { hasCapabilities, mapScreenShareError, useRoomLayout, useScreenShare } from "@zvonok/react";
+import { mapScreenShareError, useScreenShare } from "@zvonok/react";
+import { useParticipantsPanel, useStage, type PanelNotice } from "@zvonok/react/prebuilt";
 import { Lock, LockOpen, MessageSquare, MicOff, Users } from "lucide-react";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { ParticipantsList } from "@/components/room/participants-list";
@@ -19,24 +20,13 @@ import { useElementSize } from "@/hooks/use-element-size";
 import { useGuestRequests } from "../contexts/guest-requests.context";
 import { useActiveSpeakerId } from "../contexts/room-audio.context";
 import { useRoomIdentity } from "../contexts/room-identity.context";
-import { useRoomSessionActions, useRoomSessionState } from "../contexts/room-session.context";
+import { useRoomSession, useRoomToggles } from "../contexts/room-session.context";
 import type { Room } from "../types/room.types";
 import { AsidePanel, AsidePanelContainer, AsidePanelHeader } from "./aside-panel";
 import { RoomLeftControls } from "./room-left-controls";
 import { RoomRightControls } from "./room-right-controls";
 
-interface ActiveScreenShare {
-  userId: string;
-  sharerName: string;
-  stream: MediaStream;
-  isLocal: boolean;
-}
-
-interface ActiveRoomViewProps {
-  room: Room;
-}
-
-export function ActiveRoomView({ room }: ActiveRoomViewProps) {
+export function ActiveRoomView({ room }: { room: Room }) {
   const { userId: currentUserId } = useRoomIdentity();
 
   return (
@@ -49,18 +39,11 @@ export function ActiveRoomView({ room }: ActiveRoomViewProps) {
 function ActiveRoomViewContent({ room }: { room: Room }) {
   const { userId: currentUserId, displayName: currentUsername } = useRoomIdentity();
   const chat = useChatContext();
-  const {
-    localVideoStream,
-    localAudioStream,
-    camera,
-    microphone,
-    remotePeers,
-    localUserId,
-    participants,
-    isRoomLocked,
-    capabilities,
-  } = useRoomSessionState();
-  const { toggleVideo, toggleAudio, kickPeer, hostControls } = useRoomSessionActions();
+  const call = useRoomSession();
+  const { toggleVideo, toggleAudio } = useRoomToggles();
+  const { localVideoStream, localAudioStream, participants, localUserId, isRoomLocked } = call;
+  // The call projection lists the local participant first.
+  const remotePeers = participants.slice(1);
 
   const { ref: containerRef, size: dimensions } = useElementSize<HTMLDivElement>();
 
@@ -79,55 +62,23 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     typeof navigator.mediaDevices?.getDisplayMedia === "function";
 
   // Stage arrangement: the package derivation orders local-first, picks
-  // the spotlight sharer, and computes rects. It memoizes on arrangement
-  // semantics, so unrelated participant churn keeps tile references stable.
-  const layout = useRoomLayout({
-    participants: useMemo(
-      () => [
-        {
-          userId: localUserId,
-          isLocal: true,
-          isScreenSharing: isSharing && screenStream !== null,
-        },
-        ...remotePeers.map((peer) => ({
-          userId: peer.userId,
-          isScreenSharing: peer.isScreenSharing && peer.screenStream !== null,
-        })),
-      ],
-      [localUserId, isSharing, screenStream, remotePeers],
-    ),
-    containerWidth: dimensions.width,
-    containerHeight: dimensions.height,
+  // the spotlight sharer, and computes rects. Tile styles stay stable
+  // across unrelated participant churn, so memoized tiles bail out.
+  const { tiles, spotlight } = useStage({
+    call,
+    screenShare: {
+      sharing: isSharing,
+      screenStream,
+      blocked: isScreenShareBlocked,
+      start: startScreenShare,
+      stop: stopScreenShare,
+    },
+    width: dimensions.width,
+    height: dimensions.height,
+    localName: currentUsername ?? "You",
   });
-  const isSpotlightMode = layout.spotlight !== null;
+  const isSpotlightMode = spotlight !== null;
 
-  // Active screen share payload for the spotlight selected above.
-  const activeScreenShare = useMemo((): ActiveScreenShare | null => {
-    if (layout.spotlight === null) {
-      return null;
-    }
-    if (layout.spotlight.userId === localUserId) {
-      if (!screenStream) {
-        return null;
-      }
-      return {
-        userId: localUserId,
-        sharerName: currentUsername ?? "You",
-        stream: screenStream,
-        isLocal: true,
-      };
-    }
-    const remotePeer = remotePeers.find((peer) => peer.userId === layout.spotlight?.userId);
-    if (remotePeer?.screenStream) {
-      return {
-        userId: remotePeer.userId,
-        sharerName: remotePeer.displayName,
-        stream: remotePeer.screenStream,
-        isLocal: false,
-      };
-    }
-    return null;
-  }, [layout.spotlight, localUserId, currentUsername, screenStream, remotePeers]);
   const activeSpeakerId = useActiveSpeakerId();
 
   const recorder = useCallRecording({
@@ -138,12 +89,12 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     localAudioStream,
     remotePeers,
     activeScreenShare:
-      activeScreenShare === null
+      spotlight === null || spotlight.stream === null
         ? null
         : {
-            userId: activeScreenShare.userId,
-            label: activeScreenShare.sharerName,
-            stream: activeScreenShare.stream,
+            userId: spotlight.isLocal ? localUserId : (spotlight.userId ?? spotlight.key),
+            label: spotlight.name,
+            stream: spotlight.stream,
           },
     activeSpeakerId,
   });
@@ -162,62 +113,25 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
     }
   };
 
-  // Stable per-tile style objects: RoomVideo is memoized, so rebuilding
-  // styles on every participant event would defeat the bailout.
-  const tileStyles = useMemo(
-    () =>
-      layout.tiles.map(
-        (tile): React.CSSProperties => ({
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: tile.rect.width,
-          height: tile.rect.height,
-          transform: `translateX(${tile.rect.x}px) translateY(${tile.rect.y}px)`,
-        }),
-      ),
-    [layout.tiles],
-  );
-
   const isOwner = currentUserId === room.ownerId;
 
-  // Server-delivered capabilities gate the host affordances; role and
-  // owner knowledge never lives in the client.
-  const canMuteUsers = hasCapabilities(capabilities, "mute-users");
-  const canLockRoom = hasCapabilities(capabilities, "lock-room");
-  const canRemoveParticipants = hasCapabilities(capabilities, "remove-participants");
+  // Host actions run through the package panel core: capability gating,
+  // outcome notices, and roster ordering are single-sourced there. Chat,
+  // guest policy, and whiteboard panels stay app domains.
+  const { pendingRequests, approveRequest, denyRequest } = useGuestRequests();
+  const onNotice = useCallback((notice: PanelNotice) => toast.error(notice.message), []);
+  const panel = useParticipantsPanel({
+    call,
+    currentUserId,
+    isOwner,
+    pendingRequests,
+    onApproveRequest: approveRequest,
+    onDenyRequest: denyRequest,
+    onNotice,
+  });
 
   const [asideState, setAsideState] = useState<string | null>(null);
-
   const overlayPanel = roomPanels.find((panel) => panel.id === asideState) ?? null;
-
-  const handleMuteAll = useCallback(async () => {
-    try {
-      await hostControls.muteAll();
-    } catch {
-      toast.error("Could not mute everyone");
-    }
-  }, [hostControls]);
-
-  const handleToggleLock = useCallback(async () => {
-    try {
-      await hostControls.lockRoom(!isRoomLocked);
-    } catch {
-      toast.error("Could not change the room lock");
-    }
-  }, [hostControls, isRoomLocked]);
-
-  const handleMuteParticipant = useCallback(
-    async (userId: string) => {
-      try {
-        await hostControls.mutePeer(userId);
-      } catch {
-        toast.error("Could not mute the participant");
-      }
-    },
-    [hostControls],
-  );
-  const { pendingRequests, approveRequest, denyRequest } = useGuestRequests();
 
   const handleToggleScreenShare = useCallback(async () => {
     if (isSharing) {
@@ -264,42 +178,26 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
           {hasValidDimensions && (
             <>
               {/* Screen share spotlight - rendered only in spotlight mode */}
-              {isSpotlightMode && activeScreenShare && layout.spotlight && (
+              {isSpotlightMode && spotlight !== null && spotlight.stream !== null && (
                 <ScreenShareSpotlight
-                  key={activeScreenShare.userId}
-                  stream={activeScreenShare.stream}
-                  sharerName={activeScreenShare.sharerName}
-                  isLocal={activeScreenShare.isLocal}
-                  style={{
-                    position: "absolute",
-                    top: layout.spotlight.rect.y,
-                    left: layout.spotlight.rect.x,
-                    width: layout.spotlight.rect.width,
-                    height: layout.spotlight.rect.height,
-                  }}
+                  key={spotlight.key}
+                  stream={spotlight.stream}
+                  sharerName={spotlight.name}
+                  isLocal={spotlight.isLocal}
+                  style={spotlight.style}
                 />
               )}
 
-              {/* Local participant tile */}
-              <RoomVideo
-                userId={localUserId}
-                style={tileStyles[0]}
-                stream={localVideoStream}
-                username={currentUsername}
-                isVideoEnabled={camera.isEnabled}
-                isAudioEnabled={microphone.isEnabled}
-              />
-
-              {/* Remote participant tiles */}
-              {remotePeers.map((peer, index) => (
+              {/* Local and remote tiles from the shared stage derivation */}
+              {tiles.map((tile) => (
                 <RoomVideo
-                  key={peer.userId}
-                  userId={peer.userId}
-                  style={tileStyles[index + 1]}
-                  stream={peer.cameraStream}
-                  username={peer.displayName}
-                  isVideoEnabled={peer.isCameraEnabled}
-                  isAudioEnabled={peer.isAudioEnabled}
+                  key={tile.key}
+                  userId={tile.isLocal ? localUserId : (tile.userId ?? tile.key)}
+                  style={tile.style}
+                  stream={tile.stream}
+                  username={tile.isLocal ? currentUsername : tile.name}
+                  isVideoEnabled={tile.isVideoOn}
+                  isAudioEnabled={tile.isAudioOn}
                 />
               ))}
             </>
@@ -323,12 +221,12 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                 <Users className="size-4" />
                 <span>Participants</span>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  {participants.length}
+                  {panel.participants.length}
                 </span>
               </AsidePanelHeader>
-              {(canMuteUsers || canLockRoom) && (
+              {(panel.canMuteAll || panel.canLockRoom) && (
                 <div className="flex items-center gap-2 border-b px-3 py-2">
-                  <Button size="sm" variant="outline" onClick={handleMuteAll}>
+                  <Button size="sm" variant="outline" onClick={() => void panel.muteAll()}>
                     <MicOff className="size-3.5" />
                     Mute all
                   </Button>
@@ -336,23 +234,31 @@ function ActiveRoomViewContent({ room }: { room: Room }) {
                     size="sm"
                     variant="outline"
                     className="h-7 gap-1.5 text-xs"
-                    onClick={handleToggleLock}
+                    onClick={() => void panel.toggleLock()}
                   >
-                    {isRoomLocked ? (
+                    {panel.isRoomLocked ? (
                       <LockOpen className="size-3.5" />
                     ) : (
                       <Lock className="size-3.5" />
                     )}
-                    {isRoomLocked ? "Unlock room" : "Lock room"}
+                    {panel.isRoomLocked ? "Unlock room" : "Lock room"}
                   </Button>
                 </div>
               )}
               <ParticipantsList
-                participants={participants}
+                participants={panel.participants}
                 currentUserId={currentUserId}
                 roomOwnerId={room.ownerId}
-                onKickParticipant={canRemoveParticipants ? kickPeer : undefined}
-                onMuteParticipant={canMuteUsers ? handleMuteParticipant : undefined}
+                onKickParticipant={
+                  panel.participants.some((participant) => panel.canKickParticipant(participant))
+                    ? (id) => void panel.kickParticipant(id)
+                    : undefined
+                }
+                onMuteParticipant={
+                  panel.participants.some((participant) => panel.canMuteParticipant(participant))
+                    ? (id) => void panel.muteParticipant(id)
+                    : undefined
+                }
                 onApproveRequest={isOwner ? approveRequest : undefined}
                 onDenyRequest={isOwner ? denyRequest : undefined}
               />

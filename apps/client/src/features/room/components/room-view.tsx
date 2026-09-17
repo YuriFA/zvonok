@@ -5,7 +5,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 
 import { RoomAudioContextProvider } from "../contexts/room-audio.context";
 import { useRoomIdentity } from "../contexts/room-identity.context";
-import { RoomSessionProvider, useRoomSessionState } from "../contexts/room-session.context";
+import { RoomSessionProvider, useRoomSession } from "../contexts/room-session.context";
 import { useEndRoom } from "../hooks/use-end-room";
 import { useRoomVisibilityPause } from "../hooks/use-room-visibility";
 import type { Room } from "../types/room.types";
@@ -37,7 +37,7 @@ function RoomViewContent({
     onSuccess: () => navigate("/"),
   });
   const { userId } = useRoomIdentity();
-  const { camera, microphone, connectionState, wasKicked } = useRoomSessionState();
+  const { camera, microphone, connectionState, wasKicked } = useRoomSession();
   const isMobile = useIsMobile();
   const isOwner = userId === room.ownerId;
 

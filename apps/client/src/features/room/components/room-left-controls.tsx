@@ -1,5 +1,4 @@
-import { CaptureState } from "@zvonok/client/media/capture-state";
-import { deriveMediaControlState } from "@zvonok/react";
+import { useMediaControls } from "@zvonok/react/prebuilt";
 import { AlertTriangle, Loader2, Mic, MicOff, Video, VideoOff } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +6,7 @@ import { Button, type ButtonProps } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-import { useRoomSessionActions, useRoomSessionState } from "../contexts/room-session.context";
+import { useRoomSession, useRoomToggles } from "../contexts/room-session.context";
 
 interface Props {
   className?: string;
@@ -15,29 +14,26 @@ interface Props {
   buttonInactiveVariant?: ButtonProps["variant"];
 }
 
+/**
+ * App markup over the package media-control core: the core owns the derived
+ * control states (including the host-mute override) and toggle outcomes,
+ * this component owns icons, tooltips, and the design system.
+ */
 export const RoomLeftControls = ({
   className,
   buttonVariant = "outline",
   buttonInactiveVariant = "secondary",
 }: Props) => {
-  const { camera, microphone, mutedByHost: isMutedByHost } = useRoomSessionState();
-  const { toggleVideo: onToggleVideo, toggleAudio: onToggleAudio } = useRoomSessionActions();
+  const call = useRoomSession();
+  const { mutedByHost: isMutedByHost } = call;
+  const { toggleVideo: onToggleVideo, toggleAudio: onToggleAudio } = useRoomToggles();
+  const { video, audio } = useMediaControls({
+    camera: call.camera,
+    microphone: call.microphone,
+    mutedByHost: isMutedByHost,
+  });
 
-  const video = deriveMediaControlState({
-    isEnabled: camera.isEnabled,
-    captureState: camera.captureState ?? CaptureState.STOPPED,
-    kind: "video",
-  });
-  const audio = deriveMediaControlState({
-    isEnabled: microphone.isEnabled,
-    captureState: microphone.captureState ?? CaptureState.STOPPED,
-    kind: "audio",
-    isMutedByHost,
-  });
-  // Host mute overrides the capture-state vocabulary for audio.
-  const audioDisplay = isMutedByHost
-    ? { tooltip: "Muted by host", status: "off" as const, statusText: null }
-    : audio.display;
+  const audioDisplay = audio.display;
 
   return (
     <div className={cn("flex gap-2", className)}>

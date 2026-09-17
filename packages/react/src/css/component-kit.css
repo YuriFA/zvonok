@@ -172,3 +172,113 @@
   font-weight: 600;
   color: var(--zk-color-text);
 }
+
+/* Participants panel block. */
+.zk-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.zk-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.zk-participants,
+.zk-panel-requests ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zk-participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--zk-radius);
+}
+
+.zk-participant-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: 14px;
+}
+
+.zk-panel-requests {
+  border-top: 1px solid var(--zk-color-surface-hover);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zk-panel-requests-title {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--zk-color-text-muted, var(--zk-color-text));
+}
+
+/* Device switcher block. */
+.zk-device-switcher {
+  gap: 12px;
+}
+
+.zk-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--zk-color-surface-hover);
+  border-radius: var(--zk-radius);
+  background: var(--zk-color-surface, transparent);
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: 14px;
+}
+
+/* Room status block. */
+.zk-status-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zk-banner {
+  margin: 0;
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 12px;
+  font-family: var(--zk-font-family);
+  color: var(--zk-color-notice-text);
+  background: var(--zk-color-notice-surface);
+  border-radius: var(--zk-radius);
+}
+
+.zk-card-error p {
+  margin: 0 0 8px;
+}
+
+/* Embedded room collapsible sections. */
+.zk-section {
+  border: 1px solid var(--zk-color-border);
+  border-radius: var(--zk-radius);
+  padding: 6px 10px;
+}
+
+.zk-section-summary {
+  cursor: pointer;
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: var(--zk-font-size-sm);
+  user-select: none;
+}

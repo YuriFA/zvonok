@@ -1,7 +1,7 @@
 import { useRemoteAudio, type UseRemoteAudioResult } from "@zvonok/react";
 import { createContext, useContext, type ReactNode } from "react";
 
-import { useRoomSessionState } from "./room-session.context";
+import { useRoomSession } from "./room-session.context";
 
 /**
  * Slim view over the SDK's remote-audio hook: remote playout, per-user
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function RoomAudioContextProvider({ children }: Props) {
-  const { localUserId, localAudioStream } = useRoomSessionState();
+  const { localUserId, localAudioStream } = useRoomSession();
   const value = useRemoteAudio({
     localAudio: { userId: localUserId, stream: localAudioStream },
   });

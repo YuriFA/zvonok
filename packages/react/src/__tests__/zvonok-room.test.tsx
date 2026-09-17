@@ -159,7 +159,7 @@ describe("ZvonokEmbeddedRoom", () => {
       );
     });
 
-    expect(screen.getByText("Alice")).toBeTruthy();
+    expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     expect(screen.getByText("You (you)")).toBeTruthy();
     expect(screen.getByText("2 participants")).toBeTruthy();
     expect(view.container.querySelectorAll("audio")).toHaveLength(0);
@@ -185,14 +185,18 @@ describe("ZvonokEmbeddedRoom", () => {
     media.audioCapture.getState.mockReturnValue(CaptureState.ACTIVE);
     (media.audioCapture.getTrack as Mock).mockReturnValue(audio);
     await flush();
-    lastSfu().manager.getProducerByKind.mockImplementation(
-      (kind: "audio" | "video") => ({
+    // The join's own hasProducer checks must see no producers, while the
+    // post-produce resume looks up the fresh producer ids.
+    lastSfu().manager.getProducerByKind
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce(undefined)
+      .mockImplementation((kind: "audio" | "video") => ({
         id: `${kind}-producer`,
-      }),
-    );
+      }));
     act(() => {
       lastSfu().socket.fire("sfu:joined");
     });
+    await flush();
     await flush();
 
     expect(lastSfu().manager.produce).toHaveBeenCalledWith(video, undefined);
@@ -271,16 +275,14 @@ describe("ZvonokEmbeddedRoom", () => {
     );
 
     lastSfu().manager.getProducerByKind.mockReturnValue(undefined);
-    (lastMedia().audioCapture.getTrack as Mock).mockReturnValue(
-      createTrack("audio", "mic-2"),
-    );
+    const reacquiredTrack = createTrack("audio", "mic-2");
+    (lastMedia().audioCapture.getTrack as Mock).mockReturnValue(reacquiredTrack);
     fireEvent.click(micButton);
     await flush();
-    expect(lastMedia().audioCapture.toggle).toHaveBeenLastCalledWith(true);
-    expect(lastSfu().manager.produce).toHaveBeenCalledWith(
-      createTrack("audio", "mic-2"),
-      undefined,
-    );
+    // The enable path publishes the live capture track; hardware toggling
+    // stays inside the capture port (release on pause, ensure on enable).
+    expect(lastSfu().manager.produce).toHaveBeenCalledWith(reacquiredTrack, undefined);
+    expect(micButton.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("collects the name and device choices in the pre-join card", async () => {
@@ -432,5 +434,82 @@ describe("ZvonokEmbeddedRoom", () => {
       "./dist/css/embedded.css",
     );
     expect(manifest.sideEffects).toContain("*.css");
+  });
+  it("forces the mic control off and announces a host mute", async () => {
+    await renderJoined();
+    act(() => {
+      lastMedia().emitAudioState(CaptureState.ACTIVE, createTrack("audio", "mic-1"));
+    });
+    expect(screen.getByRole("button", { name: "Mic" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    lastSfu().manager.simulateLocalUser("participant-9");
+    act(() => {
+      lastSfu().socket.fire("sfu:peer-muted", { userId: "participant-9" });
+    });
+    await flush();
+
+    const mutedMic = screen.getByRole("button", { name: "Mic off" });
+    expect(mutedMic.getAttribute("aria-pressed")).toBe("false");
+    expect(mutedMic.getAttribute("title")).toBe("Muted by host");
+  });
+
+  it("surfaces a kick and releases captured media through the port", async () => {
+    await renderJoined();
+    act(() => {
+      lastMedia().emitVideoState(CaptureState.ACTIVE, createTrack("video", "cam-1"));
+      lastMedia().emitAudioState(CaptureState.ACTIVE, createTrack("audio", "mic-1"));
+    });
+
+    act(() => {
+      lastSfu().manager.emitKicked();
+    });
+    await flush();
+
+    expect(
+      screen.getByText("You were removed from the room by the host"),
+    ).toBeTruthy();
+    expect(lastMedia().videoCapture.toggle).toHaveBeenCalledWith(false);
+    expect(lastMedia().audioCapture.toggle).toHaveBeenCalledWith(false);
+  });
+
+  it("shows the locked banner while the room is locked", async () => {
+    await renderJoined();
+
+    act(() => {
+      lastSfu().socket.fire("sfu:room-locked", { locked: true });
+    });
+    await flush();
+
+    expect(
+      screen.getByText("Room is locked - new participants cannot join"),
+    ).toBeTruthy();
+  });
+
+  it("exposes capability-gated host actions through the participants panel", async () => {
+    await renderJoined();
+
+    // Without capabilities no panel section renders.
+    fireEvent.click(screen.getByText("Participants"));
+    expect(screen.queryByText("Mute all")).toBeNull();
+
+    act(() => {
+      lastSfu().manager.simulateCapabilities([
+        "send-audio",
+        "send-video",
+        "mute-users",
+        "remove-participants",
+        "lock-room",
+      ]);
+    });
+    await flush();
+
+    fireEvent.click(screen.getByText("Mute all"));
+    await flush();
+    expect(lastSfu().manager.muteAll).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Lock room"));
+    await flush();
+    expect(lastSfu().manager.lockRoom).toHaveBeenCalledWith(true);
   });
 });

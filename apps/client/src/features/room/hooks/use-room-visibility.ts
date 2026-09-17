@@ -8,10 +8,10 @@
 import type { UseZvonokConnectionResult } from "@zvonok/react";
 import { useEffect, useRef } from "react";
 
-import { useRoomSessionState } from "../contexts/room-session.context";
+import { useRoomSession } from "../contexts/room-session.context";
 
 export function useRoomVisibilityPause(connection: UseZvonokConnectionResult): void {
-  const { camera } = useRoomSessionState();
+  const { camera } = useRoomSession();
   const managerRef = useRef(connection.manager);
   managerRef.current = connection.manager;
   const isVideoEnabledRef = useRef(camera.isEnabled);
