@@ -28,5 +28,5 @@
 ## 6. Verification
 
 - [x] 6.1 `pnpm -C packages/react test`, `pnpm -C packages/client test`, app test suite, typecheck, and lint clean
-- [ ] 6.2 Local smoke: embedder page with `ZvonokEmbeddedRoom` (join, device switch, host actions) and app room regression pass
+- [x] 6.2 Local smoke: embedder page with `ZvonokEmbeddedRoom` (join, device switch, host actions) and app room regression pass - accepted per owner decision: visual suite 9/9 (widget prejoin, grids, kicked alert, participants panel) plus package embedded-room tests cover the join/host/kick/lock paths; no live server run
 - [x] 6.3 `pnpm openspec:validate` clean
