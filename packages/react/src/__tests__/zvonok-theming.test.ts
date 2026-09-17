@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const kitPath = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../css/component-kit.css",
+  "../css/component-kit/base.css",
 );
 const embeddedPath = join(
   dirname(fileURLToPath(import.meta.url)),

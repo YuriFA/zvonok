@@ -1,0 +1,16 @@
+/* Embedded room collapsible section styles. */
+
+/* Embedded room collapsible sections. */
+.zk-section {
+  border: 1px solid var(--zk-color-border);
+  border-radius: var(--zk-radius);
+  padding: 6px 10px;
+}
+
+.zk-section-summary {
+  cursor: pointer;
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: var(--zk-font-size-sm);
+  user-select: none;
+}

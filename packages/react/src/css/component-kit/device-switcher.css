@@ -1,0 +1,17 @@
+/* Device switcher block styles. */
+
+/* Device switcher block. */
+.zk-device-switcher {
+  gap: 12px;
+}
+
+.zk-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--zk-color-surface-hover);
+  border-radius: var(--zk-radius);
+  background: var(--zk-color-surface, transparent);
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: 14px;
+}

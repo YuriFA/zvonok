@@ -1,0 +1,58 @@
+/* Participants panel block styles. */
+
+/* Participants panel block. */
+.zk-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.zk-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.zk-participants,
+.zk-panel-requests ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.zk-participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--zk-radius);
+}
+
+.zk-participant-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--zk-color-text);
+  font-family: var(--zk-font-family);
+  font-size: 14px;
+}
+
+.zk-panel-requests {
+  border-top: 1px solid var(--zk-color-surface-hover);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zk-panel-requests-title {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--zk-color-text-muted, var(--zk-color-text));
+}

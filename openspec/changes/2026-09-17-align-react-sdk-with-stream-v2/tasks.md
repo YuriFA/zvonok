@@ -11,7 +11,7 @@
 
 ## 3. React package: stylesheets
 
-- [ ] 3.1 Split `css/component-kit.css` into per-block files (`css/component-kit/<block>.css`) aggregated by the same subpath entry files (`component-kit.css`, `embedded.css`); built CSS output and `--zk-*` tokens byte-compatible (no selector renames); package css test / smoke graph unchanged
+- [x] 3.1 Split `css/component-kit.css` into per-block files (`css/component-kit/<block>.css`) aggregated by the same subpath entry files (`component-kit.css`, `embedded.css`); built CSS output and `--zk-*` tokens byte-compatible (no selector renames); package css test / smoke graph unchanged
 
 ## 4. Client package: manager split
 

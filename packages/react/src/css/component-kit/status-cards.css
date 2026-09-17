@@ -1,0 +1,23 @@
+/* Room status cards block styles. */
+
+/* Room status block. */
+.zk-status-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zk-banner {
+  margin: 0;
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 12px;
+  font-family: var(--zk-font-family);
+  color: var(--zk-color-notice-text);
+  background: var(--zk-color-notice-surface);
+  border-radius: var(--zk-radius);
+}
+
+.zk-card-error p {
+  margin: 0 0 8px;
+}
