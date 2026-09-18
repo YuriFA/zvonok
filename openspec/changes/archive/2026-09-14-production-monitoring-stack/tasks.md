@@ -71,21 +71,21 @@
 
 ## 5. VPS rollout (manual, ordered)
 
-- [ ] 5.1 Create a 2 GB swapfile, persist in fstab, verify swappiness
-- [ ] 5.2 Edit `~/gateway/docker-compose.yml`: add
+- [x] 5.1 Create a 2 GB swapfile, persist in fstab, verify swappiness
+- [x] 5.2 Edit `~/gateway/docker-compose.yml`: add
       `--metrics.prometheus=true`,
       `--metrics.prometheus.addRoutersLabels=true`, publish
       `127.0.0.1:8082:8082`; recreate Traefik; confirm
       `curl 127.0.0.1:8082/metrics` exposes per-router metrics
-- [ ] 5.3 Create the `glitchtip` database and a scoped role inside the
+- [x] 5.3 Create the `glitchtip` database and a scoped role inside the
       existing postgres container
-- [ ] 5.4 Copy `monitoring/` to `~/monitoring`, fill `.env`, bring the
+- [x] 5.4 Copy `monitoring/` to `~/monitoring`, fill `.env`, bring the
       project up, confirm all targets are `up` in Prometheus
-- [ ] 5.5 Add DNS A records for `grafana.` / `status.` / `errors.
+- [x] 5.5 Add DNS A records for `grafana.` / `status.` / `errors.
       yurifa.site`, verify LE certificates and first logins
-- [ ] 5.6 Register the three HTTPS monitors in UptimeRobot
-- [ ] 5.7 Redeploy the server with `SENTRY_DSN` set; trigger a test error
+- [x] 5.6 Register the three HTTPS monitors in UptimeRobot
+- [x] 5.7 Redeploy the server with `SENTRY_DSN` set; trigger a test error
       and confirm the event lands in GlitchTip with no secret data
-- [ ] 5.8 End-to-end verification against the spec: two-browser room
+- [x] 5.8 End-to-end verification against the spec: two-browser room
       shows rooms/peers gauges in Grafana; stopping a container fires
       the Telegram alert; UptimeRobot and Kuma both report a pulled site
