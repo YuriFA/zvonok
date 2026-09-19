@@ -20,8 +20,8 @@
       "default": "./src/index.ts"
     },
     "./embedded": {
-      "types": "./src/embedded/ZvonokEmbeddedRoom.tsx",
-      "default": "./src/embedded/ZvonokEmbeddedRoom.tsx"
+      "types": "./src/embedded/zvonok-embedded-room.tsx",
+      "default": "./src/embedded/zvonok-embedded-room.tsx"
     },
     "./css/component-kit.css": "./src/css/component-kit.css",
     "./css/embedded.css": "./src/css/embedded.css"
@@ -34,8 +34,8 @@
         "default": "./dist/index.js"
       },
       "./embedded": {
-        "types": "./dist/embedded/ZvonokEmbeddedRoom.d.ts",
-        "default": "./dist/embedded/ZvonokEmbeddedRoom.js"
+        "types": "./dist/embedded/zvonok-embedded-room.d.ts",
+        "default": "./dist/embedded/zvonok-embedded-room.js"
       },
       "./css/component-kit.css": "./dist/css/component-kit.css",
       "./css/embedded.css": "./dist/css/embedded.css"

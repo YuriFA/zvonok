@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ZvonokEmbeddedRoom,
   type ZvonokEmbeddedRoomProps,
-} from "../embedded/ZvonokEmbeddedRoom.js";
+} from "../embedded/zvonok-embedded-room.js";
 import { ZvonokJoinError } from "../errors.js";
 import {
   createMockMediaManager,
