@@ -13,10 +13,10 @@ const GRACEFUL_STUB = [
 ].join('\n');
 
 const IGNORES_SIGINT_STUB = [
-  "require('fs').writeSync(2, 'running\\n');",
   "process.on('SIGINT', () => {",
   '  // deliberately ignore SIGINT so stop() must escalate to SIGKILL',
   '});',
+  "require('fs').writeSync(2, 'running\\n');",
   'setInterval(() => {}, 1000000);',
 ].join('\n');
 
